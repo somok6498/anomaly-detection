@@ -1,0 +1,37 @@
+server:
+  port: 8080
+
+# Aerospike connection
+aerospike:
+  host: 127.0.0.1
+  port: 3000
+  namespace: banking
+
+# Risk scoring configuration
+risk:
+  # Composite score threshold for ALERT action (score >= this but < blockThreshold)
+  alert-threshold: 30.0
+  # Composite score threshold for BLOCK action (score >= this)
+  block-threshold: 70.0
+  # EWMA smoothing factor. Lower = slower adaptation to new patterns.
+  # 0.01 is good for 30-day windows with high txn volume.
+  ewma-alpha: 0.01
+  # Minimum transactions before rules apply to a client (grace period for new clients)
+  min-profile-txns: 20
+  # How often (seconds) to reload rules from Aerospike into memory cache
+  rule-cache-refresh-seconds: 60
+
+# Swagger / OpenAPI
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+  api-docs:
+    path: /v3/api-docs
+
+# Logging
+logging:
+  level:
+    com.bank.anomaly: INFO
+    com.bank.anomaly.engine: DEBUG

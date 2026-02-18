@@ -1,0 +1,16 @@
+services:
+  aerospike:
+    image: aerospike/aerospike-server:7.1.0.2
+    container_name: aerospike-anomaly
+    ports:
+      - "3000:3000"   # client port
+      - "3001:3001"   # fabric port
+      - "3002:3002"   # mesh heartbeat port
+      - "3003:3003"   # info port
+    volumes:
+      - ./aerospike/aerospike.conf:/opt/aerospike/etc/aerospike.conf
+      - aerospike-data:/opt/aerospike/data
+    command: ["--config-file", "/opt/aerospike/etc/aerospike.conf"]
+
+volumes:
+  aerospike-data:

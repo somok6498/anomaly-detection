@@ -1,0 +1,51 @@
+# === Build outputs ===
+build/
+target/
+out/
+*.class
+*.jar
+*.war
+
+# === Gradle ===
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+
+# === IDE ===
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+.project
+.classpath
+.settings/
+
+# === OS ===
+.DS_Store
+Thumbs.db
+~$*
+
+# === Aerospike local data (keep config, ignore runtime data) ===
+aerospike/data/
+
+# === Flutter build (dashboard) ===
+dashboard_ui/build/
+dashboard_ui/.dart_tool/
+dashboard_ui/.packages
+
+# === Compiled Flutter web assets (rebuild with: cd dashboard_ui && flutter build web) ===
+src/main/resources/static/
+
+# === Python ===
+__pycache__/
+*.pyc
+create_deck.py
+
+# === Presentations ===
+*.pptx
+
+# === Temp/generated ===
+*.log
+*.tmp

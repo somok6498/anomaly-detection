@@ -1,0 +1,769 @@
+openapi: 3.0.1
+info:
+  title: Anomaly Detection API
+  description: |
+    Real-time behavioral anomaly detection system for banking transactions.
+
+    The system evaluates incoming transactions against a client's historical behavioral
+    profile using a combination of rule-based evaluators and an Isolation Forest ML model.
+
+    **Evaluation Pipeline:**
+    1. Receive transaction via `POST /transactions/evaluate`
+    2. Load/create client behavioral profile (EWMA stats)
+    3. Evaluate against all active anomaly rules (5 rule-based + 1 Isolation Forest)
+    4. Compute weighted composite risk score (0-100)
+    5. Determine action: **PASS** (<30), **ALERT** (30-70), **BLOCK** (>=70)
+    6. Update client profile with new transaction data
+    7. Persist and return evaluation result
+
+    **Rule Types:**
+    - `TRANSACTION_TYPE_ANOMALY` — flags rarely/never used transaction types
+    - `TPS_SPIKE` — flags hourly transaction count spikes
+    - `AMOUNT_ANOMALY` — flags unusually large single transactions
+    - `HOURLY_AMOUNT_ANOMALY` — flags hourly total amount spikes
+    - `AMOUNT_PER_TYPE_ANOMALY` — flags unusual amounts for specific transaction types
+    - `ISOLATION_FOREST` — ML-based multi-dimensional anomaly detection
+  version: 1.0.0
+  contact:
+    name: Anomaly Detection Team
+
+servers:
+  - url: http://localhost:8080
+    description: Local development server
+
+tags:
+  - name: Transactions
+    description: Submit transactions for evaluation and query history
+  - name: Profiles
+    description: View client behavioral profiles
+  - name: Rules
+    description: Manage anomaly detection rules
+  - name: Models
+    description: Isolation Forest model training and metadata
+
+paths:
+  /api/v1/transactions/evaluate:
+    post:
+      tags:
+        - Transactions
+      summary: Evaluate a transaction for anomalies
+      description: |
+        Submits a transaction for real-time anomaly evaluation. The transaction is
+        persisted, evaluated against all active rules (including the Isolation Forest model),
+        and returns a composite risk score with per-rule breakdown.
+      operationId: evaluateTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Transaction'
+            examples:
+              normalTransaction:
+                summary: Normal transaction (likely PASS)
+                value:
+                  txnId: "TXN-NORMAL-001"
+                  clientId: "CLIENT-001"
+                  txnType: "NEFT"
+                  amount: 45000.00
+                  timestamp: 1739886764000
+              borderlineIF:
+                summary: Borderline transaction (IF catches, rules miss)
+                description: Amount is 1.8x EWMA but below rule thresholds. Only the Isolation Forest detects the multi-dimensional anomaly.
+                value:
+                  txnId: "IF-DEMO-001"
+                  clientId: "CLIENT-001"
+                  txnType: "NEFT"
+                  amount: 90000.00
+                  timestamp: 1739886764000
+              blockTransaction:
+                summary: Anomalous transaction (likely BLOCK)
+                value:
+                  txnId: "IF-DEMO-BLOCK-001"
+                  clientId: "CLIENT-001"
+                  txnType: "IFT"
+                  amount: 95000.00
+                  timestamp: 1739886764000
+      responses:
+        '200':
+          description: Evaluation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResult'
+              examples:
+                passResult:
+                  summary: Transaction passed
+                  value:
+                    txnId: "TXN-NORMAL-001"
+                    clientId: "CLIENT-001"
+                    compositeScore: 0.0
+                    riskLevel: "LOW"
+                    action: "PASS"
+                    ruleResults: []
+                    evaluatedAt: 1739886764000
+                alertResult:
+                  summary: IF triggered — ALERT
+                  value:
+                    txnId: "IF-DEMO-001"
+                    clientId: "CLIENT-001"
+                    compositeScore: 42.5
+                    riskLevel: "MEDIUM"
+                    action: "ALERT"
+                    ruleResults:
+                      - ruleId: "RULE-IF"
+                        ruleName: "Isolation Forest"
+                        ruleType: "ISOLATION_FOREST"
+                        triggered: true
+                        deviationPct: 15.0
+                        partialScore: 42.5
+                        riskWeight: 2.0
+                        reason: "Isolation Forest: score=0.690 (threshold=0.60). Multi-dimensional anomaly detected. Top factors: Amount Z-score=2.67 (contribution=0.045), Type Amount Z-score=1.82 (contribution=0.031)"
+                    evaluatedAt: 1739886764000
+        '400':
+          description: Missing required fields (txnId, clientId, or txnType)
+
+  /api/v1/transactions/{txnId}:
+    get:
+      tags:
+        - Transactions
+      summary: Get a transaction by ID
+      operationId: getTransaction
+      parameters:
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-001-TXN-000001"
+      responses:
+        '200':
+          description: Transaction found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Transaction'
+        '404':
+          description: Transaction not found
+
+  /api/v1/transactions/client/{clientId}:
+    get:
+      tags:
+        - Transactions
+      summary: List transactions by client ID
+      operationId: getTransactionsByClient
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-001"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+          description: Maximum number of transactions to return
+      responses:
+        '200':
+          description: List of transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Transaction'
+
+  /api/v1/transactions/results/{txnId}:
+    get:
+      tags:
+        - Transactions
+      summary: Get evaluation result for a transaction
+      operationId: getEvaluationResult
+      parameters:
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "IF-DEMO-001"
+      responses:
+        '200':
+          description: Evaluation result found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvaluationResult'
+        '404':
+          description: No evaluation result found for this transaction
+
+  /api/v1/transactions/results/client/{clientId}:
+    get:
+      tags:
+        - Transactions
+      summary: List evaluation results by client ID
+      operationId: getEvaluationResultsByClient
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-001"
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 20
+          description: Maximum number of results to return
+      responses:
+        '200':
+          description: List of evaluation results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EvaluationResult'
+
+  /api/v1/profiles/{clientId}:
+    get:
+      tags:
+        - Profiles
+      summary: Get client behavioral profile
+      description: |
+        Returns the client's behavioral profile built from historical transaction data.
+        Includes EWMA statistics, transaction type distribution, hourly TPS averages,
+        and per-type amount averages.
+      operationId: getClientProfile
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-001"
+      responses:
+        '200':
+          description: Client profile found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ClientProfile'
+        '404':
+          description: No profile found (client has no transaction history)
+
+  /api/v1/rules:
+    get:
+      tags:
+        - Rules
+      summary: List all anomaly rules
+      operationId: listRules
+      responses:
+        '200':
+          description: List of all configured rules
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AnomalyRule'
+    post:
+      tags:
+        - Rules
+      summary: Create a new anomaly rule
+      operationId: createRule
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnomalyRule'
+            example:
+              name: "Custom TPS Rule"
+              description: "Detect TPS spikes above 80%"
+              ruleType: "TPS_SPIKE"
+              variancePct: 80.0
+              riskWeight: 2.0
+              enabled: true
+              params:
+                minProfileTxns: "20"
+      responses:
+        '200':
+          description: Rule created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyRule'
+        '400':
+          description: Missing required fields (name or ruleType)
+
+  /api/v1/rules/{ruleId}:
+    get:
+      tags:
+        - Rules
+      summary: Get a specific rule by ID
+      operationId: getRule
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "RULE-IF"
+      responses:
+        '200':
+          description: Rule found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyRule'
+        '404':
+          description: Rule not found
+    put:
+      tags:
+        - Rules
+      summary: Update an existing rule
+      description: |
+        Updates rule configuration. Use this to modify variance thresholds,
+        risk weights, enable/disable rules, or change parameters.
+      operationId: updateRule
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "RULE-IF"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnomalyRule'
+            example:
+              variancePct: 55.0
+              riskWeight: 3.0
+              enabled: true
+      responses:
+        '200':
+          description: Rule updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnomalyRule'
+        '404':
+          description: Rule not found
+    delete:
+      tags:
+        - Rules
+      summary: Delete a rule
+      operationId: deleteRule
+      parameters:
+        - name: ruleId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "RULE-TXN-TYPE"
+      responses:
+        '204':
+          description: Rule deleted successfully
+        '404':
+          description: Rule not found
+
+  /api/v1/models/train/{clientId}:
+    post:
+      tags:
+        - Models
+      summary: Train Isolation Forest model for a client
+      description: |
+        Trains a new Isolation Forest model using the client's historical transaction data.
+        The model learns the client's normal behavioral patterns across 6 feature dimensions
+        and is persisted to Aerospike for real-time evaluation.
+      operationId: trainModelForClient
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-001"
+        - name: numTrees
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+          description: Number of isolation trees in the forest
+        - name: sampleSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 256
+          description: Sub-sampling size per tree
+      responses:
+        '200':
+          description: Model trained successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelMetadata'
+              example:
+                clientId: "CLIENT-001"
+                treeCount: 100
+                featureCount: 6
+                trainingSamples: 6000
+                trainedAt: 1739886764000
+        '500':
+          description: Training failed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  error:
+                    type: string
+
+  /api/v1/models/train:
+    post:
+      tags:
+        - Models
+      summary: Train Isolation Forest models for all clients
+      description: |
+        Triggers IF model training for all known clients. This is a batch operation
+        that scans all client profiles and trains individual models.
+      operationId: trainAllModels
+      parameters:
+        - name: numTrees
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+        - name: sampleSize
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 256
+      responses:
+        '200':
+          description: Training complete
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "Training complete for all clients"
+
+  /api/v1/models/{clientId}:
+    get:
+      tags:
+        - Models
+      summary: Get model metadata for a client
+      description: Returns metadata about the trained IF model (tree count, training samples, trained date).
+      operationId: getModelMetadata
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-001"
+      responses:
+        '200':
+          description: Model metadata found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelMetadata'
+        '404':
+          description: No trained model found for this client
+
+components:
+  schemas:
+    Transaction:
+      type: object
+      required:
+        - txnId
+        - clientId
+        - txnType
+        - amount
+      properties:
+        txnId:
+          type: string
+          description: Unique transaction identifier
+          example: "CLIENT-001-TXN-000001"
+        clientId:
+          type: string
+          description: Client identifier
+          example: "CLIENT-001"
+        txnType:
+          type: string
+          description: Transaction type
+          enum:
+            - NEFT
+            - RTGS
+            - IMPS
+            - UPI
+            - IFT
+          example: "NEFT"
+        amount:
+          type: number
+          format: double
+          description: Transaction amount
+          example: 50000.00
+        timestamp:
+          type: integer
+          format: int64
+          description: Transaction timestamp in epoch milliseconds. Defaults to current time if not provided.
+          example: 1739886764000
+
+    EvaluationResult:
+      type: object
+      properties:
+        txnId:
+          type: string
+          example: "IF-DEMO-001"
+        clientId:
+          type: string
+          example: "CLIENT-001"
+        compositeScore:
+          type: number
+          format: double
+          description: "Weighted composite risk score (0-100)"
+          example: 42.5
+        riskLevel:
+          type: string
+          enum:
+            - LOW
+            - MEDIUM
+            - HIGH
+            - CRITICAL
+          description: "LOW (<30), MEDIUM (30-60), HIGH (60-80), CRITICAL (>=80)"
+          example: "MEDIUM"
+        action:
+          type: string
+          enum:
+            - PASS
+            - ALERT
+            - BLOCK
+          description: "PASS (<30), ALERT (30-70), BLOCK (>=70)"
+          example: "ALERT"
+        ruleResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/RuleResult'
+        evaluatedAt:
+          type: integer
+          format: int64
+          description: Evaluation timestamp in epoch milliseconds
+          example: 1739886764000
+
+    RuleResult:
+      type: object
+      properties:
+        ruleId:
+          type: string
+          example: "RULE-IF"
+        ruleName:
+          type: string
+          example: "Isolation Forest"
+        ruleType:
+          type: string
+          enum:
+            - TRANSACTION_TYPE_ANOMALY
+            - TPS_SPIKE
+            - AMOUNT_ANOMALY
+            - HOURLY_AMOUNT_ANOMALY
+            - AMOUNT_PER_TYPE_ANOMALY
+            - ISOLATION_FOREST
+          example: "ISOLATION_FOREST"
+        triggered:
+          type: boolean
+          description: Whether this rule flagged the transaction
+          example: true
+        deviationPct:
+          type: number
+          format: double
+          description: How far the value deviated from baseline (as percentage)
+          example: 15.0
+        partialScore:
+          type: number
+          format: double
+          description: "This rule's contribution score (0-100) before weighting"
+          example: 42.5
+        riskWeight:
+          type: number
+          format: double
+          description: The rule's weight in composite score calculation
+          example: 2.0
+        reason:
+          type: string
+          description: Human-readable explanation of the evaluation
+          example: "Isolation Forest: score=0.690 (threshold=0.60). Multi-dimensional anomaly detected."
+
+    AnomalyRule:
+      type: object
+      properties:
+        ruleId:
+          type: string
+          description: Unique rule identifier (auto-generated if not provided on create)
+          example: "RULE-IF"
+        name:
+          type: string
+          description: Rule display name
+          example: "Isolation Forest"
+        description:
+          type: string
+          description: Detailed description of what the rule detects
+          example: "ML-based detection of multi-dimensional anomalies that individual rules miss"
+        ruleType:
+          type: string
+          enum:
+            - TRANSACTION_TYPE_ANOMALY
+            - TPS_SPIKE
+            - AMOUNT_ANOMALY
+            - HOURLY_AMOUNT_ANOMALY
+            - AMOUNT_PER_TYPE_ANOMALY
+            - ISOLATION_FOREST
+          description: The type of anomaly this rule detects
+          example: "ISOLATION_FOREST"
+        variancePct:
+          type: number
+          format: double
+          description: |
+            Threshold percentage. Meaning varies by rule type:
+            - Rule-based: flag if value exceeds baseline by this percentage
+            - Isolation Forest: anomaly score threshold (60 = 0.60)
+          example: 60.0
+        riskWeight:
+          type: number
+          format: double
+          description: Weight of this rule in composite score (higher = more influence)
+          default: 1.0
+          example: 2.0
+        enabled:
+          type: boolean
+          description: Whether this rule is currently active
+          default: true
+          example: true
+        params:
+          type: object
+          additionalProperties:
+            type: string
+          description: Rule-specific parameters
+          example:
+            numTrees: "100"
+            sampleSize: "256"
+
+    ClientProfile:
+      type: object
+      properties:
+        clientId:
+          type: string
+          example: "CLIENT-001"
+        txnTypeCounts:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: "Transaction count per type"
+          example:
+            NEFT: 5400
+            RTGS: 600
+        totalTxnCount:
+          type: integer
+          format: int64
+          description: Total number of transactions processed
+          example: 6000
+        ewmaAmount:
+          type: number
+          format: double
+          description: Exponentially weighted moving average of transaction amounts
+          example: 50234.56
+        amountM2:
+          type: number
+          format: double
+          description: Welford's M2 accumulator for amount variance
+        ewmaHourlyTps:
+          type: number
+          format: double
+          description: EWMA of hourly transaction count
+          example: 8.33
+        tpsM2:
+          type: number
+          format: double
+          description: Welford's M2 accumulator for TPS variance
+        completedHoursCount:
+          type: integer
+          format: int64
+          description: Number of completed hour windows observed
+        avgAmountByType:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          description: EWMA amount per transaction type
+          example:
+            NEFT: 48500.00
+            RTGS: 65000.00
+        amountM2ByType:
+          type: object
+          additionalProperties:
+            type: number
+            format: double
+          description: Welford's M2 per transaction type
+        amountCountByType:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+          description: Transaction count per type (for Welford's)
+        ewmaHourlyAmount:
+          type: number
+          format: double
+          description: EWMA of hourly total transaction amount
+          example: 416000.00
+        hourlyAmountM2:
+          type: number
+          format: double
+          description: Welford's M2 for hourly amount variance
+        lastUpdated:
+          type: integer
+          format: int64
+          description: Last profile update timestamp (epoch millis)
+        lastHourBucket:
+          type: string
+          description: Hour bucket key of the last processed hour (for TPS rollover)
+
+    ModelMetadata:
+      type: object
+      properties:
+        clientId:
+          type: string
+          example: "CLIENT-001"
+        treeCount:
+          type: integer
+          description: Number of isolation trees in the forest
+          example: 100
+        featureCount:
+          type: integer
+          description: Number of features in the feature vector
+          example: 6
+        trainingSamples:
+          type: integer
+          description: Number of transaction samples used for training
+          example: 6000
+        trainedAt:
+          type: integer
+          format: int64
+          description: Model training timestamp (epoch millis)
+          example: 1739886764000
