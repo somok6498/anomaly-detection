@@ -35,28 +35,57 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **Java 17+**
 - **Docker** and **Docker Compose**
 
-## Quick Start
+## Quick Start (Docker — recommended)
+
+Everything runs in Docker. No Java or Gradle installation needed.
+
+### 1. Build and seed data (first time only)
+
+```bash
+# Build the app image and start Aerospike
+docker-compose up -d --build aerospike
+
+# Wait for Aerospike to be healthy, then seed demo data
+docker-compose run --rm -e SPRING_PROFILES_ACTIVE=seed app
+
+# Wait for "Seeding complete" in the logs, then Ctrl+C
+```
+
+### 2. Start / Stop
+
+```bash
+# Start both containers
+docker-compose up -d
+
+# Stop (keeps data in Aerospike volume)
+docker-compose stop
+
+# Start again later
+docker-compose start
+```
+
+### 3. Explore
+
+- **Swagger UI**: http://localhost:8080/swagger-ui.html
+- **OpenAPI spec**: http://localhost:8080/v3/api-docs
+
+## Quick Start (Local development)
+
+Requires **Java 17+** installed locally.
 
 ### 1. Start Aerospike
 
 ```bash
-docker-compose up -d
-```
-
-Verify it's running:
-```bash
-docker ps | grep aerospike
+docker-compose up -d aerospike
 ```
 
 ### 2. Seed data and start the app
-
-First run — seeds 10 clients with historical transactions, builds behavioral profiles, and trains Isolation Forest models:
 
 ```bash
 ./gradlew bootRun --args='--spring.profiles.active=seed'
 ```
 
-Wait for logs to show seeding complete, then stop (`Ctrl+C`) and start normally:
+Wait for seeding to complete, then stop (`Ctrl+C`) and start normally:
 
 ```bash
 ./gradlew bootRun

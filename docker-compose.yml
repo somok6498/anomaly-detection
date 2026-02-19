@@ -11,6 +11,36 @@ services:
       - ./aerospike/aerospike.conf:/opt/aerospike/etc/aerospike.conf
       - aerospike-data:/opt/aerospike/data
     command: ["--config-file", "/opt/aerospike/etc/aerospike.conf"]
+    healthcheck:
+      test: ["CMD", "asinfo", "-p", "3000", "-v", "status"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: anomaly-detection-app
+    ports:
+      - "8080:8080"
+    environment:
+      - AEROSPIKE_HOST=aerospike
+      - AEROSPIKE_PORT=3000
+      # Set SPRING_PROFILES_ACTIVE=seed for first run to load demo data
+    depends_on:
+      aerospike:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # All-in-one: single container with Aerospike + App + auto-seeding
+  allinone:
+    build:
+      context: .
+      dockerfile: Dockerfile.allinone
+    container_name: anomaly-detection
+    ports:
+      - "8080:8080"
+      - "3000:3000"
+    restart: unless-stopped
 
 volumes:
   aerospike-data:

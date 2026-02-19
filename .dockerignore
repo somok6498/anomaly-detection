@@ -1,0 +1,9 @@
+build/
+target/
+.gradle/
+.idea/
+.git/
+*.pptx
+dashboard_ui/build/
+dashboard_ui/.dart_tool/
+aerospike/data/
