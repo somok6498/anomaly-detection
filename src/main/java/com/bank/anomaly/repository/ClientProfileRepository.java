@@ -65,13 +65,20 @@ public class ClientProfileRepository {
         Bin lastUpdatedBin = new Bin("lastUpdated", profile.getLastUpdated());
         Bin lastHourBucketBin = new Bin("lastHrBucket", profile.getLastHourBucket());
 
+        // Beneficiary tracking bins
+        Bin beneTxnCntsBin = new Bin("beneTxnCnts", serializeLongMap(profile.getBeneficiaryTxnCounts()));
+        Bin distinctBeneBin = new Bin("distinctBene", profile.getDistinctBeneficiaryCount());
+        Bin ewmaAmtBeneBin = new Bin("ewmaAmtBene", serializeMap(profile.getEwmaAmountByBeneficiary()));
+        Bin amtM2BeneBin = new Bin("amtM2Bene", serializeMap(profile.getAmountM2ByBeneficiary()));
+
         client.put(writePolicy, key,
                 clientIdBin, txnTypeCountsBin, totalTxnCountBin,
                 ewmaAmountBin, amountM2Bin,
                 ewmaHourlyTpsBin, tpsM2Bin, completedHoursCountBin,
                 avgAmountByTypeBin, amountM2ByTypeBin, amountCountByTypeBin,
                 ewmaHourlyAmountBin, hourlyAmountM2Bin,
-                lastUpdatedBin, lastHourBucketBin);
+                lastUpdatedBin, lastHourBucketBin,
+                beneTxnCntsBin, distinctBeneBin, ewmaAmtBeneBin, amtM2BeneBin);
     }
 
     /**
@@ -111,6 +118,38 @@ public class ClientProfileRepository {
      */
     public long getHourlyAmount(String counterKey) {
         Key key = new Key(namespace, AerospikeConfig.SET_HOURLY_COUNTERS, counterKey);
+        Record record = client.get(readPolicy, key);
+        if (record == null) return 0;
+        Long amount = record.getLong("totalAmount");
+        return amount != null ? amount : 0;
+    }
+
+    // --- Beneficiary hourly counters ---
+
+    public long incrementBeneficiaryCounter(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
+        Bin countBin = new Bin("count", 1);
+        Record record = client.operate(writePolicy, key,
+                Operation.add(countBin),
+                Operation.get("count"));
+        return record.getLong("count");
+    }
+
+    public void addBeneficiaryAmount(String counterKey, long amountInPaise) {
+        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
+        Bin amountBin = new Bin("totalAmount", amountInPaise);
+        client.operate(writePolicy, key, Operation.add(amountBin));
+    }
+
+    public long getBeneficiaryCount(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
+        Record record = client.get(readPolicy, key);
+        if (record == null) return 0;
+        return record.getLong("count");
+    }
+
+    public long getBeneficiaryAmount(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
         Record record = client.get(readPolicy, key);
         if (record == null) return 0;
         Long amount = record.getLong("totalAmount");
@@ -161,7 +200,42 @@ public class ClientProfileRepository {
             profile.setAmountCountByType(typed);
         }
 
+        // Beneficiary fields
+        Long distinctBene = (Long) record.getValue("distinctBene");
+        profile.setDistinctBeneficiaryCount(distinctBene != null ? distinctBene : 0);
+
+        String beneTxnCntsStr = record.getString("beneTxnCnts");
+        if (beneTxnCntsStr != null) {
+            profile.setBeneficiaryTxnCounts(deserializeLongMap(beneTxnCntsStr));
+        }
+
+        String ewmaAmtBeneStr = record.getString("ewmaAmtBene");
+        if (ewmaAmtBeneStr != null) {
+            profile.setEwmaAmountByBeneficiary(deserializeDoubleMap(ewmaAmtBeneStr));
+        }
+
+        String amtM2BeneStr = record.getString("amtM2Bene");
+        if (amtM2BeneStr != null) {
+            profile.setAmountM2ByBeneficiary(deserializeDoubleMap(amtM2BeneStr));
+        }
+
         return profile;
+    }
+
+    private String serializeLongMap(Map<String, Long> map) {
+        try {
+            return objectMapper.writeValueAsString(map);
+        } catch (Exception e) {
+            return "{}";
+        }
+    }
+
+    private Map<String, Long> deserializeLongMap(String json) {
+        try {
+            return objectMapper.readValue(json, new TypeReference<Map<String, Long>>() {});
+        } catch (Exception e) {
+            return new HashMap<>();
+        }
     }
 
     private String serializeMap(Map<String, Double> map) {

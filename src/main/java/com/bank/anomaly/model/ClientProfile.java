@@ -74,6 +74,36 @@ public class ClientProfile {
     @Schema(description = "Hour bucket key of the last processed hour (for TPS rollover)", example = "CLIENT-001:2025-02-18T14")
     private String lastHourBucket;
 
+    // --- Beneficiary tracking ---
+
+    @Schema(description = "Transaction count per beneficiary (key = IFSC:Account)")
+    @Builder.Default
+    private Map<String, Long> beneficiaryTxnCounts = new HashMap<>();
+
+    @Schema(description = "Total distinct beneficiaries this client has transacted with", example = "35")
+    @Builder.Default
+    private long distinctBeneficiaryCount = 0;
+
+    @Schema(description = "EWMA of amount per beneficiary")
+    @Builder.Default
+    private Map<String, Double> ewmaAmountByBeneficiary = new HashMap<>();
+
+    @Schema(description = "Welford's M2 per beneficiary for amount variance")
+    @Builder.Default
+    private Map<String, Double> amountM2ByBeneficiary = new HashMap<>();
+
+    public double getBeneficiaryConcentration(String beneficiaryKey) {
+        if (totalTxnCount == 0 || beneficiaryKey == null) return 0.0;
+        return beneficiaryTxnCounts.getOrDefault(beneficiaryKey, 0L) / (double) totalTxnCount;
+    }
+
+    public double getAmountStdDevForBeneficiary(String beneficiaryKey) {
+        long count = beneficiaryTxnCounts.getOrDefault(beneficiaryKey, 0L);
+        if (count < 2) return 0.0;
+        double m2 = amountM2ByBeneficiary.getOrDefault(beneficiaryKey, 0.0);
+        return Math.sqrt(m2 / (count - 1));
+    }
+
     public double getTypeFrequency(String txnType) {
         if (totalTxnCount == 0) return 0.0;
         return txnTypeCounts.getOrDefault(txnType, 0L) / (double) totalTxnCount;

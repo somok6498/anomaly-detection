@@ -102,6 +102,8 @@ public class IsolationForestEvaluator implements RuleEvaluator {
         means[3] = 1.0;  // Hourly amount ratio baseline
         means[4] = 0.0;  // Type amount Z-score mean
         means[5] = 0.5;  // Hour-of-day midpoint
+        means[6] = 1.0;  // Beneficiary concentration baseline (ratio=1.0 means uniform)
+        means[7] = 0.1;  // Beneficiary window velocity baseline (low)
         return means;
     }
 

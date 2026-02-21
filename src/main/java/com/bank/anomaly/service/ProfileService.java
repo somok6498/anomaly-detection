@@ -111,6 +111,40 @@ public class ProfileService {
         profileRepository.incrementHourlyCounter(counterKey);
         profileRepository.addHourlyAmount(counterKey, (long) (txn.getAmount() * 100)); // store as paise
 
+        // 5.5 Update beneficiary stats (if beneficiary data present)
+        String beneKey = txn.getBeneficiaryKey();
+        if (beneKey != null) {
+            long beneCount = profile.getBeneficiaryTxnCounts().getOrDefault(beneKey, 0L);
+
+            // Track distinct beneficiary count (increment on first encounter)
+            if (beneCount == 0) {
+                profile.setDistinctBeneficiaryCount(profile.getDistinctBeneficiaryCount() + 1);
+            }
+
+            // Increment beneficiary transaction count
+            profile.getBeneficiaryTxnCounts().merge(beneKey, 1L, Long::sum);
+
+            // EWMA + Welford for per-beneficiary amount
+            if (beneCount == 0) {
+                profile.getEwmaAmountByBeneficiary().put(beneKey, txn.getAmount());
+                profile.getAmountM2ByBeneficiary().put(beneKey, 0.0);
+            } else {
+                double oldBeneMean = profile.getEwmaAmountByBeneficiary().getOrDefault(beneKey, 0.0);
+                double newBeneMean = alpha * txn.getAmount() + (1 - alpha) * oldBeneMean;
+                profile.getEwmaAmountByBeneficiary().put(beneKey, newBeneMean);
+
+                double beneDelta = txn.getAmount() - oldBeneMean;
+                double beneDelta2 = txn.getAmount() - newBeneMean;
+                double oldBeneM2 = profile.getAmountM2ByBeneficiary().getOrDefault(beneKey, 0.0);
+                profile.getAmountM2ByBeneficiary().put(beneKey, oldBeneM2 + beneDelta * beneDelta2);
+            }
+
+            // Atomic increment beneficiary hourly counters
+            String beneCounterKey = profile.getClientId() + ":" + beneKey + ":" + currentHourBucket;
+            profileRepository.incrementBeneficiaryCounter(beneCounterKey);
+            profileRepository.addBeneficiaryAmount(beneCounterKey, (long) (txn.getAmount() * 100));
+        }
+
         // 6. Update timestamp and save
         profile.setLastUpdated(System.currentTimeMillis());
         profileRepository.save(profile);
@@ -130,6 +164,22 @@ public class ProfileService {
     public long getCurrentHourlyAmount(String clientId, long timestamp) {
         String counterKey = clientId + ":" + getHourBucket(timestamp);
         return profileRepository.getHourlyAmount(counterKey);
+    }
+
+    /**
+     * Get the current hourly transaction count for a specific beneficiary.
+     */
+    public long getCurrentBeneficiaryCount(String clientId, String beneKey, long timestamp) {
+        String counterKey = clientId + ":" + beneKey + ":" + getHourBucket(timestamp);
+        return profileRepository.getBeneficiaryCount(counterKey);
+    }
+
+    /**
+     * Get the current hourly total amount for a specific beneficiary.
+     */
+    public long getCurrentBeneficiaryAmount(String clientId, String beneKey, long timestamp) {
+        String counterKey = clientId + ":" + beneKey + ":" + getHourBucket(timestamp);
+        return profileRepository.getBeneficiaryAmount(counterKey);
     }
 
     /**

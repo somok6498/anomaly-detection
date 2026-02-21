@@ -94,10 +94,23 @@ public class TransactionEvaluationService {
         long currentHourlyAmount = profileService.getCurrentHourlyAmount(
                 txn.getClientId(), txn.getTimestamp());
 
-        EvaluationContext context = EvaluationContext.builder()
+        EvaluationContext.EvaluationContextBuilder ctxBuilder = EvaluationContext.builder()
                 .currentHourlyTxnCount(currentHourlyCount)
-                .currentHourlyAmountPaise(currentHourlyAmount)
-                .build();
+                .currentHourlyAmountPaise(currentHourlyAmount);
+
+        // Populate beneficiary window data if beneficiary info is present
+        String beneKey = txn.getBeneficiaryKey();
+        if (beneKey != null) {
+            long beneCount = profileService.getCurrentBeneficiaryCount(
+                    txn.getClientId(), beneKey, txn.getTimestamp());
+            long beneAmount = profileService.getCurrentBeneficiaryAmount(
+                    txn.getClientId(), beneKey, txn.getTimestamp());
+            ctxBuilder.currentWindowBeneficiaryTxnCount(beneCount)
+                      .currentWindowBeneficiaryAmountPaise(beneAmount)
+                      .currentBeneficiaryKey(beneKey);
+        }
+
+        EvaluationContext context = ctxBuilder.build();
 
         // 4. Run all active rules
         List<RuleResult> ruleResults = ruleEngine.evaluateAll(txn, profile, context);

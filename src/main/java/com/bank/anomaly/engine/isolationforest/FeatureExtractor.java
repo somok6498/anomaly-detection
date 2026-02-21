@@ -8,7 +8,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 
 /**
- * Extracts a 6-dimensional feature vector from a transaction relative to the client's profile.
+ * Extracts an 8-dimensional feature vector from a transaction relative to the client's profile.
  *
  * Features:
  *   [0] Amount Z-score: (amount - ewmaAmount) / amountStdDev
@@ -17,10 +17,12 @@ import java.time.ZoneId;
  *   [3] Hourly amount ratio: currentHourlyAmount / ewmaHourlyAmount
  *   [4] Type amount Z-score: (amount - avgAmountForType) / stdDevForType
  *   [5] Hour-of-day factor: normalized hour (0-23) / 24.0
+ *   [6] Beneficiary concentration: actual_concentration / expected_uniform
+ *   [7] Beneficiary window velocity: same_bene_window_count / ewmaHourlyTps
  */
 public class FeatureExtractor {
 
-    public static final int FEATURE_COUNT = 6;
+    public static final int FEATURE_COUNT = 8;
 
     public static final String[] FEATURE_NAMES = {
             "Amount Z-score",
@@ -28,7 +30,9 @@ public class FeatureExtractor {
             "TPS Ratio",
             "Hourly Amount Ratio",
             "Type Amount Z-score",
-            "Hour-of-Day"
+            "Hour-of-Day",
+            "Beneficiary Concentration",
+            "Beneficiary Window Velocity"
     };
 
     public static double[] extract(Transaction txn, ClientProfile profile, EvaluationContext context) {
@@ -76,6 +80,23 @@ public class FeatureExtractor {
                 .getHour();
         features[5] = hour / 24.0;
 
+        // [6] Beneficiary concentration ratio
+        String beneKey = (context != null) ? context.getCurrentBeneficiaryKey() : null;
+        if (beneKey != null && profile.getDistinctBeneficiaryCount() > 0) {
+            double actualConcentration = profile.getBeneficiaryConcentration(beneKey);
+            double expectedUniform = 1.0 / profile.getDistinctBeneficiaryCount();
+            features[6] = expectedUniform > 0 ? actualConcentration / expectedUniform : 1.0;
+        } else {
+            features[6] = 1.0; // neutral
+        }
+
+        // [7] Beneficiary window velocity
+        if (context != null && beneKey != null && profile.getEwmaHourlyTps() > 0) {
+            features[7] = context.getCurrentWindowBeneficiaryTxnCount() / profile.getEwmaHourlyTps();
+        } else {
+            features[7] = 0.0; // neutral (no beneficiary window activity)
+        }
+
         return features;
     }
 
@@ -110,6 +131,19 @@ public class FeatureExtractor {
                 .atZone(ZoneId.systemDefault())
                 .getHour();
         features[5] = hour / 24.0;
+
+        // [6] Beneficiary concentration — simulate near-neutral for training
+        String beneKey = txn.getBeneficiaryKey();
+        if (beneKey != null && profile.getDistinctBeneficiaryCount() > 0) {
+            double actualConcentration = profile.getBeneficiaryConcentration(beneKey);
+            double expectedUniform = 1.0 / profile.getDistinctBeneficiaryCount();
+            features[6] = expectedUniform > 0 ? actualConcentration / expectedUniform : 1.0;
+        } else {
+            features[6] = 1.0; // neutral
+        }
+
+        // [7] Beneficiary window velocity — simulate near-zero for training (no live counters)
+        features[7] = 0.1 * (1.0 + tpsJitter); // small baseline with jitter
 
         return features;
     }

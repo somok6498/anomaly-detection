@@ -18,6 +18,8 @@ import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Random;
 import java.util.UUID;
@@ -50,6 +52,11 @@ public class DataSeeder implements CommandLineRunner {
 
     // Transaction types
     private static final String[] TXN_TYPES = {"NEFT", "RTGS", "IMPS", "UPI", "IFT"};
+
+    // IFSC codes for beneficiary generation
+    private static final String[] IFSC_PREFIXES = {
+            "HDFC", "ICIC", "SBIN", "UTIB", "KKBK", "PUNB", "BARB", "IDFB", "YESB", "CNRB"
+    };
 
     public DataSeeder(AerospikeClient client,
                       @Qualifier("aerospikeNamespace") String namespace,
@@ -146,7 +153,31 @@ public class DataSeeder implements CommandLineRunner {
                 .params(Map.of("numTrees", "100", "sampleSize", "256"))
                 .build());
 
-        log.info("Seeded 6 default anomaly rules (including Isolation Forest)");
+        // Rule 7: Beneficiary rapid repeat — flag 5+ txns to same beneficiary in 1 hour
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-BENE-RAPID")
+                .name("Beneficiary Rapid Repeat")
+                .description("Flag when a client sends multiple transactions to the same beneficiary in a short window (structuring/smurfing)")
+                .ruleType(RuleType.BENEFICIARY_RAPID_REPEAT)
+                .variancePct(0.0)  // not used — threshold via params
+                .riskWeight(3.0)
+                .enabled(true)
+                .params(Map.of("minRepeatCount", "5"))
+                .build());
+
+        // Rule 8: Beneficiary concentration — flag disproportionate txn volume to one beneficiary
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-BENE-CONC")
+                .name("Beneficiary Concentration Anomaly")
+                .description("Flag when a disproportionate share of transactions go to a single beneficiary")
+                .ruleType(RuleType.BENEFICIARY_CONCENTRATION)
+                .variancePct(200.0)  // flag if concentration > 3x expected uniform
+                .riskWeight(2.0)
+                .enabled(true)
+                .params(Map.of("absMinConcentrationPct", "5.0"))
+                .build());
+
+        log.info("Seeded 8 default anomaly rules (including Isolation Forest and beneficiary rules)");
     }
 
     /**
@@ -240,6 +271,10 @@ public class DataSeeder implements CommandLineRunner {
         int totalDays = 30;
         int totalTxns = txnsPerDay * totalDays;
 
+        // Generate beneficiary pool for this client (20-50 beneficiaries)
+        int poolSize = 20 + random.nextInt(31);
+        List<String[]> beneficiaryPool = generateBeneficiaryPool(poolSize);
+
         // Spread transactions evenly with some jitter
         long avgIntervalMillis = totalDurationMillis / totalTxns;
 
@@ -252,6 +287,8 @@ public class DataSeeder implements CommandLineRunner {
 
             String txnType;
             double amount;
+            String beneIfsc = null;
+            String beneAcct = null;
 
             if (isAnomalyWindow && random.nextDouble() < 0.15) {
                 // 15% of transactions in the anomaly window are anomalous
@@ -281,11 +318,16 @@ public class DataSeeder implements CommandLineRunner {
                 amount = gaussianAmount(avgAmount, amountStdDev);
             }
 
+            // Pick a beneficiary (power-law distribution — some beneficiaries more frequent)
+            String[] bene = pickBeneficiary(beneficiaryPool);
+            beneIfsc = bene[0];
+            beneAcct = bene[1];
+
             // Ensure amount is positive
             amount = Math.max(1.0, Math.round(amount * 100.0) / 100.0);
 
             String txnId = clientId + "-TXN-" + String.format("%06d", i);
-            writeTransaction(txnId, clientId, txnType, amount, currentTimestamp);
+            writeTransaction(txnId, clientId, txnType, amount, currentTimestamp, beneAcct, beneIfsc);
 
             txnCount++;
 
@@ -303,7 +345,28 @@ public class DataSeeder implements CommandLineRunner {
                 double amount = gaussianAmount(avgAmount, amountStdDev);
                 amount = Math.max(1.0, Math.round(amount * 100.0) / 100.0);
                 long ts = burstHourStart + (long) (random.nextDouble() * 3600_000); // within the hour
-                writeTransaction(txnId, clientId, txnType, amount, ts);
+                String[] bene = pickBeneficiary(beneficiaryPool);
+                writeTransaction(txnId, clientId, txnType, amount, ts, bene[1], bene[0]);
+                txnCount++;
+                anomalyCount++;
+            }
+
+            // Inject structuring/smurfing anomaly: 15-25 txns to the SAME beneficiary within 2 hours
+            // Amounts are random 8K-50K (look individually normal but the pattern is the anomaly)
+            String smurfIfsc = "HDFC0009999";
+            String smurfAcct = "9876543210";
+            int smurfCount = 15 + random.nextInt(11); // 15-25 txns
+            long smurfWindowStart = anomalyStartMillis + 7200_000L; // 2 hours into anomaly window
+            log.info("    {} — injecting {} structuring txns to {}:{}", clientId, smurfCount, smurfIfsc, smurfAcct);
+
+            for (int i = 0; i < smurfCount; i++) {
+                String txnId = clientId + "-SMURF-" + String.format("%03d", i);
+                String txnType = "NEFT"; // structuring typically uses one common type
+                // Random amounts between 8K-50K — designed to look individually normal
+                double amount = 8000 + random.nextDouble() * 42000;
+                amount = Math.round(amount * 100.0) / 100.0;
+                long ts = smurfWindowStart + (long) (random.nextDouble() * 7200_000); // within 2 hours
+                writeTransaction(txnId, clientId, txnType, amount, ts, smurfAcct, smurfIfsc);
                 txnCount++;
                 anomalyCount++;
             }
@@ -312,6 +375,33 @@ public class DataSeeder implements CommandLineRunner {
         int total = counter.addAndGet(txnCount);
         log.info("  {} — {} txns seeded (anomalies: {}). Running total: {}",
                 clientId, txnCount, anomalyCount, total);
+    }
+
+    /**
+     * Generate a pool of beneficiary accounts for a client.
+     * Returns list of [ifsc, accountNumber] pairs.
+     */
+    private List<String[]> generateBeneficiaryPool(int size) {
+        List<String[]> pool = new ArrayList<>();
+        for (int i = 0; i < size; i++) {
+            String ifsc = IFSC_PREFIXES[random.nextInt(IFSC_PREFIXES.length)]
+                    + "000" + String.format("%04d", random.nextInt(10000));
+            String account = String.valueOf(1000000000L + random.nextInt(900000000));
+            pool.add(new String[]{ifsc, account});
+        }
+        return pool;
+    }
+
+    /**
+     * Pick a beneficiary from the pool using power-law distribution.
+     * Lower-indexed beneficiaries are picked more frequently.
+     */
+    private String[] pickBeneficiary(List<String[]> pool) {
+        // Power-law: index = floor(pool.size * random^2)
+        double r = random.nextDouble();
+        int idx = (int) (pool.size() * r * r);
+        idx = Math.min(idx, pool.size() - 1);
+        return pool.get(idx);
     }
 
     /**
@@ -349,14 +439,24 @@ public class DataSeeder implements CommandLineRunner {
      * Write a single transaction record to Aerospike.
      */
     private void writeTransaction(String txnId, String clientId, String txnType,
-                                  double amount, long timestamp) {
+                                  double amount, long timestamp,
+                                  String beneAcct, String beneIfsc) {
         Key key = new Key(namespace, AerospikeConfig.SET_TRANSACTIONS, txnId);
 
-        client.put(writePolicy, key,
+        List<Bin> bins = new ArrayList<>(List.of(
                 new Bin("txnId", txnId),
                 new Bin("clientId", clientId),
                 new Bin("txnType", txnType),
                 new Bin("amount", amount),
-                new Bin("timestamp", timestamp));
+                new Bin("timestamp", timestamp)));
+
+        if (beneAcct != null) {
+            bins.add(new Bin("beneAcct", beneAcct));
+        }
+        if (beneIfsc != null) {
+            bins.add(new Bin("beneIfsc", beneIfsc));
+        }
+
+        client.put(writePolicy, key, bins.toArray(new Bin[0]));
     }
 }

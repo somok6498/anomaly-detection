@@ -71,6 +71,8 @@ public class ProfileBuilder implements CommandLineRunner {
                                 .txnType(record.getString("txnType"))
                                 .amount(record.getDouble("amount"))
                                 .timestamp(record.getLong("timestamp"))
+                                .beneficiaryAccount(record.getString("beneAcct"))
+                                .beneficiaryIfsc(record.getString("beneIfsc"))
                                 .build();
 
                         txnsByClient.computeIfAbsent(txn.getClientId(), k -> Collections.synchronizedList(new ArrayList<>()))
@@ -102,11 +104,12 @@ public class ProfileBuilder implements CommandLineRunner {
                 profileService.updateProfile(profile, txn);
             }
 
-            log.info("  Built profile for {}: {} txns, EWMA amount={}, EWMA hourly TPS={}, types={}",
+            log.info("  Built profile for {}: {} txns, EWMA amount={}, EWMA hourly TPS={}, types={}, distinct beneficiaries={}",
                     clientId, txns.size(),
                     String.format("%.2f", profile.getEwmaAmount()),
                     String.format("%.2f", profile.getEwmaHourlyTps()),
-                    profile.getTxnTypeCounts().keySet());
+                    profile.getTxnTypeCounts().keySet(),
+                    profile.getDistinctBeneficiaryCount());
         }
 
         log.info("=== Profile building complete for {} clients ===", txnsByClient.size());

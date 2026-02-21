@@ -15,4 +15,9 @@ public class EvaluationContext {
 
     // Current hour's total amount for this client (in paise, from atomic counter)
     private long currentHourlyAmountPaise;
+
+    // Beneficiary window data — same beneficiary txns/amount in the current hour
+    private long currentWindowBeneficiaryTxnCount;
+    private long currentWindowBeneficiaryAmountPaise;
+    private String currentBeneficiaryKey;
 }

@@ -36,12 +36,21 @@ public class TransactionRepository {
 
     public void save(Transaction txn) {
         Key key = new Key(namespace, AerospikeConfig.SET_TRANSACTIONS, txn.getTxnId());
-        client.put(writePolicy, key,
+        java.util.List<Bin> bins = new java.util.ArrayList<>(java.util.List.of(
                 new Bin("txnId", txn.getTxnId()),
                 new Bin("clientId", txn.getClientId()),
                 new Bin("txnType", txn.getTxnType()),
                 new Bin("amount", txn.getAmount()),
-                new Bin("timestamp", txn.getTimestamp()));
+                new Bin("timestamp", txn.getTimestamp())));
+
+        if (txn.getBeneficiaryAccount() != null) {
+            bins.add(new Bin("beneAcct", txn.getBeneficiaryAccount()));
+        }
+        if (txn.getBeneficiaryIfsc() != null) {
+            bins.add(new Bin("beneIfsc", txn.getBeneficiaryIfsc()));
+        }
+
+        client.put(writePolicy, key, bins.toArray(new Bin[0]));
     }
 
     public Transaction findByTxnId(String txnId) {
@@ -81,6 +90,8 @@ public class TransactionRepository {
                 .txnType(record.getString("txnType"))
                 .amount(record.getDouble("amount"))
                 .timestamp(record.getLong("timestamp"))
+                .beneficiaryAccount(record.getString("beneAcct"))
+                .beneficiaryIfsc(record.getString("beneIfsc"))
                 .build();
     }
 }
