@@ -1,3 +1,7 @@
+spring:
+  application:
+    name: anomaly-detection
+
 server:
   port: 8080
 
@@ -29,6 +33,29 @@ springdoc:
     operations-sorter: method
   api-docs:
     path: /v3/api-docs
+
+# Twilio notification (SMS / WhatsApp) on BLOCKED transactions
+# Set these via environment variables: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, etc.
+twilio:
+  account-sid: ${TWILIO_ACCOUNT_SID:}
+  auth-token: ${TWILIO_AUTH_TOKEN:}
+  from-number: ${TWILIO_FROM_NUMBER:+14155238886}
+  to-number: ${TWILIO_TO_NUMBER:+919830709527}
+  enabled: ${TWILIO_ENABLED:true}
+  channel: ${TWILIO_CHANNEL:whatsapp}   # "sms" or "whatsapp"
+
+# Observability: OTEL traces + Actuator metrics
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: http://localhost:4318/v1/traces
 
 # Logging
 logging:

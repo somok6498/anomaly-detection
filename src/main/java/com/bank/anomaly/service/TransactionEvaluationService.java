@@ -1,5 +1,6 @@
 package com.bank.anomaly.service;
 
+import com.bank.anomaly.config.MetricsConfig;
 import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.engine.EvaluationContext;
 import com.bank.anomaly.engine.RuleEngine;
@@ -10,6 +11,7 @@ import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.repository.TransactionRepository;
+import io.micrometer.observation.annotation.Observed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -40,25 +42,32 @@ public class TransactionEvaluationService {
     private final RiskResultRepository riskResultRepository;
     private final TransactionRepository transactionRepository;
     private final RiskThresholdConfig thresholdConfig;
+    private final TwilioNotificationService notificationService;
+    private final MetricsConfig metricsConfig;
 
     public TransactionEvaluationService(ProfileService profileService,
                                         RuleEngine ruleEngine,
                                         RiskScoringService riskScoringService,
                                         RiskResultRepository riskResultRepository,
                                         TransactionRepository transactionRepository,
-                                        RiskThresholdConfig thresholdConfig) {
+                                        RiskThresholdConfig thresholdConfig,
+                                        TwilioNotificationService notificationService,
+                                        MetricsConfig metricsConfig) {
         this.profileService = profileService;
         this.ruleEngine = ruleEngine;
         this.riskScoringService = riskScoringService;
         this.riskResultRepository = riskResultRepository;
         this.transactionRepository = transactionRepository;
         this.thresholdConfig = thresholdConfig;
+        this.notificationService = notificationService;
+        this.metricsConfig = metricsConfig;
     }
 
     /**
      * Evaluate a transaction for anomalies.
      * This is the main entry point called by the REST controller.
      */
+    @Observed(name = "transaction.evaluate", contextualName = "evaluate-transaction")
     public EvaluationResult evaluate(Transaction txn) {
         // 0. Persist the incoming transaction
         transactionRepository.save(txn);
@@ -124,7 +133,13 @@ public class TransactionEvaluationService {
         // 7. Persist evaluation result
         riskResultRepository.save(result);
 
-        // 8. Log significant events
+        // 8. Record metrics
+        metricsConfig.recordEvaluation(result.getAction(), result.getCompositeScore());
+
+        // 9. Send notification if blocked (async — does not delay response)
+        notificationService.notifyIfBlocked(txn, result);
+
+        // 10. Log significant events
         if (result.getCompositeScore() >= thresholdConfig.getAlertThreshold()) {
             log.warn("Anomaly detected for client={}, txn={}: score={}, level={}, action={}",
                     txn.getClientId(), txn.getTxnId(),

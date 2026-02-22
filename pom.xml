@@ -25,6 +25,10 @@
         <springdoc-openapi.version>2.5.0</springdoc-openapi.version>
         <lombok.version>1.18.32</lombok.version>
         <jackson.version>2.15.4</jackson.version>
+        <twilio.version>10.1.0</twilio.version>
+        <micrometer-tracing.version>1.2.5</micrometer-tracing.version>
+        <opentelemetry-exporter.version>1.36.0</opentelemetry-exporter.version>
+        <micrometer-prometheus.version>1.12.5</micrometer-prometheus.version>
     </properties>
 
     <dependencies>
@@ -54,6 +58,40 @@
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
             <version>${springdoc-openapi.version}</version>
+        </dependency>
+
+        <!-- Twilio SDK for SMS/WhatsApp notifications -->
+        <dependency>
+            <groupId>com.twilio.sdk</groupId>
+            <artifactId>twilio</artifactId>
+            <version>${twilio.version}</version>
+        </dependency>
+
+        <!-- Observability: Actuator + OTEL Traces + Prometheus Metrics -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+            <version>3.2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+            <version>3.2.5</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+            <version>${micrometer-tracing.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
+            <version>${opentelemetry-exporter.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+            <version>${micrometer-prometheus.version}</version>
         </dependency>
 
         <!-- Lombok -->

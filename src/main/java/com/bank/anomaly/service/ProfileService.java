@@ -4,6 +4,7 @@ import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.ClientProfileRepository;
+import io.micrometer.observation.annotation.Observed;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -31,6 +32,7 @@ public class ProfileService {
     /**
      * Get a client's behavioral profile. Returns a new empty profile if none exists.
      */
+    @Observed(name = "profile.get_or_create", contextualName = "load-client-profile")
     public ClientProfile getOrCreateProfile(String clientId) {
         ClientProfile profile = profileRepository.findByClientId(clientId);
         if (profile == null) {
@@ -46,6 +48,7 @@ public class ProfileService {
      * This should be called AFTER the transaction has been evaluated (so scoring
      * uses the pre-update profile).
      */
+    @Observed(name = "profile.update", contextualName = "update-client-profile")
     public void updateProfile(ClientProfile profile, Transaction txn) {
         double alpha = thresholdConfig.getEwmaAlpha();
         long n = profile.getTotalTxnCount();

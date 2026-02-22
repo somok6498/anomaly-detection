@@ -5,6 +5,7 @@ import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.RiskLevel;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.Transaction;
+import io.micrometer.observation.annotation.Observed;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -30,6 +31,7 @@ public class RiskScoringService {
      * Composite score = Σ(triggeredPartialScore × riskWeight) / Σ(triggeredRiskWeight)
      * Non-triggered rules appear in the results for transparency but don't dilute the score.
      */
+    @Observed(name = "risk.score.compute", contextualName = "compute-risk-score")
     public EvaluationResult computeResult(Transaction txn, List<RuleResult> ruleResults) {
         if (ruleResults.isEmpty()) {
             return EvaluationResult.builder()
