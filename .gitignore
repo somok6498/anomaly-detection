@@ -46,6 +46,9 @@ create_deck.py
 # === Presentations ===
 *.pptx
 
+# === Secrets ===
+.env
+
 # === Temp/generated ===
 *.log
 *.tmp
