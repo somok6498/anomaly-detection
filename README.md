@@ -6,7 +6,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 
 - **Spring Boot 3.2.5** (Java 17) REST API
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
-- **8 anomaly evaluators** — 7 rule-based + 1 ML (Isolation Forest)
+- **9 anomaly evaluators** — 8 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
@@ -20,7 +20,7 @@ POST /api/v1/transactions/evaluate
   │
   ├─ 1. Load/create client behavioral profile (EWMA stats)
   ├─ 2. Build evaluation context (hourly counters, beneficiary data)
-  ├─ 3. Evaluate against all active anomaly rules (8 evaluators)
+  ├─ 3. Evaluate against all active anomaly rules (9 evaluators)
   ├─ 4. Compute weighted composite risk score (0–100)
   ├─ 5. Determine action: PASS (<30) · ALERT (30–70) · BLOCK (≥70)
   ├─ 6. Update client profile with new transaction data
@@ -39,6 +39,7 @@ POST /api/v1/transactions/evaluate
 | `AMOUNT_PER_TYPE_ANOMALY` | Unusual amounts for specific transaction types | 1.5 |
 | `BENEFICIARY_RAPID_REPEAT` | ≥5 transactions to same beneficiary in 1 hour | 3.0 |
 | `BENEFICIARY_CONCENTRATION` | Disproportionate volume to a single beneficiary | 2.0 |
+| `BENEFICIARY_AMOUNT_REPETITION` | Repeated identical amounts to same beneficiary (threshold evasion) | 2.5 |
 | `ISOLATION_FOREST` | ML-based multi-dimensional anomaly detection (8 features) | 2.0 |
 
 **Composite Score** = Σ(triggered partial score × weight) / Σ(triggered weight), capped at 100.
@@ -301,7 +302,7 @@ src/main/java/com/bank/anomaly/
 ├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
 ├── controller/           # REST controllers (Transactions, Rules, Profiles, Models)
 ├── engine/
-│   ├── evaluators/       # 8 rule evaluators (7 rule-based + 1 Isolation Forest)
+│   ├── evaluators/       # 9 rule evaluators (8 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
 ├── repository/           # Aerospike data access (5 repositories)

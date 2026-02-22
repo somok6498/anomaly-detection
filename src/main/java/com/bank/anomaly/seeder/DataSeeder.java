@@ -177,7 +177,19 @@ public class DataSeeder implements CommandLineRunner {
                 .params(Map.of("absMinConcentrationPct", "5.0"))
                 .build());
 
-        log.info("Seeded 8 default anomaly rules (including Isolation Forest and beneficiary rules)");
+        // Rule 9: Beneficiary amount repetition — flag repeated identical amounts to same beneficiary
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-BENE-AMT-REPEAT")
+                .name("Beneficiary Amount Repetition")
+                .description("Flag when a client repeatedly sends the same amount to the same beneficiary (structuring to evade reporting thresholds)")
+                .ruleType(RuleType.BENEFICIARY_AMOUNT_REPETITION)
+                .variancePct(0.0)  // not used — threshold via params
+                .riskWeight(2.5)
+                .enabled(true)
+                .params(Map.of("minBeneficiaryTxns", "3", "maxCvPct", "10.0"))
+                .build());
+
+        log.info("Seeded 9 default anomaly rules (including Isolation Forest and beneficiary rules)");
     }
 
     /**
@@ -367,6 +379,31 @@ public class DataSeeder implements CommandLineRunner {
                 amount = Math.round(amount * 100.0) / 100.0;
                 long ts = smurfWindowStart + (long) (random.nextDouble() * 7200_000); // within 2 hours
                 writeTransaction(txnId, clientId, txnType, amount, ts, smurfAcct, smurfIfsc);
+                txnCount++;
+                anomalyCount++;
+            }
+
+            // Inject amount repetition anomaly: 8-12 txns with nearly identical amounts to same beneficiary
+            // Spread across the full 2-day anomaly window (not rapid — slow drip pattern)
+            String repeatIfsc = "SBIN0005555";
+            String repeatAcct = "5555000001";
+            int repeatCount = 8 + random.nextInt(5); // 8-12 txns
+            double repeatAmount = 49999.0; // just under a common reporting threshold
+            log.info("    {} — injecting {} amount-repetition txns (₹{}) to {}:{}",
+                    clientId, repeatCount, repeatAmount, repeatIfsc, repeatAcct);
+
+            long anomalyWindowDuration = endMillis - anomalyStartMillis;
+            for (int i = 0; i < repeatCount; i++) {
+                String txnId = clientId + "-REPEAT-" + String.format("%03d", i);
+                String txnType = "NEFT";
+                // Amount varies by ±0.5% to look natural but maintain very low CV
+                double amount = repeatAmount * (1.0 + (random.nextDouble() - 0.5) * 0.01);
+                amount = Math.round(amount * 100.0) / 100.0;
+                // Spread evenly across the 2-day anomaly window
+                long ts = anomalyStartMillis + (long) (anomalyWindowDuration * ((double) i / repeatCount))
+                        + (long) (random.nextDouble() * 3600_000); // ±1 hour jitter
+                ts = Math.min(ts, endMillis - 1);
+                writeTransaction(txnId, clientId, txnType, amount, ts, repeatAcct, repeatIfsc);
                 txnCount++;
                 anomalyCount++;
             }
