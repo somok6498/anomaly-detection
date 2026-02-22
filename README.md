@@ -9,7 +9,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **8 anomaly evaluators** — 7 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
-- **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus)
+- **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
 - **Swagger UI** for interactive API exploration
 - **Flutter Web** dashboard (pre-built, served as static assets)
 
@@ -82,7 +82,7 @@ docker-compose run --rm -e SPRING_PROFILES_ACTIVE=seed app
 ### 3. Start / Stop
 
 ```bash
-# Start all containers (Aerospike + Jaeger + App)
+# Start all containers (Aerospike + Jaeger + App + Prometheus + Grafana)
 docker-compose up -d
 
 # Stop (keeps data in Aerospike volume)
@@ -107,8 +107,9 @@ docker-compose up -d --build allinone
 | http://localhost:8080/swagger-ui.html | Swagger UI |
 | http://localhost:8080/index.html | Flutter dashboard |
 | http://localhost:8080/v3/api-docs | OpenAPI spec (JSON) |
+| http://localhost:3333 | Grafana dashboard (admin/admin) |
 | http://localhost:16686 | Jaeger tracing UI |
-| http://localhost:8080/actuator/prometheus | Prometheus metrics |
+| http://localhost:9090 | Prometheus query UI |
 | http://localhost:8080/actuator/health | Health check |
 
 ## Quick Start (Local development)
@@ -251,14 +252,36 @@ anomaly-detection: POST /api/v1/transactions/evaluate
 
 View traces at **http://localhost:16686** → select service `anomaly-detection`.
 
-### Metrics (Prometheus / Actuator)
+### Metrics & Dashboards (Grafana + Prometheus)
+
+Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provisioned with an **Anomaly Detection** dashboard at **http://localhost:3333**.
+
+**Dashboard panels:**
+
+| Panel | Type | What it shows |
+|-------|------|---------------|
+| Evaluations by Action | Donut chart | PASS / ALERT / BLOCK distribution |
+| Evaluation Rate Over Time | Time series | Evaluations per minute by action |
+| Avg Composite Score by Action | Gauge | Mean risk score per action type |
+| Composite Score Over Time | Time series | Average and max scores over time |
+| Total Rules Triggered by Type | Bar chart | Which rules fire most often |
+| Rule Trigger Rate Over Time | Time series | Rule triggers per minute |
+| Notifications Sent | Stat | WhatsApp/SMS success vs error counts |
+| Notification Rate Over Time | Time series | Notification rate per minute |
+| HTTP Request Rate | Time series | Total requests per second |
+| HTTP Response Time (p95/p99) | Time series | Latency percentiles |
+| JVM Heap Memory | Time series | Used / committed / max heap |
+
+**Custom Prometheus metrics:**
 
 | Metric | Type | Labels |
 |--------|------|--------|
-| `evaluation.count` | Counter | `action` (PASS/ALERT/BLOCK) |
-| `evaluation.composite_score` | Distribution Summary | `action` |
-| `rule.triggered.count` | Counter | `rule_type` |
-| `notification.sent.count` | Counter | `channel`, `status` |
+| `evaluation_count_total` | Counter | `action` (PASS/ALERT/BLOCK) |
+| `evaluation_composite_score` | Distribution Summary | `action` |
+| `rule_triggered_count_total` | Counter | `rule_type` |
+| `notification_sent_count_total` | Counter | `channel`, `status` |
+
+Grafana login: **admin / admin** (anonymous viewing also enabled).
 
 ## Notifications (Twilio)
 
@@ -287,6 +310,8 @@ src/main/java/com/bank/anomaly/
 
 dashboard_ui/             # Flutter Web dashboard
 aerospike/                # Aerospike server configuration
+prometheus/               # Prometheus scrape configuration
+grafana/provisioning/     # Grafana datasources + pre-built dashboard
 ```
 
 ## Seeded Test Data
@@ -325,7 +350,7 @@ Key settings in `application.yml` (overridable via environment variables):
 | ML | Isolation Forest (pure Java) |
 | Notifications | Twilio SDK 10.1.0 (WhatsApp / SMS) |
 | Tracing | Micrometer + OpenTelemetry → Jaeger |
-| Metrics | Micrometer + Prometheus |
+| Metrics | Micrometer + Prometheus + Grafana |
 | API Docs | springdoc-openapi (Swagger UI) |
 | Dashboard | Flutter Web |
 | Containerization | Docker, Docker Compose |
