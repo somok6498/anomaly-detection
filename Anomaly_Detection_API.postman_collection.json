@@ -546,6 +546,175 @@
       ]
     },
     {
+      "name": "Review Queue & Feedback",
+      "description": "Ops review queue for ALERT/BLOCK transactions. Provides feedback (True Positive / False Positive), bulk actions, queue stats, and rule weight adjustment history.",
+      "item": [
+        {
+          "name": "Get Queue Stats",
+          "description": "Returns counts by feedback status: pending, truePositive, falsePositive, autoAccepted.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/review/stats",
+            "header": []
+          }
+        },
+        {
+          "name": "List Queue Items (all)",
+          "description": "List all review queue items. Supports filters: action (ALERT/BLOCK), clientId, fromDate, toDate, ruleId, limit.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/queue?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review", "queue"],
+              "query": [
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "List Queue Items (ALERT only)",
+          "description": "Filter queue to show only ALERT actions.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/queue?action=ALERT&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review", "queue"],
+              "query": [
+                { "key": "action", "value": "ALERT" },
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "List Queue Items (BLOCK only)",
+          "description": "Filter queue to show only BLOCK actions.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/queue?action=BLOCK&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review", "queue"],
+              "query": [
+                { "key": "action", "value": "BLOCK" },
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "List Queue Items (by Client)",
+          "description": "Filter queue items by client ID.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/queue?clientId=CLIENT-001&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review", "queue"],
+              "query": [
+                { "key": "clientId", "value": "CLIENT-001" },
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Queue Item Detail",
+          "description": "Returns composite detail: queue item + evaluation result + transaction + client profile. Replace TRIGGER-AMTTYPE-001 with an actual queued txnId.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMTTYPE-001",
+            "header": []
+          }
+        },
+        {
+          "name": "Submit Feedback - True Positive",
+          "description": "Mark a queued transaction as a confirmed anomaly (True Positive). Replace the txnId in the URL.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMTTYPE-001/feedback",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"TRUE_POSITIVE\",\n  \"feedbackBy\": \"ops\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit Feedback - False Positive",
+          "description": "Dismiss a queued transaction as a false alarm (False Positive). Replace the txnId in the URL.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMOUNT-001/feedback",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"FALSE_POSITIVE\",\n  \"feedbackBy\": \"ops\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Bulk Feedback - True Positive",
+          "description": "Mark multiple transactions as True Positive in one call. Update the txnIds array with actual queued IDs.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/review/queue/bulk-feedback",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnIds\": [\"TRIGGER-AMTTYPE-001\", \"TRIGGER-AMOUNT-001\"],\n  \"status\": \"TRUE_POSITIVE\",\n  \"feedbackBy\": \"ops\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Weight History (all rules)",
+          "description": "Returns recent rule weight adjustments from the auto-tuning job.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/weight-history?limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review", "weight-history"],
+              "query": [
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Weight History (specific rule)",
+          "description": "Filter weight history for a specific rule ID.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/weight-history?ruleId=RULE-AMOUNT&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review", "weight-history"],
+              "query": [
+                { "key": "ruleId", "value": "RULE-AMOUNT" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "header": []
+          }
+        }
+      ]
+    },
+    {
       "name": "Silence Detection",
       "item": [
         {
