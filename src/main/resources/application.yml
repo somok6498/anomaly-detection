@@ -62,7 +62,7 @@ risk:
 
   # Silence detection — background scheduler that alerts when active clients stop transacting
   silence-detection:
-    enabled: true
+    enabled: false
     check-interval-minutes: 5       # how often to scan profiles
     silence-multiplier: 3.0         # alert if gap > 3x expected gap between txns
     min-expected-tps: 1.0           # skip clients with < 1 txn/hour baseline

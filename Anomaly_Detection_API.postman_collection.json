@@ -1,0 +1,570 @@
+{
+  "info": {
+    "name": "Anomaly Detection API",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints plus targeted evaluation scenarios that trigger each of the 13 anomaly rules.\n\n**Setup:** Seed data first with `docker compose run --rm -e SPRING_PROFILES_ACTIVE=seed app`\n\n**Base URL:** http://localhost:8080",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "anomaly-detection"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "timestamp",
+      "value": "{{$timestamp}}000",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Actuator",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/actuator/health",
+            "header": []
+          }
+        },
+        {
+          "name": "Prometheus Metrics",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/actuator/prometheus",
+            "header": []
+          }
+        },
+        {
+          "name": "OpenAPI Spec",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/v3/api-docs",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Profiles",
+      "item": [
+        {
+          "name": "Get Profile - CLIENT-001 (NEFT heavy, ~50K avg)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/profiles/CLIENT-001",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Profile - CLIENT-002 (UPI retail, ~2K avg)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/profiles/CLIENT-002",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Profile - CLIENT-005 (IMPS specialist, ~10K avg)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/profiles/CLIENT-005",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Profile - CLIENT-011 (Dormant client)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/profiles/CLIENT-011",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rules",
+      "item": [
+        {
+          "name": "List All Rules",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/rules",
+            "header": []
+          }
+        },
+        {
+          "name": "Get Rule - Amount Anomaly",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/rules/RULE-AMOUNT",
+            "header": []
+          }
+        },
+        {
+          "name": "Create Custom Rule",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/rules",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruleId\": \"RULE-CUSTOM-001\",\n  \"name\": \"Custom Test Rule\",\n  \"description\": \"Example custom rule for testing\",\n  \"ruleType\": \"AMOUNT_ANOMALY\",\n  \"variancePct\": 50.0,\n  \"riskWeight\": 2.0,\n  \"enabled\": false,\n  \"params\": {}\n}"
+            }
+          }
+        },
+        {
+          "name": "Update Rule - Set Dormancy to 1 min (for testing)",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/rules/RULE-DORMANCY",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ruleId\": \"RULE-DORMANCY\",\n  \"ruleType\": \"DORMANCY_REACTIVATION\",\n  \"name\": \"Dormancy Reactivation\",\n  \"description\": \"Detects sudden activity after extended inactivity\",\n  \"riskWeight\": 3.0,\n  \"variancePct\": 0.0,\n  \"enabled\": true,\n  \"params\": {\n    \"dormancyMinutes\": \"1\"\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Delete Rule",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/rules/RULE-CUSTOM-001",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Transactions",
+      "item": [
+        {
+          "name": "Get Transaction by ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/transactions/CLIENT-001-TXN-000001",
+            "header": []
+          }
+        },
+        {
+          "name": "List Client Transactions",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/client/CLIENT-001?limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "client", "CLIENT-001"],
+              "query": [
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Evaluation Result by Txn ID",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/transactions/results/CLIENT-001-TXN-000001",
+            "header": []
+          }
+        },
+        {
+          "name": "List Client Evaluation Results",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/transactions/results/client/CLIENT-001?limit=5",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "transactions", "results", "client", "CLIENT-001"],
+              "query": [
+                { "key": "limit", "value": "5" }
+              ]
+            },
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Evaluate - Rule Trigger Scenarios",
+      "description": "Each request is crafted to trigger a specific anomaly rule based on seeded client profiles. Run in order for best results — some rules (like Rapid Repeat and New Bene Velocity) require multiple sequential requests.",
+      "item": [
+        {
+          "name": "Rule 1: Transaction Type Anomaly",
+          "description": "CLIENT-005 only uses IMPS/UPI. Sending RTGS triggers TRANSACTION_TYPE_ANOMALY (0% type frequency < 5% threshold).",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-TYPE-001\",\n  \"clientId\": \"CLIENT-005\",\n  \"txnType\": \"RTGS\",\n  \"amount\": 10000,\n  \"beneficiaryAccount\": \"1234567890\",\n  \"beneficiaryIfsc\": \"HDFC0001234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 2: TPS Spike (send 1 of 20)",
+          "description": "CLIENT-003 averages ~2 txns/hour. Sending 20 in rapid succession triggers TPS_SPIKE. Run this request 20 times quickly (or use Postman Runner with 20 iterations).",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-TPS-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-003\",\n  \"txnType\": \"RTGS\",\n  \"amount\": 500000,\n  \"beneficiaryAccount\": \"1111222233\",\n  \"beneficiaryIfsc\": \"SBIN0001111\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 3: Amount Anomaly (large single txn)",
+          "description": "CLIENT-001 averages ~50K per txn. Sending 1M (20x normal) triggers AMOUNT_ANOMALY with ~100 partial score.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-AMOUNT-001\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 1000000,\n  \"beneficiaryAccount\": \"5555666677\",\n  \"beneficiaryIfsc\": \"ICIC0005555\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 4: Hourly Amount Anomaly (setup 1/3)",
+          "description": "CLIENT-002 averages ~2K/txn, ~40K/hour. Sending 3x 500K within the same hour triggers HOURLY_AMOUNT_ANOMALY. Send this 3 times.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-HRLYAMT-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"UPI\",\n  \"amount\": 500000,\n  \"beneficiaryAccount\": \"4444555566\",\n  \"beneficiaryIfsc\": \"HDFC0004444\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 5: Amount Per Type Anomaly",
+          "description": "CLIENT-001 averages ~50K for NEFT. Sending 750K NEFT triggers AMOUNT_PER_TYPE_ANOMALY (15x type average).",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-AMTTYPE-001\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 750000,\n  \"beneficiaryAccount\": \"7777888899\",\n  \"beneficiaryIfsc\": \"AXIS0007777\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 6: Isolation Forest (multi-dimensional)",
+          "description": "CLIENT-001 normally does NEFT with ~50K amounts. Sending a rare type (IFT) + unusual amount + unknown beneficiary creates multi-feature anomaly for the Isolation Forest ML model.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-IF-001\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"IFT\",\n  \"amount\": 950000,\n  \"beneficiaryAccount\": \"0000000001\",\n  \"beneficiaryIfsc\": \"UNKNOWN\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 7: Beneficiary Rapid Repeat (send 1 of 6)",
+          "description": "Sends to same beneficiary repeatedly within 1 hour. Send this 6 times to trigger BENEFICIARY_RAPID_REPEAT (threshold = 5). Use Postman Runner with 6 iterations.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-RAPID-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-004\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 25000,\n  \"beneficiaryAccount\": \"RAPID-TARGET-999\",\n  \"beneficiaryIfsc\": \"HDFC0009999\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 8: Beneficiary Concentration",
+          "description": "CLIENT-004 has 21 beneficiaries. Sending 30+ txns to the same beneficiary concentrates volume and triggers BENEFICIARY_CONCENTRATION. Send this request ~30 times.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-CONC-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-004\",\n  \"txnType\": \"IMPS\",\n  \"amount\": 5000,\n  \"beneficiaryAccount\": \"CONC-TARGET-888\",\n  \"beneficiaryIfsc\": \"SBIN0008888\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 9: Bene Amount Repetition (send 1 of 4)",
+          "description": "Sends near-identical amounts (49999) to same beneficiary. After 3+ txns with CV < 10%, triggers BENEFICIARY_AMOUNT_REPETITION (threshold evasion). Send 4 times.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-REPEAT-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 49999,\n  \"beneficiaryAccount\": \"STRUCT-TARGET-777\",\n  \"beneficiaryIfsc\": \"ICIC0007777\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 10: Daily Cumulative Amount (send 1 of 5)",
+          "description": "CLIENT-002 has EWMA daily amount ~914K. With 150% variance, threshold ~2.3M. Send 5x 600K (total 3M) to trigger DAILY_CUMULATIVE_AMOUNT. Send 5 times.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-DRIP-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"UPI\",\n  \"amount\": 600000,\n  \"beneficiaryAccount\": \"DRIP-TARGET-{{$randomInt}}\",\n  \"beneficiaryIfsc\": \"HDFC0006666\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 11: New Bene Velocity (send 1 of 6)",
+          "description": "Hard threshold = 5 new beneficiaries/day. Send 6 txns to 6 unique (never-seen) beneficiaries. Each request uses a random account number. Send 6 times.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-FANOUT-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-004\",\n  \"txnType\": \"UPI\",\n  \"amount\": 5000,\n  \"beneficiaryAccount\": \"NEW-BENE-{{$randomInt}}\",\n  \"beneficiaryIfsc\": \"SBIN000{{$randomInt}}\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 12: Dormancy Reactivation",
+          "description": "CLIENT-011 is a dormant client (2+ day gap since last activity). First update the dormancy rule to dormancyMinutes=1 using the 'Update Rule' request in the Rules folder, then send this. Triggers DORMANCY_REACTIVATION.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-DORMANCY-001\",\n  \"clientId\": \"CLIENT-011\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 50000,\n  \"beneficiaryAccount\": \"9999999999\",\n  \"beneficiaryIfsc\": \"SBIN0001234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 13: Cross-Channel Bene Amount (1/4 - NEFT)",
+          "description": "Send 4x 1M to the SAME beneficiary via different txn types. CLIENT-004 threshold ~5.8M. Total will be 4M but combined with Rule 10 daily accumulation it may trigger. For guaranteed trigger use CLIENT-002 (threshold ~2.3M). Step 1 of 4.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-XCHAN-NEFT\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 800000,\n  \"beneficiaryAccount\": \"XCHAN-TARGET-001\",\n  \"beneficiaryIfsc\": \"AXIS0005555\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 13: Cross-Channel Bene Amount (2/4 - RTGS)",
+          "description": "Step 2: Same beneficiary, different channel (RTGS).",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-XCHAN-RTGS\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"RTGS\",\n  \"amount\": 800000,\n  \"beneficiaryAccount\": \"XCHAN-TARGET-001\",\n  \"beneficiaryIfsc\": \"AXIS0005555\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 13: Cross-Channel Bene Amount (3/4 - IMPS)",
+          "description": "Step 3: Same beneficiary, different channel (IMPS).",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-XCHAN-IMPS\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"IMPS\",\n  \"amount\": 800000,\n  \"beneficiaryAccount\": \"XCHAN-TARGET-001\",\n  \"beneficiaryIfsc\": \"AXIS0005555\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 13: Cross-Channel Bene Amount (4/4 - UPI trigger)",
+          "description": "Step 4: Final channel. Total to XCHAN-TARGET-001 = 3.2M across NEFT/RTGS/IMPS/UPI. Exceeds CLIENT-002 threshold of ~2.3M. Triggers CROSS_CHANNEL_BENEFICIARY_AMOUNT.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-XCHAN-UPI\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"UPI\",\n  \"amount\": 800000,\n  \"beneficiaryAccount\": \"XCHAN-TARGET-001\",\n  \"beneficiaryIfsc\": \"AXIS0005555\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Evaluate - Normal Transactions (PASS)",
+      "description": "Transactions within normal behavioral patterns — expected to PASS with low or zero risk scores.",
+      "item": [
+        {
+          "name": "Normal NEFT - CLIENT-001 (~50K)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"NORMAL-NEFT-001\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 48000,\n  \"beneficiaryAccount\": \"1234567890\",\n  \"beneficiaryIfsc\": \"HDFC0001234\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Normal UPI - CLIENT-002 (~2K)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"NORMAL-UPI-002\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"UPI\",\n  \"amount\": 1800,\n  \"beneficiaryAccount\": \"9876543210\",\n  \"beneficiaryIfsc\": \"SBIN0009876\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Normal RTGS - CLIENT-003 (~500K)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"NORMAL-RTGS-003\",\n  \"clientId\": \"CLIENT-003\",\n  \"txnType\": \"RTGS\",\n  \"amount\": 480000,\n  \"beneficiaryAccount\": \"5555666677\",\n  \"beneficiaryIfsc\": \"ICIC0005555\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Normal IMPS - CLIENT-005 (~10K)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"NORMAL-IMPS-005\",\n  \"clientId\": \"CLIENT-005\",\n  \"txnType\": \"IMPS\",\n  \"amount\": 9500,\n  \"beneficiaryAccount\": \"3333444455\",\n  \"beneficiaryIfsc\": \"AXIS0003333\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Isolation Forest Models",
+      "item": [
+        {
+          "name": "Train Model - CLIENT-001",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/models/train/CLIENT-001?numTrees=100&sampleSize=256",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "models", "train", "CLIENT-001"],
+              "query": [
+                { "key": "numTrees", "value": "100" },
+                { "key": "sampleSize", "value": "256" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Train Models - All Clients",
+          "request": {
+            "method": "POST",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/models/train?numTrees=100&sampleSize=256",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "models", "train"],
+              "query": [
+                { "key": "numTrees", "value": "100" },
+                { "key": "sampleSize", "value": "256" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Get Model Metadata - CLIENT-001",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/models/CLIENT-001",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Silence Detection",
+      "item": [
+        {
+          "name": "Get Silent Clients",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/silence",
+            "header": []
+          }
+        },
+        {
+          "name": "Trigger Manual Silence Check",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/silence/check",
+            "header": []
+          }
+        }
+      ]
+    }
+  ]
+}
