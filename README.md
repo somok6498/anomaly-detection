@@ -478,6 +478,26 @@ All rule parameters are configurable via `risk.rule-defaults.*` in `application.
 | `risk.rule-defaults.dormancy-days` | 30 | Dormancy Reactivation |
 | `risk.rule-defaults.cross-channel-bene-variance-pct` | 150.0 | Cross-Channel Bene Amount |
 
+## Aerospike Data Model
+
+All data is stored in the `banking` namespace across 11 sets:
+
+| # | Set | Purpose | Key Format |
+|---|-----|---------|------------|
+| 1 | `transactions` | Raw transaction records | `txnId` |
+| 2 | `client_profiles` | EWMA behavioral profiles per client | `clientId` |
+| 3 | `anomaly_rules` | Rule definitions (type, weight, params) | `ruleId` |
+| 4 | `risk_results` | Evaluation results per transaction | `txnId` |
+| 5 | `client_hourly_counters` | Atomic hourly txn count + amount | `clientId:yyyyMMddHH` |
+| 6 | `bene_hourly_counters` | Atomic hourly beneficiary count + amount | `clientId:beneKey:yyyyMMddHH` |
+| 7 | `client_daily_counters` | Atomic daily txn count + amount | `clientId:yyyyMMdd` |
+| 8 | `daily_new_bene_cntrs` | Atomic daily new-beneficiary count | `clientId:newbene:yyyyMMdd` |
+| 9 | `if_models` | Serialized Isolation Forest models | `clientId` |
+| 10 | `review_queue` | ALERT/BLOCK items for ops review | `txnId` |
+| 11 | `rule_weight_history` | Rule weight change audit trail | `ruleId_timestamp` |
+
+Sets 1–4 are core data, 5–8 are atomic counters for real-time aggregation, 9 is ML models, and 10–11 support the feedback loop.
+
 ## Tech Stack
 
 | Component | Technology |

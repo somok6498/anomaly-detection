@@ -337,32 +337,52 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
       child: Row(
         children: [
-          _buildMiniStat('Pending', _stats!.pending, AppTheme.textSecondary),
-          _buildMiniStat('True +ve', _stats!.truePositive, AppTheme.critical),
-          _buildMiniStat('False +ve', _stats!.falsePositive, AppTheme.low),
-          _buildMiniStat('Auto', _stats!.autoAccepted, AppTheme.medium),
+          _buildMiniStat('Pending', _stats!.pending, AppTheme.textSecondary, 'PENDING'),
+          _buildMiniStat('True +ve', _stats!.truePositive, AppTheme.critical, 'TRUE_POSITIVE'),
+          _buildMiniStat('False +ve', _stats!.falsePositive, AppTheme.low, 'FALSE_POSITIVE'),
+          _buildMiniStat('Auto', _stats!.autoAccepted, AppTheme.medium, 'AUTO_ACCEPTED'),
         ],
       ),
     );
   }
 
-  Widget _buildMiniStat(String label, int value, Color color) {
+  Widget _buildMiniStat(String label, int value, Color color, String statusKey) {
+    final isActive = _statusFilter == statusKey;
     return Expanded(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 3),
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: AppTheme.surface,
-          borderRadius: BorderRadius.circular(6),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value.toString(),
-              style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w700),
+      child: GestureDetector(
+        onTap: () {
+          setState(() {
+            // Toggle: if already active, clear filter; otherwise set it
+            if (isActive) {
+              _statusFilter = 'ALL';
+            } else {
+              _statusFilter = statusKey;
+            }
+            _actionFilter = 'ALL';
+            _clientFilterController.clear();
+          });
+          _loadQueue();
+        },
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 3),
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isActive ? color.withValues(alpha: 0.15) : AppTheme.surface,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color: isActive ? color : Colors.transparent,
+              width: 1.5,
             ),
-            Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
-          ],
+          ),
+          child: Column(
+            children: [
+              Text(
+                value.toString(),
+                style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w700),
+              ),
+              Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+            ],
+          ),
         ),
       ),
     );
