@@ -62,4 +62,24 @@ public class MetricsConfig {
     public void updateSilentClientCount(int count) {
         silentClientCount.set(count);
     }
+
+    public void recordFeedback(String status) {
+        Counter.builder("review.feedback.count")
+                .tag("status", status)
+                .register(registry)
+                .increment();
+    }
+
+    public void recordAutoAccepted(int count) {
+        Counter.builder("review.auto_accepted.count")
+                .register(registry)
+                .increment(count);
+    }
+
+    public void recordWeightAdjustment(String ruleId) {
+        Counter.builder("review.weight_adjustment.count")
+                .tag("rule_id", ruleId)
+                .register(registry)
+                .increment();
+    }
 }

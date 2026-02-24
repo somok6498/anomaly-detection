@@ -4,6 +4,7 @@ import 'services/api_service.dart';
 import 'models/models.dart';
 import 'screens/client_view.dart';
 import 'screens/transaction_view.dart';
+import 'screens/review_queue_page.dart';
 
 void main() {
   runApp(const AnomalyDashboardApp());
@@ -50,6 +51,25 @@ class _DashboardPageState extends State<DashboardPage> {
   EvaluationResult? _evalDetail;
 
   bool _hasResults = false;
+
+  // Tab navigation: 0 = Investigation, 1 = Review Queue
+  int _activeTab = 0;
+  int _pendingCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadPendingCount();
+  }
+
+  Future<void> _loadPendingCount() async {
+    try {
+      final stats = await _api.getReviewStats();
+      if (mounted) {
+        setState(() => _pendingCount = stats.pending);
+      }
+    } catch (_) {}
+  }
 
   void _doSearch([String? overrideQuery, SearchType? overrideType]) {
     final query = overrideQuery ?? _searchController.text.trim();
@@ -136,17 +156,23 @@ class _DashboardPageState extends State<DashboardPage> {
       body: Column(
         children: [
           _buildHeader(),
-          _buildSearchBar(),
+          if (_activeTab == 0) _buildSearchBar(),
           Expanded(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Center(
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 1400),
-                  child: _buildContent(),
-                ),
-              ),
-            ),
+            child: _activeTab == 0
+                ? SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1400),
+                        child: _buildContent(),
+                      ),
+                    ),
+                  )
+                : ReviewQueuePage(
+                    onPendingCountChanged: (count) {
+                      setState(() => _pendingCount = count);
+                    },
+                  ),
           ),
         ],
       ),
@@ -170,7 +196,61 @@ class _DashboardPageState extends State<DashboardPage> {
                   style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
             ],
           ),
+          const Spacer(),
+          // Tab buttons
+          _buildTabButton(0, 'Investigation', Icons.search),
+          const SizedBox(width: 8),
+          _buildTabButton(1, 'Review Queue', Icons.rate_review, badge: _pendingCount),
         ],
+      ),
+    );
+  }
+
+  Widget _buildTabButton(int index, String label, IconData icon, {int badge = 0}) {
+    final isActive = _activeTab == index;
+    return InkWell(
+      onTap: () {
+        setState(() => _activeTab = index);
+        if (index == 1) _loadPendingCount();
+      },
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive ? AppTheme.accent.withValues(alpha: 0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isActive ? AppTheme.accent : AppTheme.cardBorder,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, size: 16, color: isActive ? AppTheme.accent : AppTheme.textSecondary),
+            const SizedBox(width: 8),
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive ? AppTheme.accent : AppTheme.textSecondary,
+                fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                fontSize: 13,
+              ),
+            ),
+            if (badge > 0) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppTheme.alert,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badge.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }

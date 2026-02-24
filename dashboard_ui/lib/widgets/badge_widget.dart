@@ -27,6 +27,33 @@ class ActionBadge extends StatelessWidget {
   }
 }
 
+class FeedbackBadge extends StatelessWidget {
+  final String status;
+
+  const FeedbackBadge({super.key, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final color = AppTheme.feedbackColor(status);
+    final label = AppTheme.feedbackLabel(status);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.15),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
 class RiskBadge extends StatelessWidget {
   final String level;
 

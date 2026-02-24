@@ -1,6 +1,6 @@
 # Anomaly Detection System
 
-Real-time behavioral anomaly detection for banking transactions using rule-based evaluation + Isolation Forest ML model, with EWMA-based client profiling, WhatsApp/SMS alerts, and full OpenTelemetry observability.
+Real-time behavioral anomaly detection for banking transactions using rule-based evaluation + Isolation Forest ML model, with EWMA-based client profiling, ops review queue with feedback-driven rule auto-tuning, WhatsApp/SMS alerts, and full OpenTelemetry observability.
 
 ## Architecture
 
@@ -25,7 +25,8 @@ POST /api/v1/transactions/evaluate
   ├─ 5. Determine action: PASS (<30) · ALERT (30–70) · BLOCK (≥70)
   ├─ 6. Update client profile with new transaction data
   ├─ 7. Persist transaction + evaluation result
-  └─ 8. Send WhatsApp/SMS alert (async, BLOCK only)
+  ├─ 8. Enqueue ALERT/BLOCK transactions for ops review
+  └─ 9. Send WhatsApp/SMS alert (async, BLOCK only)
 ```
 
 ### Rule Types
@@ -242,6 +243,67 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 | GET | `/actuator/metrics` | Micrometer metrics |
 | GET | `/actuator/prometheus` | Prometheus scrape endpoint |
 
+## Review Queue & Feedback Loop
+
+ALERT and BLOCK transactions are automatically enqueued for ops review. Operators can mark items as **True Positive** (confirmed threat) or **False Positive** (dismissed), and the system uses this feedback to auto-tune rule weights over time.
+
+### How It Works
+
+```
+Transaction evaluated as ALERT/BLOCK
+  │
+  ├─ 1. Enqueue to review_queue (status: PENDING)
+  ├─ 2. Ops reviews via Flutter dashboard or API
+  │     ├─ Mark as TRUE_POSITIVE  → confirmed anomaly
+  │     └─ Mark as FALSE_POSITIVE → dismissed
+  ├─ 3. If no action within timeout (default 1 hour) → AUTO_ACCEPTED
+  └─ 4. Every 6 hours: auto-tuning job adjusts rule weights based on TP/FP ratio
+```
+
+### Auto-Accept Timeout
+
+A scheduled job runs every 60 seconds and marks PENDING items past their deadline as `AUTO_ACCEPTED`. These are excluded from tuning calculations to prevent data pollution from unreviewed items.
+
+### Rule Auto-Tuning Algorithm
+
+Every 6 hours (configurable), the tuning job:
+1. Fetches all items with explicit feedback (TRUE_POSITIVE or FALSE_POSITIVE only)
+2. Computes per-rule TP/FP counts based on which rules triggered for each reviewed item
+3. For rules with ≥50 samples: adjusts weight based on TP ratio with guardrails
+   - High TP ratio → weight increases (rule is useful)
+   - Low TP ratio → weight decreases (rule generates false positives)
+   - Max adjustment: ±10% per cycle, weight clamped to [0.5, 5.0]
+
+### Configuration
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `risk.feedback.auto-accept-timeout-ms` | 3600000 | Auto-accept timeout (1 hour) |
+| `risk.feedback.auto-accept-check-interval-seconds` | 60 | How often to check for expired items |
+| `risk.feedback.tuning-interval-hours` | 6 | How often to run rule auto-tuning |
+| `risk.feedback.min-samples-for-tuning` | 50 | Minimum feedback samples before adjusting a rule |
+| `risk.feedback.weight-floor` | 0.5 | Minimum allowed rule weight |
+| `risk.feedback.weight-ceiling` | 5.0 | Maximum allowed rule weight |
+| `risk.feedback.max-adjustment-pct` | 0.10 | Max weight change per tuning cycle (10%) |
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/review/queue` | List queue items (filters: action, clientId, fromDate, toDate, ruleId, limit) |
+| GET | `/api/v1/review/queue/{txnId}` | Get full detail (queue item + evaluation + transaction + client profile) |
+| POST | `/api/v1/review/queue/{txnId}/feedback` | Submit feedback `{status, feedbackBy}` |
+| POST | `/api/v1/review/queue/bulk-feedback` | Bulk feedback `{txnIds[], status, feedbackBy}` |
+| GET | `/api/v1/review/stats` | Queue stats `{pending, truePositive, falsePositive, autoAccepted}` |
+| GET | `/api/v1/review/weight-history` | Rule weight change history (filters: ruleId, limit) |
+
+### Flutter Dashboard
+
+The dashboard has a **Review Queue** tab with a two-panel layout:
+
+- **Left panel**: filter bar (action/status/client ID), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, and a sortable queue table with auto-accept countdown timers
+- **Right panel**: detailed view of the selected item showing transaction info, risk score with rule breakdown, client profile summary, feedback action buttons, and weight history for involved rules
+
 ## Observability
 
 ### Tracing (Jaeger)
@@ -292,6 +354,9 @@ Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provi
 | `evaluation_composite_score` | Distribution Summary | `action` |
 | `rule_triggered_count_total` | Counter | `rule_type` |
 | `notification_sent_count_total` | Counter | `channel`, `status` |
+| `review_feedback_count_total` | Counter | `status` (TRUE_POSITIVE/FALSE_POSITIVE) |
+| `review_auto_accepted_count_total` | Counter | — |
+| `rule_weight_adjustment_count_total` | Counter | `rule_id` |
 
 Grafana login: **admin / admin** (anonymous viewing also enabled).
 
@@ -349,14 +414,14 @@ The "Silence Detection" row in the Grafana dashboard shows:
 ```
 src/main/java/com/bank/anomaly/
 ├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
-├── controller/           # REST controllers (Transactions, Rules, Profiles, Models)
+├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue)
 ├── engine/
 │   ├── evaluators/       # 13 rule evaluators (12 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
-├── repository/           # Aerospike data access (5 repositories)
+├── repository/           # Aerospike data access (7 repositories)
 ├── seeder/               # Demo data seeder & profile builder
-└── service/              # Business logic (evaluation, scoring, profiling, notifications)
+└── service/              # Business logic (evaluation, scoring, profiling, notifications, review queue, auto-tuning)
 
 dashboard_ui/             # Flutter Web dashboard
 aerospike/                # Aerospike server configuration

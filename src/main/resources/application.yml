@@ -60,6 +60,16 @@ risk:
     cross-channel-bene-variance-pct: 150.0
     cross-channel-bene-min-days: 3
 
+  # Feedback loop — review queue for ALERT/BLOCK transactions + rule auto-tuning
+  feedback:
+    auto-accept-timeout-ms: 3600000          # 1 hour — unreviewed items auto-accepted after this
+    auto-accept-check-interval-seconds: 60   # how often to scan for expired items
+    tuning-interval-hours: 6                 # how often to re-compute rule weights from feedback
+    min-samples-for-tuning: 50               # minimum TP+FP feedback items before adjusting a rule
+    weight-floor: 0.5                        # rule weight never drops below this
+    weight-ceiling: 5.0                      # rule weight never exceeds this
+    max-adjustment-pct: 0.10                 # max 10% weight change per tuning cycle
+
   # Silence detection — background scheduler that alerts when active clients stop transacting
   silence-detection:
     enabled: false

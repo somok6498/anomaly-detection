@@ -20,6 +20,8 @@ public class AerospikeConfig {
     public static final String SET_BENEFICIARY_COUNTERS = "bene_hourly_counters";
     public static final String SET_DAILY_COUNTERS = "client_daily_counters";
     public static final String SET_DAILY_BENE_COUNTERS = "daily_new_bene_cntrs";
+    public static final String SET_REVIEW_QUEUE = "review_queue";
+    public static final String SET_WEIGHT_HISTORY = "rule_weight_history";
 
     @Value("${aerospike.host:127.0.0.1}")
     private String host;

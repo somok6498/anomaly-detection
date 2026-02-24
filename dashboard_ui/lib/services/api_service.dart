@@ -65,4 +65,102 @@ class ApiService {
     }
     return EvaluationResult.fromJson(jsonDecode(response.body));
   }
+
+  // ── Review Queue API ──
+
+  Future<List<ReviewQueueItem>> getReviewQueue({
+    String? action,
+    String? clientId,
+    int? fromDate,
+    int? toDate,
+    String? ruleId,
+    int limit = 100,
+  }) async {
+    final params = <String, String>{'limit': limit.toString()};
+    if (action != null && action.isNotEmpty) params['action'] = action;
+    if (clientId != null && clientId.isNotEmpty) params['clientId'] = clientId;
+    if (fromDate != null) params['fromDate'] = fromDate.toString();
+    if (toDate != null) params['toDate'] = toDate.toString();
+    if (ruleId != null && ruleId.isNotEmpty) params['ruleId'] = ruleId;
+
+    final uri = Uri.parse('$baseUrl/review/queue')
+        .replace(queryParameters: params);
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load review queue: ${response.statusCode}');
+    }
+    final List<dynamic> data = jsonDecode(response.body);
+    return data
+        .map((j) => ReviewQueueItem.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<ReviewQueueDetail> getReviewDetail(String txnId) async {
+    final response =
+        await http.get(Uri.parse('$baseUrl/review/queue/$txnId'));
+    if (response.statusCode == 404) {
+      throw Exception('Queue item not found for "$txnId"');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load review detail: ${response.statusCode}');
+    }
+    return ReviewQueueDetail.fromJson(jsonDecode(response.body));
+  }
+
+  Future<ReviewQueueItem> submitFeedback(
+      String txnId, String status, String feedbackBy) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/review/queue/$txnId/feedback'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'status': status, 'feedbackBy': feedbackBy}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to submit feedback: ${response.statusCode}');
+    }
+    return ReviewQueueItem.fromJson(jsonDecode(response.body));
+  }
+
+  Future<int> submitBulkFeedback(
+      List<String> txnIds, String status, String feedbackBy) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/review/queue/bulk-feedback'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'txnIds': txnIds,
+        'status': status,
+        'feedbackBy': feedbackBy,
+      }),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to submit bulk feedback: ${response.statusCode}');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return (data['updatedCount'] ?? 0) as int;
+  }
+
+  Future<ReviewStats> getReviewStats() async {
+    final response = await http.get(Uri.parse('$baseUrl/review/stats'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load review stats: ${response.statusCode}');
+    }
+    return ReviewStats.fromJson(jsonDecode(response.body));
+  }
+
+  Future<List<RuleWeightChange>> getWeightHistory(
+      {String? ruleId, int limit = 50}) async {
+    final params = <String, String>{'limit': limit.toString()};
+    if (ruleId != null && ruleId.isNotEmpty) params['ruleId'] = ruleId;
+
+    final uri = Uri.parse('$baseUrl/review/weight-history')
+        .replace(queryParameters: params);
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to load weight history: ${response.statusCode}');
+    }
+    final List<dynamic> data = jsonDecode(response.body);
+    return data
+        .map((j) => RuleWeightChange.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
 }

@@ -1,14 +1,18 @@
 package com.bank.anomaly.service;
 
+import com.bank.anomaly.config.FeedbackConfig;
 import com.bank.anomaly.config.MetricsConfig;
 import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.engine.EvaluationContext;
 import com.bank.anomaly.engine.RuleEngine;
 import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.EvaluationResult;
+import com.bank.anomaly.model.ReviewQueueItem;
+import com.bank.anomaly.model.ReviewStatus;
 import com.bank.anomaly.model.RiskLevel;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.repository.ReviewQueueRepository;
 import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.repository.TransactionRepository;
 import io.micrometer.observation.annotation.Observed;
@@ -44,6 +48,8 @@ public class TransactionEvaluationService {
     private final RiskThresholdConfig thresholdConfig;
     private final TwilioNotificationService notificationService;
     private final MetricsConfig metricsConfig;
+    private final ReviewQueueRepository reviewQueueRepository;
+    private final FeedbackConfig feedbackConfig;
 
     public TransactionEvaluationService(ProfileService profileService,
                                         RuleEngine ruleEngine,
@@ -52,7 +58,9 @@ public class TransactionEvaluationService {
                                         TransactionRepository transactionRepository,
                                         RiskThresholdConfig thresholdConfig,
                                         TwilioNotificationService notificationService,
-                                        MetricsConfig metricsConfig) {
+                                        MetricsConfig metricsConfig,
+                                        ReviewQueueRepository reviewQueueRepository,
+                                        FeedbackConfig feedbackConfig) {
         this.profileService = profileService;
         this.ruleEngine = ruleEngine;
         this.riskScoringService = riskScoringService;
@@ -61,6 +69,8 @@ public class TransactionEvaluationService {
         this.thresholdConfig = thresholdConfig;
         this.notificationService = notificationService;
         this.metricsConfig = metricsConfig;
+        this.reviewQueueRepository = reviewQueueRepository;
+        this.feedbackConfig = feedbackConfig;
     }
 
     /**
@@ -146,6 +156,30 @@ public class TransactionEvaluationService {
 
         // 7. Persist evaluation result
         riskResultRepository.save(result);
+
+        // 7b. Enqueue for ops review if ALERT or BLOCK
+        if ("ALERT".equals(result.getAction()) || "BLOCK".equals(result.getAction())) {
+            List<String> triggeredRuleIds = result.getRuleResults().stream()
+                    .filter(RuleResult::isTriggered)
+                    .map(RuleResult::getRuleId)
+                    .toList();
+
+            long now = System.currentTimeMillis();
+            ReviewQueueItem queueItem = ReviewQueueItem.builder()
+                    .txnId(txn.getTxnId())
+                    .clientId(txn.getClientId())
+                    .action(result.getAction())
+                    .compositeScore(result.getCompositeScore())
+                    .riskLevel(result.getRiskLevel().name())
+                    .triggeredRuleIds(triggeredRuleIds)
+                    .enqueuedAt(now)
+                    .feedbackStatus(ReviewStatus.PENDING)
+                    .feedbackAt(0)
+                    .autoAcceptDeadline(now + feedbackConfig.getAutoAcceptTimeoutMs())
+                    .build();
+
+            reviewQueueRepository.save(queueItem);
+        }
 
         // 8. Record metrics
         metricsConfig.recordEvaluation(result.getAction(), result.getCompositeScore());

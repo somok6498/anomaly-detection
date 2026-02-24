@@ -55,6 +55,32 @@ class AppTheme {
     }
   }
 
+  static Color feedbackColor(String status) {
+    switch (status.toUpperCase()) {
+      case 'TRUE_POSITIVE':
+        return critical;
+      case 'FALSE_POSITIVE':
+        return low;
+      case 'AUTO_ACCEPTED':
+        return medium;
+      default:
+        return textSecondary;
+    }
+  }
+
+  static String feedbackLabel(String status) {
+    switch (status.toUpperCase()) {
+      case 'TRUE_POSITIVE':
+        return 'True Positive';
+      case 'FALSE_POSITIVE':
+        return 'False Positive';
+      case 'AUTO_ACCEPTED':
+        return 'Auto-Accepted';
+      default:
+        return 'Pending';
+    }
+  }
+
   static ThemeData get darkTheme {
     return ThemeData.dark().copyWith(
       scaffoldBackgroundColor: bg,

@@ -133,3 +133,133 @@ class EvaluationResult {
     );
   }
 }
+
+class ReviewQueueItem {
+  final String txnId;
+  final String clientId;
+  final String action;
+  final double compositeScore;
+  final String riskLevel;
+  final List<String> triggeredRuleIds;
+  final int enqueuedAt;
+  final String feedbackStatus;
+  final int feedbackAt;
+  final String? feedbackBy;
+  final int autoAcceptDeadline;
+
+  ReviewQueueItem({
+    required this.txnId,
+    required this.clientId,
+    required this.action,
+    required this.compositeScore,
+    required this.riskLevel,
+    required this.triggeredRuleIds,
+    required this.enqueuedAt,
+    required this.feedbackStatus,
+    required this.feedbackAt,
+    this.feedbackBy,
+    required this.autoAcceptDeadline,
+  });
+
+  factory ReviewQueueItem.fromJson(Map<String, dynamic> json) {
+    return ReviewQueueItem(
+      txnId: json['txnId'] ?? '',
+      clientId: json['clientId'] ?? '',
+      action: json['action'] ?? '',
+      compositeScore: (json['compositeScore'] ?? 0).toDouble(),
+      riskLevel: json['riskLevel'] ?? 'LOW',
+      triggeredRuleIds: (json['triggeredRuleIds'] as List<dynamic>? ?? [])
+          .map((e) => e.toString())
+          .toList(),
+      enqueuedAt: (json['enqueuedAt'] ?? 0).toInt(),
+      feedbackStatus: json['feedbackStatus'] ?? 'PENDING',
+      feedbackAt: (json['feedbackAt'] ?? 0).toInt(),
+      feedbackBy: json['feedbackBy'],
+      autoAcceptDeadline: (json['autoAcceptDeadline'] ?? 0).toInt(),
+    );
+  }
+}
+
+class ReviewQueueDetail {
+  final ReviewQueueItem queueItem;
+  final EvaluationResult? evaluation;
+  final Transaction? transaction;
+  final ClientProfile? clientProfile;
+
+  ReviewQueueDetail({
+    required this.queueItem,
+    this.evaluation,
+    this.transaction,
+    this.clientProfile,
+  });
+
+  factory ReviewQueueDetail.fromJson(Map<String, dynamic> json) {
+    return ReviewQueueDetail(
+      queueItem: ReviewQueueItem.fromJson(json['queueItem'] as Map<String, dynamic>),
+      evaluation: json['evaluation'] != null
+          ? EvaluationResult.fromJson(json['evaluation'] as Map<String, dynamic>)
+          : null,
+      transaction: json['transaction'] != null
+          ? Transaction.fromJson(json['transaction'] as Map<String, dynamic>)
+          : null,
+      clientProfile: json['clientProfile'] != null
+          ? ClientProfile.fromJson(json['clientProfile'] as Map<String, dynamic>)
+          : null,
+    );
+  }
+}
+
+class ReviewStats {
+  final int pending;
+  final int truePositive;
+  final int falsePositive;
+  final int autoAccepted;
+
+  ReviewStats({
+    required this.pending,
+    required this.truePositive,
+    required this.falsePositive,
+    required this.autoAccepted,
+  });
+
+  factory ReviewStats.fromJson(Map<String, dynamic> json) {
+    return ReviewStats(
+      pending: (json['pending'] ?? 0).toInt(),
+      truePositive: (json['truePositive'] ?? 0).toInt(),
+      falsePositive: (json['falsePositive'] ?? 0).toInt(),
+      autoAccepted: (json['autoAccepted'] ?? 0).toInt(),
+    );
+  }
+}
+
+class RuleWeightChange {
+  final String ruleId;
+  final double oldWeight;
+  final double newWeight;
+  final int tpCount;
+  final int fpCount;
+  final double tpFpRatio;
+  final int adjustedAt;
+
+  RuleWeightChange({
+    required this.ruleId,
+    required this.oldWeight,
+    required this.newWeight,
+    required this.tpCount,
+    required this.fpCount,
+    required this.tpFpRatio,
+    required this.adjustedAt,
+  });
+
+  factory RuleWeightChange.fromJson(Map<String, dynamic> json) {
+    return RuleWeightChange(
+      ruleId: json['ruleId'] ?? '',
+      oldWeight: (json['oldWeight'] ?? 0).toDouble(),
+      newWeight: (json['newWeight'] ?? 0).toDouble(),
+      tpCount: (json['tpCount'] ?? 0).toInt(),
+      fpCount: (json['fpCount'] ?? 0).toInt(),
+      tpFpRatio: (json['tpFpRatio'] ?? 0).toDouble(),
+      adjustedAt: (json['adjustedAt'] ?? 0).toInt(),
+    );
+  }
+}
