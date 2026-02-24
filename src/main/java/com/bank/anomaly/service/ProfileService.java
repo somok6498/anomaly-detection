@@ -19,6 +19,8 @@ public class ProfileService {
     private static final Logger log = LoggerFactory.getLogger(ProfileService.class);
     private static final DateTimeFormatter HOUR_BUCKET_FORMAT =
             DateTimeFormatter.ofPattern("yyyyMMddHH").withZone(ZoneOffset.UTC);
+    private static final DateTimeFormatter DAY_BUCKET_FORMAT =
+            DateTimeFormatter.ofPattern("yyyyMMdd").withZone(ZoneOffset.UTC);
 
     private final ClientProfileRepository profileRepository;
     private final RiskThresholdConfig thresholdConfig;
@@ -109,10 +111,30 @@ public class ProfileService {
         }
         profile.setLastHourBucket(currentHourBucket);
 
+        // 4.5 Handle daily rollover — update daily EWMA stats
+        String currentDayBucket = getDayBucket(txn.getTimestamp());
+        String lastDayBucket = profile.getLastDayBucket();
+
+        if (lastDayBucket != null && !lastDayBucket.equals(currentDayBucket)) {
+            long completedDayAmountPaise = profileRepository.getDailyAmount(
+                    profile.getClientId() + ":" + lastDayBucket);
+            long completedDayNewBeneCount = profileRepository.getDailyNewBeneCount(
+                    profile.getClientId() + ":newbene:" + lastDayBucket);
+
+            updateDailyAmountStats(profile, completedDayAmountPaise);
+            updateDailyNewBeneStats(profile, completedDayNewBeneCount);
+        }
+        profile.setLastDayBucket(currentDayBucket);
+
         // 5. Increment hourly counters in Aerospike (atomic)
         String counterKey = profile.getClientId() + ":" + currentHourBucket;
         profileRepository.incrementHourlyCounter(counterKey);
         profileRepository.addHourlyAmount(counterKey, (long) (txn.getAmount() * 100)); // store as paise
+
+        // 5.3 Increment daily counters in Aerospike (atomic)
+        String dailyCounterKey = profile.getClientId() + ":" + currentDayBucket;
+        profileRepository.incrementDailyCounter(dailyCounterKey);
+        profileRepository.addDailyAmount(dailyCounterKey, (long) (txn.getAmount() * 100));
 
         // 5.5 Update beneficiary stats (if beneficiary data present)
         String beneKey = txn.getBeneficiaryKey();
@@ -123,6 +145,16 @@ public class ProfileService {
             if (beneCount == 0) {
                 profile.setDistinctBeneficiaryCount(profile.getDistinctBeneficiaryCount() + 1);
             }
+
+            // Track new-beneficiary for daily velocity (Rule 11)
+            if (beneCount == 0) {
+                String dailyBeneCounterKey = profile.getClientId() + ":newbene:" + currentDayBucket;
+                profileRepository.incrementDailyNewBeneCounter(dailyBeneCounterKey);
+            }
+
+            // Track daily beneficiary amount for cross-channel detection (Rule 13)
+            String dailyBeneAmtKey = profile.getClientId() + ":beneDaily:" + currentDayBucket + ":" + beneKey;
+            profileRepository.addDailyBeneficiaryAmount(dailyBeneAmtKey, (long) (txn.getAmount() * 100));
 
             // Increment beneficiary transaction count
             profile.getBeneficiaryTxnCounts().merge(beneKey, 1L, Long::sum);
@@ -185,6 +217,26 @@ public class ProfileService {
         return profileRepository.getBeneficiaryAmount(counterKey);
     }
 
+    public long getCurrentDailyCount(String clientId, long timestamp) {
+        String counterKey = clientId + ":" + getDayBucket(timestamp);
+        return profileRepository.getDailyCount(counterKey);
+    }
+
+    public long getCurrentDailyAmount(String clientId, long timestamp) {
+        String counterKey = clientId + ":" + getDayBucket(timestamp);
+        return profileRepository.getDailyAmount(counterKey);
+    }
+
+    public long getCurrentDailyNewBeneCount(String clientId, long timestamp) {
+        String counterKey = clientId + ":newbene:" + getDayBucket(timestamp);
+        return profileRepository.getDailyNewBeneCount(counterKey);
+    }
+
+    public long getCurrentDailyBeneficiaryAmount(String clientId, String beneKey, long timestamp) {
+        String counterKey = clientId + ":beneDaily:" + getDayBucket(timestamp) + ":" + beneKey;
+        return profileRepository.getDailyBeneficiaryAmount(counterKey);
+    }
+
     /**
      * Update the EWMA hourly TPS stats when an hour rolls over.
      */
@@ -235,7 +287,50 @@ public class ProfileService {
         }
     }
 
+    private void updateDailyAmountStats(ClientProfile profile, long dayAmountPaise) {
+        double dayAmount = dayAmountPaise / 100.0;
+        long completedDays = profile.getCompletedDaysCount();
+        double dailyAlpha = Math.min(0.1, thresholdConfig.getEwmaAlpha() * 10);
+
+        if (completedDays == 0) {
+            profile.setEwmaDailyAmount(dayAmount);
+            profile.setDailyAmountM2(0.0);
+        } else {
+            double oldMean = profile.getEwmaDailyAmount();
+            double newMean = dailyAlpha * dayAmount + (1 - dailyAlpha) * oldMean;
+            profile.setEwmaDailyAmount(newMean);
+
+            double delta = dayAmount - oldMean;
+            double delta2 = dayAmount - newMean;
+            profile.setDailyAmountM2(profile.getDailyAmountM2() + delta * delta2);
+        }
+        profile.setCompletedDaysCount(completedDays + 1);
+    }
+
+    private void updateDailyNewBeneStats(ClientProfile profile, long dayNewBeneCount) {
+        long completedDays = profile.getCompletedDaysForBeneCount();
+        double dailyAlpha = Math.min(0.1, thresholdConfig.getEwmaAlpha() * 10);
+
+        if (completedDays == 0) {
+            profile.setEwmaDailyNewBeneficiaries(dayNewBeneCount);
+            profile.setDailyNewBeneM2(0.0);
+        } else {
+            double oldMean = profile.getEwmaDailyNewBeneficiaries();
+            double newMean = dailyAlpha * dayNewBeneCount + (1 - dailyAlpha) * oldMean;
+            profile.setEwmaDailyNewBeneficiaries(newMean);
+
+            double delta = dayNewBeneCount - oldMean;
+            double delta2 = dayNewBeneCount - newMean;
+            profile.setDailyNewBeneM2(profile.getDailyNewBeneM2() + delta * delta2);
+        }
+        profile.setCompletedDaysForBeneCount(completedDays + 1);
+    }
+
     public static String getHourBucket(long epochMillis) {
         return HOUR_BUCKET_FORMAT.format(Instant.ofEpochMilli(epochMillis));
+    }
+
+    public static String getDayBucket(long epochMillis) {
+        return DAY_BUCKET_FORMAT.format(Instant.ofEpochMilli(epochMillis));
     }
 }

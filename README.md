@@ -6,7 +6,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 
 - **Spring Boot 3.2.5** (Java 17) REST API
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
-- **9 anomaly evaluators** — 8 rule-based + 1 ML (Isolation Forest)
+- **13 anomaly evaluators** — 12 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
@@ -20,7 +20,7 @@ POST /api/v1/transactions/evaluate
   │
   ├─ 1. Load/create client behavioral profile (EWMA stats)
   ├─ 2. Build evaluation context (hourly counters, beneficiary data)
-  ├─ 3. Evaluate against all active anomaly rules (9 evaluators)
+  ├─ 3. Evaluate against all active anomaly rules (13 evaluators)
   ├─ 4. Compute weighted composite risk score (0–100)
   ├─ 5. Determine action: PASS (<30) · ALERT (30–70) · BLOCK (≥70)
   ├─ 6. Update client profile with new transaction data
@@ -40,6 +40,10 @@ POST /api/v1/transactions/evaluate
 | `BENEFICIARY_RAPID_REPEAT` | ≥5 transactions to same beneficiary in 1 hour | 3.0 |
 | `BENEFICIARY_CONCENTRATION` | Disproportionate volume to a single beneficiary | 2.0 |
 | `BENEFICIARY_AMOUNT_REPETITION` | Repeated identical amounts to same beneficiary (threshold evasion) | 2.5 |
+| `DAILY_CUMULATIVE_AMOUNT` | Low-and-slow drip structuring — daily total exceeds EWMA | 2.5 |
+| `NEW_BENEFICIARY_VELOCITY` | Round-robin mule fan-out — too many new beneficiaries/day | 3.5 |
+| `DORMANCY_REACTIVATION` | Sudden activity after extended inactivity (configurable threshold) | 3.0 |
+| `CROSS_CHANNEL_BENEFICIARY_AMOUNT` | Same beneficiary receives large total across multiple txn types/day | 2.5 |
 | `ISOLATION_FOREST` | ML-based multi-dimensional anomaly detection (8 features) | 2.0 |
 
 **Composite Score** = Σ(triggered partial score × weight) / Σ(triggered weight), capped at 100.
@@ -302,7 +306,7 @@ src/main/java/com/bank/anomaly/
 ├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
 ├── controller/           # REST controllers (Transactions, Rules, Profiles, Models)
 ├── engine/
-│   ├── evaluators/       # 9 rule evaluators (8 rule-based + 1 Isolation Forest)
+│   ├── evaluators/       # 13 rule evaluators (12 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
 ├── repository/           # Aerospike data access (5 repositories)
@@ -317,14 +321,15 @@ grafana/provisioning/     # Grafana datasources + pre-built dashboard
 
 ## Seeded Test Data
 
-Run with `SPRING_PROFILES_ACTIVE=seed` to generate ~50,000 transactions across 30 days:
+Run with `SPRING_PROFILES_ACTIVE=seed` to generate ~72,000 transactions across 30 days:
 
 | Clients | Behavior |
 |---------|----------|
 | CLIENT-001 to CLIENT-005 | Normal behavioral profiles (consistent patterns) |
 | CLIENT-006 to CLIENT-010 | Normal base + injected anomalies in last 2 days |
+| CLIENT-011 | Dormant account — 28 days active, then 2+ day gap with reactivation |
 
-**Injected anomalies** (clients 006–010): unusual transaction types, spiked amounts (5–10x normal), TPS bursts (50 txns/hour), and structuring patterns (15–25 rapid transfers to same beneficiary).
+**Injected anomalies** (clients 006–010): unusual transaction types, spiked amounts (5–10x normal), TPS bursts (50 txns/hour), structuring patterns (15–25 rapid transfers to same beneficiary), drip structuring (40–60 small txns/day), new-beneficiary fan-out (8–12 new beneficiaries/day), and cross-channel splitting (same beneficiary via multiple txn types).
 
 Each client has 20–50 unique beneficiaries with power-law distribution.
 
@@ -339,6 +344,29 @@ Key settings in `application.yml` (overridable via environment variables):
 | `risk.ewma-alpha` | 0.01 | EWMA smoothing factor (lower = slower adaptation) |
 | `risk.min-profile-txns` | 20 | Grace period before rules apply to new clients |
 | `risk.rule-cache-refresh-seconds` | 60 | Rule reload interval from Aerospike |
+| `risk.transaction-types` | NEFT, RTGS, IMPS, UPI, IFT | Accepted transaction types (extensible — add CBDC etc.) |
+
+### Rule Defaults
+
+All rule parameters are configurable via `risk.rule-defaults.*` in `application.yml`. These serve as fallbacks when a rule doesn't specify parameters in its DB record. Priority: `rule.params > rule.variancePct > config defaults`.
+
+| Property | Default | Used by |
+|----------|---------|---------|
+| `risk.rule-defaults.amount-anomaly-variance-pct` | 100.0 | Amount Anomaly |
+| `risk.rule-defaults.tps-spike-variance-pct` | 50.0 | TPS Spike |
+| `risk.rule-defaults.hourly-amount-variance-pct` | 80.0 | Hourly Amount |
+| `risk.rule-defaults.amount-per-type-variance-pct` | 150.0 | Amount Per Type |
+| `risk.rule-defaults.min-type-frequency-pct` | 5.0 | Transaction Type |
+| `risk.rule-defaults.min-repeat-count` | 5 | Beneficiary Rapid Repeat |
+| `risk.rule-defaults.beneficiary-concentration-variance-pct` | 200.0 | Beneficiary Concentration |
+| `risk.rule-defaults.max-cv-pct` | 10.0 | Beneficiary Amount Repetition |
+| `risk.rule-defaults.isolation-forest-threshold` | 60.0 | Isolation Forest |
+| `risk.rule-defaults.daily-cumulative-variance-pct` | 150.0 | Daily Cumulative Amount |
+| `risk.rule-defaults.daily-cumulative-min-days` | 3 | Daily Cumulative Amount |
+| `risk.rule-defaults.new-bene-max-per-day` | 5 | New Beneficiary Velocity |
+| `risk.rule-defaults.new-bene-variance-pct` | 200.0 | New Beneficiary Velocity |
+| `risk.rule-defaults.dormancy-days` | 30 | Dormancy Reactivation |
+| `risk.rule-defaults.cross-channel-bene-variance-pct` | 150.0 | Cross-Channel Bene Amount |
 
 ## Tech Stack
 

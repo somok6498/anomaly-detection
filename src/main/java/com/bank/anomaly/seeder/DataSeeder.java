@@ -5,6 +5,7 @@ import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 import com.aerospike.client.policy.WritePolicy;
 import com.bank.anomaly.config.AerospikeConfig;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.model.AnomalyRule;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.repository.RuleRepository;
@@ -48,10 +49,8 @@ public class DataSeeder implements CommandLineRunner {
     private final String namespace;
     private final WritePolicy writePolicy;
     private final RuleRepository ruleRepository;
+    private final RiskThresholdConfig thresholdConfig;
     private final Random random = new Random(42); // fixed seed for reproducibility
-
-    // Transaction types
-    private static final String[] TXN_TYPES = {"NEFT", "RTGS", "IMPS", "UPI", "IFT"};
 
     // IFSC codes for beneficiary generation
     private static final String[] IFSC_PREFIXES = {
@@ -61,11 +60,13 @@ public class DataSeeder implements CommandLineRunner {
     public DataSeeder(AerospikeClient client,
                       @Qualifier("aerospikeNamespace") String namespace,
                       WritePolicy writePolicy,
-                      RuleRepository ruleRepository) {
+                      RuleRepository ruleRepository,
+                      RiskThresholdConfig thresholdConfig) {
         this.client = client;
         this.namespace = namespace;
         this.writePolicy = writePolicy;
         this.ruleRepository = ruleRepository;
+        this.thresholdConfig = thresholdConfig;
     }
 
     @Override
@@ -189,7 +190,55 @@ public class DataSeeder implements CommandLineRunner {
                 .params(Map.of("minBeneficiaryTxns", "3", "maxCvPct", "10.0"))
                 .build());
 
-        log.info("Seeded 9 default anomaly rules (including Isolation Forest and beneficiary rules)");
+        // Rule 10: Daily cumulative amount — detect low-and-slow drip structuring
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-DAILY-AMT")
+                .name("Daily Cumulative Amount")
+                .description("Flag when total daily transaction amount exceeds client's normal daily volume (drip structuring)")
+                .ruleType(RuleType.DAILY_CUMULATIVE_AMOUNT)
+                .variancePct(150.0)
+                .riskWeight(2.5)
+                .enabled(true)
+                .params(Map.of("minDays", "3"))
+                .build());
+
+        // Rule 11: New beneficiary velocity — detect round-robin mule fan-out
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-NEW-BENE-VEL")
+                .name("New Beneficiary Velocity")
+                .description("Flag when too many first-time beneficiaries are transacted with in a single day (mule fan-out)")
+                .ruleType(RuleType.NEW_BENEFICIARY_VELOCITY)
+                .variancePct(200.0)
+                .riskWeight(3.5)
+                .enabled(true)
+                .params(Map.of("maxNewBenePerDay", "5", "minProfileDays", "3"))
+                .build());
+
+        // Rule 12: Dormancy reactivation — detect sudden activity on dormant accounts
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-DORMANCY")
+                .name("Dormancy Reactivation")
+                .description("Flag when a dormant account suddenly becomes active after extended inactivity")
+                .ruleType(RuleType.DORMANCY_REACTIVATION)
+                .variancePct(0.0)  // not used — threshold via params
+                .riskWeight(3.0)
+                .enabled(true)
+                .params(Map.of("dormancyDays", "30"))
+                .build());
+
+        // Rule 13: Cross-channel beneficiary amount — detect splitting across txn types
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-CROSS-CHAN-BENE")
+                .name("Cross-Channel Beneficiary Amount")
+                .description("Flag when same beneficiary receives large total across multiple transaction types in a day")
+                .ruleType(RuleType.CROSS_CHANNEL_BENEFICIARY_AMOUNT)
+                .variancePct(150.0)
+                .riskWeight(2.5)
+                .enabled(true)
+                .params(Map.of("minDays", "3"))
+                .build());
+
+        log.info("Seeded 13 default anomaly rules");
     }
 
     /**
@@ -206,7 +255,7 @@ public class DataSeeder implements CommandLineRunner {
      *   in the last 2 days (unusual types, spiked amounts, TPS bursts).
      */
     private void seedTransactions() {
-        log.info("Seeding transaction data for 10 clients over 30 days...");
+        log.info("Seeding transaction data for 11 clients over 30 days...");
 
         Instant endTime = Instant.now();
         Instant startTime = endTime.minus(30, ChronoUnit.DAYS);
@@ -254,7 +303,60 @@ public class DataSeeder implements CommandLineRunner {
                 new String[]{"IMPS", "IMPS", "IMPS", "IMPS", "IMPS", "IMPS", "IMPS", "IMPS", "IMPS", "UPI", "UPI"},
                 10_000, 4_000, true, totalCount);
 
+        // CLIENT-011: Dormant account — 28 days of history ending 2+ days ago, then one reactivation txn
+        seedDormantClient("CLIENT-011", startTime, endTime, totalCount);
+
         log.info("Seeded {} total transactions", totalCount.get());
+    }
+
+    /**
+     * Seed a dormant client: normal activity for 28 days, then 2+ day gap, then a reactivation txn.
+     */
+    private void seedDormantClient(String clientId, Instant start, Instant end, AtomicInteger counter) {
+        log.info("  {} — seeding dormant client (28 days active, then 2+ day gap)", clientId);
+
+        Instant dormancyStart = end.minus(2, ChronoUnit.DAYS).minus(6, ChronoUnit.HOURS);
+        Instant activeEnd = dormancyStart; // activity stops here
+        long startMillis = start.toEpochMilli();
+        long activeEndMillis = activeEnd.toEpochMilli();
+
+        int txnsPerDay = 100;
+        int activeDays = 28;
+        int totalTxns = txnsPerDay * activeDays;
+        double avgAmount = 30_000;
+        double amountStdDev = 10_000;
+        String[] typePool = {"NEFT", "NEFT", "NEFT", "NEFT", "NEFT", "RTGS", "IMPS", "UPI"};
+
+        int poolSize = 25;
+        List<String[]> beneficiaryPool = generateBeneficiaryPool(poolSize);
+
+        long totalDurationMillis = activeEndMillis - startMillis;
+        long avgIntervalMillis = totalDurationMillis / totalTxns;
+        long currentTimestamp = startMillis;
+        int txnCount = 0;
+
+        for (int i = 0; i < totalTxns && currentTimestamp < activeEndMillis; i++) {
+            String txnType = typePool[random.nextInt(typePool.length)];
+            double amount = Math.max(1.0, Math.round(gaussianAmount(avgAmount, amountStdDev) * 100.0) / 100.0);
+            String txnId = clientId + "-TXN-" + String.format("%06d", i);
+            String[] bene = pickBeneficiary(beneficiaryPool);
+            writeTransaction(txnId, clientId, txnType, amount, currentTimestamp, bene[1], bene[0]);
+            txnCount++;
+
+            long jitter = (long) (avgIntervalMillis * 0.3 * (random.nextDouble() * 2 - 1));
+            currentTimestamp += avgIntervalMillis + jitter;
+        }
+
+        // Reactivation transaction — right at "now" (triggers Rule 12: Dormancy Reactivation)
+        String reactivationTxnId = clientId + "-REACTIVATION-001";
+        String[] bene = pickBeneficiary(beneficiaryPool);
+        writeTransaction(reactivationTxnId, clientId, "NEFT", 50_000,
+                end.toEpochMilli() - 60_000, bene[1], bene[0]);
+        txnCount++;
+
+        int total = counter.addAndGet(txnCount);
+        log.info("  {} — {} txns seeded (dormant pattern, 2+ day gap). Running total: {}",
+                clientId, txnCount, total);
     }
 
     /**
@@ -407,6 +509,63 @@ public class DataSeeder implements CommandLineRunner {
                 txnCount++;
                 anomalyCount++;
             }
+
+            // === Rule 10: Drip structuring — many small txns summing to large daily total ===
+            // Inject 40-60 small txns on a single day, each individually normal but total is huge
+            int dripCount = 40 + random.nextInt(21);
+            long dripDayStart = anomalyStartMillis + 12 * 3600_000L; // 12h into anomaly window
+            log.info("    {} — injecting {} drip-structuring txns (Rule 10)", clientId, dripCount);
+            for (int i = 0; i < dripCount; i++) {
+                String txnId = clientId + "-DRIP-" + String.format("%03d", i);
+                String txnType = typePool[random.nextInt(typePool.length)];
+                // Each txn is small/normal-looking but they add up
+                double amount = Math.max(1.0, gaussianAmount(avgAmount * 0.8, amountStdDev * 0.3));
+                amount = Math.round(amount * 100.0) / 100.0;
+                long ts = dripDayStart + (long) (random.nextDouble() * 12 * 3600_000); // spread over 12h
+                String[] bene = pickBeneficiary(beneficiaryPool);
+                writeTransaction(txnId, clientId, txnType, amount, ts, bene[1], bene[0]);
+                txnCount++;
+                anomalyCount++;
+            }
+
+            // === Rule 11: Fan-out — many txns to brand-new beneficiaries in one day ===
+            int fanOutCount = 8 + random.nextInt(5); // 8-12 new beneficiaries
+            long fanOutDayStart = anomalyStartMillis + 24 * 3600_000L; // day 2 of anomaly window
+            log.info("    {} — injecting {} fan-out txns to new beneficiaries (Rule 11)", clientId, fanOutCount);
+            for (int i = 0; i < fanOutCount; i++) {
+                String txnId = clientId + "-FANOUT-" + String.format("%03d", i);
+                String txnType = typePool[random.nextInt(typePool.length)];
+                double amount = Math.max(1.0, gaussianAmount(avgAmount, amountStdDev));
+                amount = Math.round(amount * 100.0) / 100.0;
+                long ts = fanOutDayStart + (long) (random.nextDouble() * 12 * 3600_000);
+                // Generate brand-new unique beneficiary for each txn
+                String fanIfsc = IFSC_PREFIXES[random.nextInt(IFSC_PREFIXES.length)]
+                        + "000" + String.format("%04d", 9000 + i);
+                String fanAcct = "FANOUT" + String.format("%06d", i);
+                writeTransaction(txnId, clientId, txnType, amount, ts, fanAcct, fanIfsc);
+                txnCount++;
+                anomalyCount++;
+            }
+
+            // === Rule 13: Cross-channel splitting — same beneficiary via multiple txn types ===
+            List<String> txnTypes = thresholdConfig.getTransactionTypes();
+            String crossIfsc = "ICIC0008888";
+            String crossAcct = "8888000001";
+            int crossCount = Math.min(txnTypes.size(), 5); // one txn per type
+            long crossDayStart = anomalyStartMillis + 36 * 3600_000L; // 1.5 days into anomaly window
+            log.info("    {} — injecting {} cross-channel txns to same beneficiary (Rule 13)",
+                    clientId, crossCount);
+            for (int i = 0; i < crossCount; i++) {
+                String txnId = clientId + "-XCHAN-" + String.format("%03d", i);
+                String txnType = txnTypes.get(i); // different type each time
+                // Each individually normal but total to this beneficiary is large
+                double amount = avgAmount * (1.5 + random.nextDouble() * 0.5);
+                amount = Math.round(amount * 100.0) / 100.0;
+                long ts = crossDayStart + (long) (i * 3600_000L + random.nextDouble() * 1800_000);
+                writeTransaction(txnId, clientId, txnType, amount, ts, crossAcct, crossIfsc);
+                txnCount++;
+                anomalyCount++;
+            }
         }
 
         int total = counter.addAndGet(txnCount);
@@ -448,18 +607,19 @@ public class DataSeeder implements CommandLineRunner {
         // Collect the types present in the normal pool
         java.util.Set<String> normalTypes = new java.util.HashSet<>(java.util.Arrays.asList(normalPool));
 
+        // Use configurable txn types from config
+        List<String> allTypes = thresholdConfig.getTransactionTypes();
+
         // Find types NOT in the normal pool
         java.util.List<String> unusual = new java.util.ArrayList<>();
-        for (String type : TXN_TYPES) {
+        for (String type : allTypes) {
             if (!normalTypes.contains(type)) {
                 unusual.add(type);
             }
         }
 
         if (unusual.isEmpty()) {
-            // All types are in the pool — pick the least represented one
-            // (just pick randomly from all types)
-            return TXN_TYPES[random.nextInt(TXN_TYPES.length)];
+            return allTypes.get(random.nextInt(allTypes.size()));
         }
 
         return unusual.get(random.nextInt(unusual.size()));

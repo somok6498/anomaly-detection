@@ -20,4 +20,14 @@ public class EvaluationContext {
     private long currentWindowBeneficiaryTxnCount;
     private long currentWindowBeneficiaryAmountPaise;
     private String currentBeneficiaryKey;
+
+    // Current day's transaction count and amount for this client (from daily atomic counter)
+    private long currentDailyTxnCount;
+    private long currentDailyAmountPaise;
+
+    // Count of brand-new (first-time) beneficiaries transacted with today
+    private long currentDailyNewBeneficiaryCount;
+
+    // Daily total amount to the current beneficiary across all txn types (for cross-channel detection)
+    private long currentDailyBeneficiaryAmountPaise;
 }

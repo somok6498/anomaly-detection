@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,6 +22,12 @@ import org.springframework.stereotype.Component;
 @Component
 public class AmountPerTypeEvaluator implements RuleEvaluator {
 
+    private final RiskThresholdConfig config;
+
+    public AmountPerTypeEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
+
     @Override
     public RuleType getSupportedRuleType() {
         return RuleType.AMOUNT_PER_TYPE_ANOMALY;
@@ -32,7 +39,7 @@ public class AmountPerTypeEvaluator implements RuleEvaluator {
         long typeCount = profile.getAmountCountByType().getOrDefault(txnType, 0L);
 
         // Need sufficient history for this type
-        long minSamples = rule.getParamAsLong("minTypeSamples", 5);
+        long minSamples = rule.getParamAsLong("minTypeSamples", config.getRuleDefaults().getMinTypeSamples());
         if (typeCount < minSamples) {
             return notTriggered(rule);
         }
@@ -42,7 +49,9 @@ public class AmountPerTypeEvaluator implements RuleEvaluator {
             return notTriggered(rule);
         }
 
-        double variancePct = rule.getVariancePct();
+        double variancePct = rule.getVariancePct() > 0
+                ? rule.getVariancePct()
+                : config.getRuleDefaults().getAmountPerTypeVariancePct();
         double threshold = avgForType * (1.0 + variancePct / 100.0);
 
         if (txn.getAmount() <= threshold) {

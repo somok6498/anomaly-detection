@@ -19,7 +19,7 @@ public class Transaction {
     @Schema(description = "Client identifier", example = "CLIENT-001")
     private String clientId;
 
-    @Schema(description = "Transaction type", example = "NEFT", allowableValues = {"NEFT", "RTGS", "IMPS", "UPI", "IFT"})
+    @Schema(description = "Transaction type (configurable via risk.transaction-types in application.yml)", example = "NEFT")
     private String txnType;
 
     @Schema(description = "Transaction amount in rupees", example = "50000.00")

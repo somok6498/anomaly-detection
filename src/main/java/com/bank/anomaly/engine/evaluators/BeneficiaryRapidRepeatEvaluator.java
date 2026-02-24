@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -17,7 +18,7 @@ import org.springframework.stereotype.Component;
  * triggering single-transaction amount thresholds.
  *
  * Logic: If the current hour's transaction count to the same beneficiary
- * meets or exceeds minRepeatCount (default 5), the rule triggers.
+ * meets or exceeds minRepeatCount, the rule triggers.
  *
  * Scoring: 50 at threshold, scales linearly to 100 at 2x threshold.
  * riskWeight: 3.0 (structuring is a serious AML concern).
@@ -25,7 +26,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class BeneficiaryRapidRepeatEvaluator implements RuleEvaluator {
 
-    private static final int DEFAULT_MIN_REPEAT_COUNT = 5;
+    private final RiskThresholdConfig config;
+
+    public BeneficiaryRapidRepeatEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
 
     @Override
     public RuleType getSupportedRuleType() {
@@ -40,10 +45,8 @@ public class BeneficiaryRapidRepeatEvaluator implements RuleEvaluator {
             return notTriggered(rule, "No beneficiary data present");
         }
 
-        int minRepeatCount = DEFAULT_MIN_REPEAT_COUNT;
-        if (rule.getParams() != null && rule.getParams().containsKey("minRepeatCount")) {
-            minRepeatCount = Integer.parseInt(rule.getParams().get("minRepeatCount"));
-        }
+        int minRepeatCount = (int) rule.getParamAsLong("minRepeatCount",
+                config.getRuleDefaults().getMinRepeatCount());
 
         long windowCount = context.getCurrentWindowBeneficiaryTxnCount();
 

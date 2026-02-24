@@ -25,6 +25,41 @@ risk:
   # How often (seconds) to reload rules from Aerospike into memory cache
   rule-cache-refresh-seconds: 60
 
+  # Configurable transaction types — add new types (e.g., CBDC) here without code changes
+  transaction-types:
+    - NEFT
+    - RTGS
+    - IMPS
+    - UPI
+    - IFT
+
+  # Rule default parameters — fallback values when not specified in rule.params (Aerospike).
+  # Override per-rule via PUT /api/v1/rules/{ruleId} or seed via DataSeeder.
+  rule-defaults:
+    # Existing rules
+    amount-anomaly-variance-pct: 100.0
+    amount-per-type-variance-pct: 150.0
+    min-type-samples: 10
+    hourly-amount-variance-pct: 80.0
+    tps-spike-variance-pct: 50.0
+    min-type-frequency-pct: 5.0
+    min-repeat-count: 5
+    beneficiary-concentration-variance-pct: 200.0
+    min-distinct-beneficiaries: 5
+    abs-min-concentration-pct: 5.0
+    min-beneficiary-txns: 3
+    max-cv-pct: 10.0
+    isolation-forest-threshold: 60.0
+    # New rules
+    daily-cumulative-variance-pct: 150.0
+    daily-cumulative-min-days: 3
+    new-bene-max-per-day: 5
+    new-bene-variance-pct: 200.0
+    new-bene-min-profile-days: 3
+    dormancy-days: 30
+    cross-channel-bene-variance-pct: 150.0
+    cross-channel-bene-min-days: 3
+
 # Swagger / OpenAPI
 springdoc:
   swagger-ui:

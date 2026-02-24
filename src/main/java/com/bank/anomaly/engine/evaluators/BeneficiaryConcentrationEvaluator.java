@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -15,7 +16,7 @@ import org.springframework.stereotype.Component;
  * Compares the actual concentration (% of total txns going to one beneficiary)
  * against the expected uniform distribution (1 / distinctBeneficiaryCount).
  *
- * Only activates once the client has 5+ distinct beneficiaries — with fewer,
+ * Only activates once the client has enough distinct beneficiaries — with fewer,
  * natural concentration is expected and not suspicious.
  *
  * The variancePct parameter controls sensitivity: with variancePct=200,
@@ -25,7 +26,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class BeneficiaryConcentrationEvaluator implements RuleEvaluator {
 
-    private static final int MIN_DISTINCT_BENEFICIARIES = 5;
+    private final RiskThresholdConfig config;
+
+    public BeneficiaryConcentrationEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
 
     @Override
     public RuleType getSupportedRuleType() {
@@ -41,25 +46,27 @@ public class BeneficiaryConcentrationEvaluator implements RuleEvaluator {
         }
 
         // Need enough distinct beneficiaries for meaningful comparison
+        int minDistinctBene = (int) rule.getParamAsLong("minDistinctBeneficiaries",
+                config.getRuleDefaults().getMinDistinctBeneficiaries());
         long distinctCount = profile.getDistinctBeneficiaryCount();
-        if (distinctCount < MIN_DISTINCT_BENEFICIARIES) {
+        if (distinctCount < minDistinctBene) {
             return notTriggered(rule,
                     String.format("Only %d distinct beneficiaries (min %d). Skipping concentration check.",
-                            distinctCount, MIN_DISTINCT_BENEFICIARIES));
+                            distinctCount, minDistinctBene));
         }
 
         double actualConcentration = profile.getBeneficiaryConcentration(beneKey);
         double expectedUniform = 1.0 / distinctCount;
 
         // Threshold: expected * (1 + variancePct/100)
-        double variancePct = rule.getVariancePct();
+        double variancePct = rule.getVariancePct() > 0
+                ? rule.getVariancePct()
+                : config.getRuleDefaults().getBeneficiaryConcentrationVariancePct();
         double threshold = expectedUniform * (1.0 + variancePct / 100.0);
 
         // Also check absolute minimum concentration to avoid false positives on tiny percentages
-        double absMinPct = 5.0;
-        if (rule.getParams() != null && rule.getParams().containsKey("absMinConcentrationPct")) {
-            absMinPct = Double.parseDouble(rule.getParams().get("absMinConcentrationPct"));
-        }
+        double absMinPct = rule.getParamAsDouble("absMinConcentrationPct",
+                config.getRuleDefaults().getAbsMinConcentrationPct());
 
         if (actualConcentration <= threshold || actualConcentration * 100.0 < absMinPct) {
             return notTriggered(rule,

@@ -9,6 +9,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.repository.IsolationForestModelRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,9 +34,12 @@ public class IsolationForestEvaluator implements RuleEvaluator {
     private static final Logger log = LoggerFactory.getLogger(IsolationForestEvaluator.class);
 
     private final IsolationForestModelRepository modelRepository;
+    private final RiskThresholdConfig config;
 
-    public IsolationForestEvaluator(IsolationForestModelRepository modelRepository) {
+    public IsolationForestEvaluator(IsolationForestModelRepository modelRepository,
+                                     RiskThresholdConfig config) {
         this.modelRepository = modelRepository;
+        this.config = config;
     }
 
     @Override
@@ -58,7 +62,10 @@ public class IsolationForestEvaluator implements RuleEvaluator {
         double anomalyScore = forest.anomalyScore(features);
 
         // Threshold from rule config (variancePct as percentage, e.g. 60 → 0.60)
-        double threshold = rule.getVariancePct() / 100.0;
+        double variancePct = rule.getVariancePct() > 0
+                ? rule.getVariancePct()
+                : config.getRuleDefaults().getIsolationForestThreshold();
+        double threshold = variancePct / 100.0;
 
         if (anomalyScore <= threshold) {
             return notTriggered(rule,

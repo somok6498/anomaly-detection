@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -27,8 +28,11 @@ import org.springframework.stereotype.Component;
 @Component
 public class BeneficiaryAmountRepetitionEvaluator implements RuleEvaluator {
 
-    private static final int DEFAULT_MIN_BENE_TXNS = 3;
-    private static final double DEFAULT_MAX_CV_PCT = 10.0;
+    private final RiskThresholdConfig config;
+
+    public BeneficiaryAmountRepetitionEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
 
     @Override
     public RuleType getSupportedRuleType() {
@@ -42,16 +46,10 @@ public class BeneficiaryAmountRepetitionEvaluator implements RuleEvaluator {
             return notTriggered(rule, "No beneficiary data present");
         }
 
-        int minBeneTxns = DEFAULT_MIN_BENE_TXNS;
-        double maxCvPct = DEFAULT_MAX_CV_PCT;
-        if (rule.getParams() != null) {
-            if (rule.getParams().containsKey("minBeneficiaryTxns")) {
-                minBeneTxns = Integer.parseInt(rule.getParams().get("minBeneficiaryTxns"));
-            }
-            if (rule.getParams().containsKey("maxCvPct")) {
-                maxCvPct = Double.parseDouble(rule.getParams().get("maxCvPct"));
-            }
-        }
+        int minBeneTxns = (int) rule.getParamAsLong("minBeneficiaryTxns",
+                config.getRuleDefaults().getMinBeneficiaryTxns());
+        double maxCvPct = rule.getParamAsDouble("maxCvPct",
+                config.getRuleDefaults().getMaxCvPct());
 
         long beneCount = profile.getBeneficiaryTxnCounts().getOrDefault(beneKey, 0L);
         if (beneCount < minBeneTxns) {

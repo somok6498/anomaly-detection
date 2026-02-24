@@ -248,11 +248,11 @@
         "fullHighlight": false,
         "groupWidth": 0.7,
         "legend": { "displayMode": "list", "placement": "bottom" },
-        "orientation": "horizontal",
+        "orientation": "vertical",
         "showValue": "always",
         "stacking": "none",
         "tooltip": { "mode": "single" },
-        "xTickLabelRotation": 0
+        "xTickLabelRotation": -45
       },
       "title": "Total Rules Triggered by Type",
       "type": "barchart",

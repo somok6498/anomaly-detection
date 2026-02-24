@@ -92,6 +92,39 @@ public class ClientProfile {
     @Builder.Default
     private Map<String, Double> amountM2ByBeneficiary = new HashMap<>();
 
+    // --- Daily cumulative tracking (Rule 10) ---
+
+    @Schema(description = "EWMA of daily cumulative transaction amount (rupees)", example = "1200000.0")
+    @Builder.Default
+    private double ewmaDailyAmount = 0.0;
+
+    @Schema(description = "Welford's M2 accumulator for daily amount variance")
+    @Builder.Default
+    private double dailyAmountM2 = 0.0;
+
+    @Schema(description = "Number of completed calendar days observed", example = "28")
+    @Builder.Default
+    private long completedDaysCount = 0;
+
+    // --- Daily new beneficiary velocity tracking (Rule 11) ---
+
+    @Schema(description = "EWMA of daily new-beneficiary count", example = "1.2")
+    @Builder.Default
+    private double ewmaDailyNewBeneficiaries = 0.0;
+
+    @Schema(description = "Welford's M2 accumulator for daily new-beneficiary count variance")
+    @Builder.Default
+    private double dailyNewBeneM2 = 0.0;
+
+    @Schema(description = "Number of completed calendar days used in new-bene EWMA", example = "28")
+    @Builder.Default
+    private long completedDaysForBeneCount = 0;
+
+    // --- Day bucket tracking ---
+
+    @Schema(description = "Day bucket key of the last processed day (for daily rollover)", example = "20260223")
+    private String lastDayBucket;
+
     public double getBeneficiaryConcentration(String beneficiaryKey) {
         if (totalTxnCount == 0 || beneficiaryKey == null) return 0.0;
         return beneficiaryTxnCounts.getOrDefault(beneficiaryKey, 0L) / (double) totalTxnCount;
@@ -124,5 +157,15 @@ public class ClientProfile {
         if (count < 2) return 0.0;
         double m2 = amountM2ByType.getOrDefault(txnType, 0.0);
         return Math.sqrt(m2 / (count - 1));
+    }
+
+    public double getDailyAmountStdDev() {
+        if (completedDaysCount < 2) return 0.0;
+        return Math.sqrt(dailyAmountM2 / (completedDaysCount - 1));
+    }
+
+    public double getDailyNewBeneStdDev() {
+        if (completedDaysForBeneCount < 2) return 0.0;
+        return Math.sqrt(dailyNewBeneM2 / (completedDaysForBeneCount - 1));
     }
 }

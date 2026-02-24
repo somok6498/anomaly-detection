@@ -103,9 +103,20 @@ public class TransactionEvaluationService {
         long currentHourlyAmount = profileService.getCurrentHourlyAmount(
                 txn.getClientId(), txn.getTimestamp());
 
+        // Daily counters for Rules 10, 11, 13
+        long currentDailyCount = profileService.getCurrentDailyCount(
+                txn.getClientId(), txn.getTimestamp());
+        long currentDailyAmount = profileService.getCurrentDailyAmount(
+                txn.getClientId(), txn.getTimestamp());
+        long currentDailyNewBene = profileService.getCurrentDailyNewBeneCount(
+                txn.getClientId(), txn.getTimestamp());
+
         EvaluationContext.EvaluationContextBuilder ctxBuilder = EvaluationContext.builder()
                 .currentHourlyTxnCount(currentHourlyCount)
-                .currentHourlyAmountPaise(currentHourlyAmount);
+                .currentHourlyAmountPaise(currentHourlyAmount)
+                .currentDailyTxnCount(currentDailyCount)
+                .currentDailyAmountPaise(currentDailyAmount)
+                .currentDailyNewBeneficiaryCount(currentDailyNewBene);
 
         // Populate beneficiary window data if beneficiary info is present
         String beneKey = txn.getBeneficiaryKey();
@@ -114,9 +125,12 @@ public class TransactionEvaluationService {
                     txn.getClientId(), beneKey, txn.getTimestamp());
             long beneAmount = profileService.getCurrentBeneficiaryAmount(
                     txn.getClientId(), beneKey, txn.getTimestamp());
+            long dailyBeneAmount = profileService.getCurrentDailyBeneficiaryAmount(
+                    txn.getClientId(), beneKey, txn.getTimestamp());
             ctxBuilder.currentWindowBeneficiaryTxnCount(beneCount)
                       .currentWindowBeneficiaryAmountPaise(beneAmount)
-                      .currentBeneficiaryKey(beneKey);
+                      .currentBeneficiaryKey(beneKey)
+                      .currentDailyBeneficiaryAmountPaise(dailyBeneAmount);
         }
 
         EvaluationContext context = ctxBuilder.build();

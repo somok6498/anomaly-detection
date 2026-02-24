@@ -71,6 +71,15 @@ public class ClientProfileRepository {
         Bin ewmaAmtBeneBin = new Bin("ewmaAmtBene", serializeMap(profile.getEwmaAmountByBeneficiary()));
         Bin amtM2BeneBin = new Bin("amtM2Bene", serializeMap(profile.getAmountM2ByBeneficiary()));
 
+        // Daily tracking bins
+        Bin ewmaDailyAmtBin = new Bin("ewmaDailyAmt", profile.getEwmaDailyAmount());
+        Bin dailyAmtM2Bin = new Bin("dailyAmtM2", profile.getDailyAmountM2());
+        Bin completedDaysBin = new Bin("completedDays", profile.getCompletedDaysCount());
+        Bin ewmaDlyNewBnBin = new Bin("ewmaDlyNewBn", profile.getEwmaDailyNewBeneficiaries());
+        Bin dlyNewBnM2Bin = new Bin("dlyNewBnM2", profile.getDailyNewBeneM2());
+        Bin cmpltDaysBnBin = new Bin("cmpltDaysBn", profile.getCompletedDaysForBeneCount());
+        Bin lastDayBktBin = new Bin("lastDayBkt", profile.getLastDayBucket());
+
         client.put(writePolicy, key,
                 clientIdBin, txnTypeCountsBin, totalTxnCountBin,
                 ewmaAmountBin, amountM2Bin,
@@ -78,7 +87,9 @@ public class ClientProfileRepository {
                 avgAmountByTypeBin, amountM2ByTypeBin, amountCountByTypeBin,
                 ewmaHourlyAmountBin, hourlyAmountM2Bin,
                 lastUpdatedBin, lastHourBucketBin,
-                beneTxnCntsBin, distinctBeneBin, ewmaAmtBeneBin, amtM2BeneBin);
+                beneTxnCntsBin, distinctBeneBin, ewmaAmtBeneBin, amtM2BeneBin,
+                ewmaDailyAmtBin, dailyAmtM2Bin, completedDaysBin, ewmaDlyNewBnBin,
+                dlyNewBnM2Bin, cmpltDaysBnBin, lastDayBktBin);
     }
 
     /**
@@ -156,6 +167,72 @@ public class ClientProfileRepository {
         return amount != null ? amount : 0;
     }
 
+    // --- Daily transaction counters ---
+
+    public long incrementDailyCounter(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
+        Bin countBin = new Bin("count", 1);
+        Record record = client.operate(writePolicy, key,
+                Operation.add(countBin),
+                Operation.get("count"));
+        return record.getLong("count");
+    }
+
+    public void addDailyAmount(String counterKey, long amountInPaise) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
+        Bin amountBin = new Bin("totalAmount", amountInPaise);
+        client.operate(writePolicy, key, Operation.add(amountBin));
+    }
+
+    public long getDailyCount(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
+        Record record = client.get(readPolicy, key);
+        if (record == null) return 0;
+        return record.getLong("count");
+    }
+
+    public long getDailyAmount(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
+        Record record = client.get(readPolicy, key);
+        if (record == null) return 0;
+        Long amount = record.getLong("totalAmount");
+        return amount != null ? amount : 0;
+    }
+
+    // --- Daily new-beneficiary counters ---
+
+    public long incrementDailyNewBeneCounter(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_BENE_COUNTERS, counterKey);
+        Bin countBin = new Bin("count", 1);
+        Record record = client.operate(writePolicy, key,
+                Operation.add(countBin),
+                Operation.get("count"));
+        return record.getLong("count");
+    }
+
+    public long getDailyNewBeneCount(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_BENE_COUNTERS, counterKey);
+        Record record = client.get(readPolicy, key);
+        if (record == null) return 0;
+        return record.getLong("count");
+    }
+
+    // --- Daily beneficiary amount counter (for cross-channel detection) ---
+
+    public void addDailyBeneficiaryAmount(String counterKey, long amountInPaise) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
+        Bin amountBin = new Bin("totalAmount", amountInPaise);
+        client.operate(writePolicy, key, Operation.add(amountBin));
+    }
+
+    public long getDailyBeneficiaryAmount(String counterKey) {
+        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
+        Record record = client.get(readPolicy, key);
+        if (record == null) return 0;
+        Long amount = record.getLong("totalAmount");
+        return amount != null ? amount : 0;
+    }
+
     private ClientProfile mapRecordToProfile(String clientId, Record record) {
         ClientProfile profile = new ClientProfile();
         profile.setClientId(clientId);
@@ -218,6 +295,15 @@ public class ClientProfileRepository {
         if (amtM2BeneStr != null) {
             profile.setAmountM2ByBeneficiary(deserializeDoubleMap(amtM2BeneStr));
         }
+
+        // Daily tracking fields
+        profile.setEwmaDailyAmount(record.getDouble("ewmaDailyAmt"));
+        profile.setDailyAmountM2(record.getDouble("dailyAmtM2"));
+        profile.setCompletedDaysCount(record.getLong("completedDays"));
+        profile.setEwmaDailyNewBeneficiaries(record.getDouble("ewmaDlyNewBn"));
+        profile.setDailyNewBeneM2(record.getDouble("dlyNewBnM2"));
+        profile.setCompletedDaysForBeneCount(record.getLong("cmpltDaysBn"));
+        profile.setLastDayBucket(record.getString("lastDayBkt"));
 
         return profile;
     }

@@ -18,6 +18,8 @@ public class AerospikeConfig {
     public static final String SET_HOURLY_COUNTERS = "client_hourly_counters";
     public static final String SET_IF_MODELS = "if_models";
     public static final String SET_BENEFICIARY_COUNTERS = "bene_hourly_counters";
+    public static final String SET_DAILY_COUNTERS = "client_daily_counters";
+    public static final String SET_DAILY_BENE_COUNTERS = "daily_new_bene_cntrs";
 
     @Value("${aerospike.host:127.0.0.1}")
     private String host;

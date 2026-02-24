@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,6 +22,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class TpsSpikeEvaluator implements RuleEvaluator {
+
+    private final RiskThresholdConfig config;
+
+    public TpsSpikeEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
 
     @Override
     public RuleType getSupportedRuleType() {
@@ -40,7 +47,9 @@ public class TpsSpikeEvaluator implements RuleEvaluator {
         }
 
         long currentCount = context.getCurrentHourlyTxnCount();
-        double variancePct = rule.getVariancePct();
+        double variancePct = rule.getVariancePct() > 0
+                ? rule.getVariancePct()
+                : config.getRuleDefaults().getTpsSpikeVariancePct();
         double threshold = ewmaTps * (1.0 + variancePct / 100.0);
 
         if (currentCount <= threshold) {

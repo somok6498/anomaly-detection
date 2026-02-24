@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -19,11 +20,17 @@ import org.springframework.stereotype.Component;
  * would score very high because IMPS frequency (0%) is far below expected.
  *
  * Rule params:
- *   - "minTypeFrequencyPct" (default: variancePct as the threshold)
+ *   - "minTypeFrequencyPct" (default: from config)
  *     Transactions of a type making up less than this % of total are flagged.
  */
 @Component
 public class TransactionTypeEvaluator implements RuleEvaluator {
+
+    private final RiskThresholdConfig config;
+
+    public TransactionTypeEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
 
     @Override
     public RuleType getSupportedRuleType() {
@@ -42,7 +49,8 @@ public class TransactionTypeEvaluator implements RuleEvaluator {
 
         // The threshold: transaction types with frequency below this % are considered anomalous
         // variancePct is used as the minimum expected frequency percentage
-        double minFrequencyPct = rule.getParamAsDouble("minTypeFrequencyPct", rule.getVariancePct());
+        double minFrequencyPct = rule.getParamAsDouble("minTypeFrequencyPct",
+                config.getRuleDefaults().getMinTypeFrequencyPct());
 
         if (typeFrequencyPct >= minFrequencyPct) {
             return notTriggered(rule);

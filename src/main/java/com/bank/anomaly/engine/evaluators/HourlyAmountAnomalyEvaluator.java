@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,6 +21,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class HourlyAmountAnomalyEvaluator implements RuleEvaluator {
+
+    private final RiskThresholdConfig config;
+
+    public HourlyAmountAnomalyEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
 
     @Override
     public RuleType getSupportedRuleType() {
@@ -39,7 +46,9 @@ public class HourlyAmountAnomalyEvaluator implements RuleEvaluator {
 
         // Convert from paise to rupees for comparison
         double currentHourlyAmount = context.getCurrentHourlyAmountPaise() / 100.0;
-        double variancePct = rule.getVariancePct();
+        double variancePct = rule.getVariancePct() > 0
+                ? rule.getVariancePct()
+                : config.getRuleDefaults().getHourlyAmountVariancePct();
         double threshold = ewmaHourlyAmount * (1.0 + variancePct / 100.0);
 
         if (currentHourlyAmount <= threshold) {

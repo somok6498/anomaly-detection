@@ -78,6 +78,7 @@ services:
         condition: service_started
 
   # All-in-one: single container with Aerospike + App + auto-seeding
+  # Only starts when explicitly requested: docker compose --profile allinone up -d allinone
   allinone:
     build:
       context: .
@@ -87,6 +88,8 @@ services:
       - "8080:8080"
       - "3000:3000"
     restart: unless-stopped
+    profiles:
+      - allinone
 
 volumes:
   aerospike-data:

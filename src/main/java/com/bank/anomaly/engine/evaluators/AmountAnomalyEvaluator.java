@@ -7,6 +7,7 @@ import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.RuleType;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.config.RiskThresholdConfig;
 import org.springframework.stereotype.Component;
 
 /**
@@ -21,6 +22,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 public class AmountAnomalyEvaluator implements RuleEvaluator {
+
+    private final RiskThresholdConfig config;
+
+    public AmountAnomalyEvaluator(RiskThresholdConfig config) {
+        this.config = config;
+    }
 
     @Override
     public RuleType getSupportedRuleType() {
@@ -38,7 +45,9 @@ public class AmountAnomalyEvaluator implements RuleEvaluator {
             return notTriggered(rule);
         }
 
-        double variancePct = rule.getVariancePct();
+        double variancePct = rule.getVariancePct() > 0
+                ? rule.getVariancePct()
+                : config.getRuleDefaults().getAmountAnomalyVariancePct();
         double threshold = ewmaAmount * (1.0 + variancePct / 100.0);
 
         if (txn.getAmount() <= threshold) {
