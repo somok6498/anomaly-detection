@@ -227,6 +227,13 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 | POST | `/api/v1/models/train?numTrees=100&sampleSize=256` | Train models for all clients |
 | GET | `/api/v1/models/{clientId}` | Get model metadata |
 
+### Silence Detection
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/silence` | Get currently silent clients |
+| POST | `/api/v1/silence/check` | Trigger immediate silence scan |
+
 ### Actuator / Observability
 
 | Method | Endpoint | Description |
@@ -298,6 +305,44 @@ When a transaction is **BLOCKED** (composite score ≥ 70), an async WhatsApp or
 - Top triggering rule
 
 Configure via environment variables (see `.env` setup above). Set `TWILIO_ENABLED=false` to disable.
+
+## Silence Detection
+
+A background scheduler proactively detects when normally-active clients **stop transacting** — the reverse of anomaly detection. This catches network failures, system outages, or account issues before the client complains.
+
+### How It Works
+
+Every `N` minutes (default: 5), the scheduler:
+1. Scans all client profiles from Aerospike
+2. For each client with sufficient history (≥48 hours of data, ≥1 txn/hour baseline):
+   - Computes the **expected gap** between transactions from their EWMA hourly TPS
+   - If the actual silence exceeds `silenceMultiplier × expectedGap` (default 3x), flags the client
+3. Sends a WhatsApp/SMS alert for newly-detected silent clients
+4. Avoids alert fatigue: no re-alerting until the client resumes transacting
+
+### Configuration
+
+| Property | Default | Description |
+|----------|---------|-------------|
+| `risk.silence-detection.enabled` | true | Enable/disable the scheduler |
+| `risk.silence-detection.check-interval-minutes` | 5 | How often to scan profiles |
+| `risk.silence-detection.silence-multiplier` | 3.0 | Alert if gap > N× expected gap |
+| `risk.silence-detection.min-expected-tps` | 1.0 | Skip clients with < N txn/hour |
+| `risk.silence-detection.min-completed-hours` | 48 | Minimum hourly data before monitoring |
+
+### API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/silence` | Get currently silent clients with duration |
+| POST | `/api/v1/silence/check` | Trigger an immediate silence scan |
+
+### Grafana Dashboard
+
+The "Silence Detection" row in the Grafana dashboard shows:
+- **Silent Clients (Current)** — gauge of currently-silent client count
+- **Silence Detected Events** — timeline of new silence alerts per client
+- **Silence Resolved Events** — timeline of clients resuming transactions
 
 ## Project Structure
 

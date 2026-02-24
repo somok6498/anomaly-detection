@@ -60,6 +60,14 @@ risk:
     cross-channel-bene-variance-pct: 150.0
     cross-channel-bene-min-days: 3
 
+  # Silence detection — background scheduler that alerts when active clients stop transacting
+  silence-detection:
+    enabled: true
+    check-interval-minutes: 5       # how often to scan profiles
+    silence-multiplier: 3.0         # alert if gap > 3x expected gap between txns
+    min-expected-tps: 1.0           # skip clients with < 1 txn/hour baseline
+    min-completed-hours: 48         # need 2+ days of hourly data before monitoring
+
 # Swagger / OpenAPI
 springdoc:
   swagger-ui:

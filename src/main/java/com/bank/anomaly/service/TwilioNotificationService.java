@@ -88,6 +88,39 @@ public class TwilioNotificationService {
         );
     }
 
+    @Async
+    public void notifySilentClient(String clientId, double silenceMinutes,
+                                    double expectedGapMinutes, double ewmaHourlyTps) {
+        if (!config.isEnabled()) {
+            return;
+        }
+
+        try {
+            String body = String.format(
+                    "[SILENCE ALERT] Transaction flow stopped\n" +
+                    "Client: %s\n" +
+                    "Silent for: %.1f minutes\n" +
+                    "Expected gap: %.1f minutes (%.1f txns/hr)\n" +
+                    "Action: Investigate possible network/system issue",
+                    clientId, silenceMinutes, expectedGapMinutes, ewmaHourlyTps);
+
+            String from = resolveNumber(config.getFromNumber());
+            String to = resolveNumber(config.getToNumber());
+
+            Message message = Message.creator(
+                    new PhoneNumber(to),
+                    new PhoneNumber(from),
+                    body
+            ).create();
+
+            metricsConfig.recordNotification(config.getChannel(), "success");
+            log.info("Silence alert sent for client={}, sid={}", clientId, message.getSid());
+        } catch (Exception e) {
+            metricsConfig.recordNotification(config.getChannel(), "error");
+            log.error("Failed to send silence alert for client={}: {}", clientId, e.getMessage(), e);
+        }
+    }
+
     private String resolveNumber(String number) {
         if ("whatsapp".equalsIgnoreCase(config.getChannel())) {
             return "whatsapp:" + number;

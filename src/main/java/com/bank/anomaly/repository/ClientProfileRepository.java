@@ -6,19 +6,26 @@ import com.aerospike.client.Key;
 import com.aerospike.client.Operation;
 import com.aerospike.client.Record;
 import com.aerospike.client.policy.Policy;
+import com.aerospike.client.policy.ScanPolicy;
 import com.aerospike.client.policy.WritePolicy;
 import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.ClientProfile;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Repository
 public class ClientProfileRepository {
+
+    private static final Logger log = LoggerFactory.getLogger(ClientProfileRepository.class);
 
     private final AerospikeClient client;
     private final String namespace;
@@ -44,6 +51,26 @@ public class ClientProfileRepository {
             return null;
         }
         return mapRecordToProfile(clientId, record);
+    }
+
+    public List<ClientProfile> scanAllProfiles() {
+        List<ClientProfile> profiles = new ArrayList<>();
+        ScanPolicy scanPolicy = new ScanPolicy();
+        scanPolicy.concurrentNodes = true;
+        scanPolicy.includeBinData = true;
+
+        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_CLIENT_PROFILES,
+                (key, record) -> {
+                    try {
+                        String clientId = record.getString("clientId");
+                        if (clientId != null) {
+                            profiles.add(mapRecordToProfile(clientId, record));
+                        }
+                    } catch (Exception e) {
+                        log.warn("Failed to deserialize profile record: {}", e.getMessage());
+                    }
+                });
+        return profiles;
     }
 
     public void save(ClientProfile profile) {

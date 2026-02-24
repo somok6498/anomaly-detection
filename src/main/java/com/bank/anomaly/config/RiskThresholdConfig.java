@@ -34,6 +34,9 @@ public class RiskThresholdConfig {
     // Rule default parameters — fallback when not specified in rule.params or rule.variancePct.
     private RuleDefaults ruleDefaults = new RuleDefaults();
 
+    // Silence detection — background scheduler config
+    private SilenceDetection silenceDetection = new SilenceDetection();
+
     @Data
     public static class RuleDefaults {
         // Existing rules
@@ -59,5 +62,14 @@ public class RiskThresholdConfig {
         private int dormancyDays = 30;
         private double crossChannelBeneVariancePct = 150.0;
         private int crossChannelBeneMinDays = 3;
+    }
+
+    @Data
+    public static class SilenceDetection {
+        private boolean enabled = true;
+        private int checkIntervalMinutes = 5;
+        private double silenceMultiplier = 3.0;
+        private double minExpectedTps = 1.0;
+        private long minCompletedHours = 48;
     }
 }
