@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints plus targeted evaluation scenarios that trigger each of the 13 anomaly rules.\n\n**Setup:** Seed data first with `docker compose run --rm -e SPRING_PROFILES_ACTIVE=seed app`\n\n**Base URL:** http://localhost:8080",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints plus targeted evaluation scenarios that trigger each of the 14 anomaly rules.\n\n**Setup:** Seed data first with `docker compose run --rm -e SPRING_PROFILES_ACTIVE=seed app`\n\n**Base URL:** http://localhost:8080",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -433,6 +433,21 @@
             "body": {
               "mode": "raw",
               "raw": "{\n  \"txnId\": \"TRIGGER-XCHAN-UPI\",\n  \"clientId\": \"CLIENT-002\",\n  \"txnType\": \"UPI\",\n  \"amount\": 800000,\n  \"beneficiaryAccount\": \"XCHAN-TARGET-001\",\n  \"beneficiaryIfsc\": \"AXIS0005555\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Rule 14: Seasonal Deviation (send 1 of 25 at 3 AM)",
+          "description": "CLIENT-001 has strong business-hours profile (90% of txns during 09-17 UTC). Sending 25+ transactions at 3 AM triggers SEASONAL_DEVIATION — hourly TPS at 3 AM far exceeds the seasonal baseline for that slot. Use Postman Runner with 25 iterations, or set your system clock to 3 AM UTC.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-SEASONAL-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 50000,\n  \"beneficiaryAccount\": \"SEASONAL-TARGET-001\",\n  \"beneficiaryIfsc\": \"HDFC0001234\"\n}"
             }
           }
         }

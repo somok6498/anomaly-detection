@@ -107,6 +107,20 @@ public class ClientProfileRepository {
         Bin cmpltDaysBnBin = new Bin("cmpltDaysBn", profile.getCompletedDaysForBeneCount());
         Bin lastDayBktBin = new Bin("lastDayBkt", profile.getLastDayBucket());
 
+        // Seasonal profile bins (12 new bins)
+        Bin ssnHrTpsBin = new Bin("ssnHrTps", serializeMap(profile.getSeasonalHourlyTps()));
+        Bin ssnHrTpsM2Bin = new Bin("ssnHrTpsM2", serializeMap(profile.getSeasonalHourlyTpsM2()));
+        Bin ssnHrTpsCntBin = new Bin("ssnHrTpsCnt", serializeLongMap(profile.getSeasonalHourlyTpsCnt()));
+        Bin ssnHrAmtBin = new Bin("ssnHrAmt", serializeMap(profile.getSeasonalHourlyAmt()));
+        Bin ssnHrAmtM2Bin = new Bin("ssnHrAmtM2", serializeMap(profile.getSeasonalHourlyAmtM2()));
+        Bin ssnHrAmtCntBin = new Bin("ssnHrAmtCnt", serializeLongMap(profile.getSeasonalHourlyAmtCnt()));
+        Bin ssnDyAmtBin = new Bin("ssnDyAmt", serializeMap(profile.getSeasonalDailyAmt()));
+        Bin ssnDyAmtM2Bin = new Bin("ssnDyAmtM2", serializeMap(profile.getSeasonalDailyAmtM2()));
+        Bin ssnDyAmtCntBin = new Bin("ssnDyAmtCnt", serializeLongMap(profile.getSeasonalDailyAmtCnt()));
+        Bin ssnDyTpsBin = new Bin("ssnDyTps", serializeMap(profile.getSeasonalDailyTps()));
+        Bin ssnDyTpsM2Bin = new Bin("ssnDyTpsM2", serializeMap(profile.getSeasonalDailyTpsM2()));
+        Bin ssnDyTpsCntBin = new Bin("ssnDyTpsCnt", serializeLongMap(profile.getSeasonalDailyTpsCnt()));
+
         client.put(writePolicy, key,
                 clientIdBin, txnTypeCountsBin, totalTxnCountBin,
                 ewmaAmountBin, amountM2Bin,
@@ -116,7 +130,11 @@ public class ClientProfileRepository {
                 lastUpdatedBin, lastHourBucketBin,
                 beneTxnCntsBin, distinctBeneBin, ewmaAmtBeneBin, amtM2BeneBin,
                 ewmaDailyAmtBin, dailyAmtM2Bin, completedDaysBin, ewmaDlyNewBnBin,
-                dlyNewBnM2Bin, cmpltDaysBnBin, lastDayBktBin);
+                dlyNewBnM2Bin, cmpltDaysBnBin, lastDayBktBin,
+                ssnHrTpsBin, ssnHrTpsM2Bin, ssnHrTpsCntBin,
+                ssnHrAmtBin, ssnHrAmtM2Bin, ssnHrAmtCntBin,
+                ssnDyAmtBin, ssnDyAmtM2Bin, ssnDyAmtCntBin,
+                ssnDyTpsBin, ssnDyTpsM2Bin, ssnDyTpsCntBin);
     }
 
     /**
@@ -331,6 +349,35 @@ public class ClientProfileRepository {
         profile.setDailyNewBeneM2(record.getDouble("dlyNewBnM2"));
         profile.setCompletedDaysForBeneCount(record.getLong("cmpltDaysBn"));
         profile.setLastDayBucket(record.getString("lastDayBkt"));
+
+        // Seasonal profile maps
+        String ssnHrTpsStr = record.getString("ssnHrTps");
+        if (ssnHrTpsStr != null) profile.setSeasonalHourlyTps(deserializeDoubleMap(ssnHrTpsStr));
+        String ssnHrTpsM2Str = record.getString("ssnHrTpsM2");
+        if (ssnHrTpsM2Str != null) profile.setSeasonalHourlyTpsM2(deserializeDoubleMap(ssnHrTpsM2Str));
+        String ssnHrTpsCntStr = record.getString("ssnHrTpsCnt");
+        if (ssnHrTpsCntStr != null) profile.setSeasonalHourlyTpsCnt(deserializeLongMap(ssnHrTpsCntStr));
+
+        String ssnHrAmtStr = record.getString("ssnHrAmt");
+        if (ssnHrAmtStr != null) profile.setSeasonalHourlyAmt(deserializeDoubleMap(ssnHrAmtStr));
+        String ssnHrAmtM2Str = record.getString("ssnHrAmtM2");
+        if (ssnHrAmtM2Str != null) profile.setSeasonalHourlyAmtM2(deserializeDoubleMap(ssnHrAmtM2Str));
+        String ssnHrAmtCntStr = record.getString("ssnHrAmtCnt");
+        if (ssnHrAmtCntStr != null) profile.setSeasonalHourlyAmtCnt(deserializeLongMap(ssnHrAmtCntStr));
+
+        String ssnDyAmtStr = record.getString("ssnDyAmt");
+        if (ssnDyAmtStr != null) profile.setSeasonalDailyAmt(deserializeDoubleMap(ssnDyAmtStr));
+        String ssnDyAmtM2Str = record.getString("ssnDyAmtM2");
+        if (ssnDyAmtM2Str != null) profile.setSeasonalDailyAmtM2(deserializeDoubleMap(ssnDyAmtM2Str));
+        String ssnDyAmtCntStr = record.getString("ssnDyAmtCnt");
+        if (ssnDyAmtCntStr != null) profile.setSeasonalDailyAmtCnt(deserializeLongMap(ssnDyAmtCntStr));
+
+        String ssnDyTpsStr = record.getString("ssnDyTps");
+        if (ssnDyTpsStr != null) profile.setSeasonalDailyTps(deserializeDoubleMap(ssnDyTpsStr));
+        String ssnDyTpsM2Str = record.getString("ssnDyTpsM2");
+        if (ssnDyTpsM2Str != null) profile.setSeasonalDailyTpsM2(deserializeDoubleMap(ssnDyTpsM2Str));
+        String ssnDyTpsCntStr = record.getString("ssnDyTpsCnt");
+        if (ssnDyTpsCntStr != null) profile.setSeasonalDailyTpsCnt(deserializeLongMap(ssnDyTpsCntStr));
 
         return profile;
     }

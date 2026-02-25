@@ -30,6 +30,14 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   String _actionFilter = 'ALL';
   String _statusFilter = 'ALL';
 
+  // Sorting: null = no sort, 'action' or 'score'
+  String? _sortColumn;
+  bool _sortAscending = true;
+
+  // Score threshold filter
+  String _scoreOp = 'none'; // 'none', '>', '<'
+  final _scoreThresholdController = TextEditingController();
+
   // Selection
   final Set<String> _selectedTxnIds = {};
   bool _selectAll = false;
@@ -51,6 +59,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   @override
   void dispose() {
     _clientFilterController.dispose();
+    _scoreThresholdController.dispose();
     super.dispose();
   }
 
@@ -91,8 +100,37 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   }
 
   List<ReviewQueueItem> get _filteredItems {
-    if (_statusFilter == 'ALL') return _queueItems;
-    return _queueItems.where((i) => i.feedbackStatus == _statusFilter).toList();
+    var items = _queueItems.toList();
+
+    // Status filter
+    if (_statusFilter != 'ALL') {
+      items = items.where((i) => i.feedbackStatus == _statusFilter).toList();
+    }
+
+    // Score threshold filter
+    if (_scoreOp != 'none') {
+      final threshold = double.tryParse(_scoreThresholdController.text.trim());
+      if (threshold != null) {
+        if (_scoreOp == '>') {
+          items = items.where((i) => i.compositeScore > threshold).toList();
+        } else if (_scoreOp == '<') {
+          items = items.where((i) => i.compositeScore < threshold).toList();
+        }
+      }
+    }
+
+    // Sorting
+    if (_sortColumn == 'score') {
+      items.sort((a, b) => _sortAscending
+          ? a.compositeScore.compareTo(b.compositeScore)
+          : b.compositeScore.compareTo(a.compositeScore));
+    } else if (_sortColumn == 'action') {
+      items.sort((a, b) => _sortAscending
+          ? a.action.compareTo(b.action)
+          : b.action.compareTo(a.action));
+    }
+
+    return items;
   }
 
   Future<void> _selectItem(String txnId) async {
@@ -212,6 +250,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       children: [
         // Filter bar
         _buildFilterBar(),
+        // Score threshold filter
+        _buildScoreFilterBar(),
         // Stats row
         if (_stats != null) _buildStatsRow(),
         // Bulk action bar
@@ -328,6 +368,62 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               .toList(),
           onChanged: onChanged,
         ),
+      ),
+    );
+  }
+
+  Widget _buildScoreFilterBar() {
+    return Container(
+      color: AppTheme.cardBg,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Row(
+        children: [
+          const Text('Score', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+          const SizedBox(width: 8),
+          _buildDropdown(
+            value: _scoreOp,
+            items: ['none', '>', '<'],
+            labels: {'none': 'Any', '>': '>', '<': '<'},
+            onChanged: (v) => setState(() {
+              _scoreOp = v!;
+            }),
+            width: 65,
+          ),
+          const SizedBox(width: 8),
+          SizedBox(
+            width: 80,
+            height: 36,
+            child: TextField(
+              controller: _scoreThresholdController,
+              enabled: _scoreOp != 'none',
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+              decoration: InputDecoration(
+                hintText: 'e.g. 50',
+                hintStyle: TextStyle(
+                  fontSize: 11,
+                  color: _scoreOp == 'none' ? AppTheme.textSecondary.withValues(alpha: 0.3) : AppTheme.textSecondary,
+                ),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(6)),
+                disabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(6),
+                  borderSide: BorderSide(color: AppTheme.cardBorder.withValues(alpha: 0.3)),
+                ),
+              ),
+              onSubmitted: (_) => setState(() {}),
+            ),
+          ),
+          const SizedBox(width: 8),
+          if (_scoreOp != 'none')
+            GestureDetector(
+              onTap: () => setState(() {
+                _scoreOp = 'none';
+                _scoreThresholdController.clear();
+              }),
+              child: const Icon(Icons.close, color: AppTheme.textSecondary, size: 16),
+            ),
+        ],
       ),
     );
   }
@@ -463,15 +559,56 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
           const Expanded(
               flex: 3,
               child: Text('TXN ID', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w700))),
-          const Expanded(
+          Expanded(
               flex: 1,
-              child: Text('ACTION', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w700))),
-          const Expanded(
+              child: _buildSortableHeader('ACTION', 'action')),
+          Expanded(
               flex: 1,
-              child: Text('SCORE', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w700))),
+              child: _buildSortableHeader('SCORE', 'score')),
           const Expanded(
               flex: 2,
               child: Text('STATUS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w700))),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSortableHeader(String label, String column) {
+    final isActive = _sortColumn == column;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          if (_sortColumn == column) {
+            if (_sortAscending) {
+              _sortAscending = false;
+            } else {
+              // Third click: clear sort
+              _sortColumn = null;
+              _sortAscending = true;
+            }
+          } else {
+            _sortColumn = column;
+            _sortAscending = false; // default: high to low for score, Z-A for action
+          }
+        });
+      },
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(label, style: TextStyle(
+            color: isActive ? AppTheme.accent : AppTheme.textSecondary,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+          )),
+          const SizedBox(width: 2),
+          if (isActive)
+            Icon(
+              _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+              size: 10,
+              color: AppTheme.accent,
+            )
+          else
+            const Icon(Icons.unfold_more, size: 10, color: AppTheme.textSecondary),
         ],
       ),
     );

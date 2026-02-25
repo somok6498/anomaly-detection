@@ -62,6 +62,8 @@ public class RiskThresholdConfig {
         private int dormancyDays = 30;
         private double crossChannelBeneVariancePct = 150.0;
         private int crossChannelBeneMinDays = 3;
+        private double seasonalDeviationVariancePct = 80.0;
+        private int seasonalMinSamples = 4;
     }
 
     @Data

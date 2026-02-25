@@ -17,7 +17,10 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
 
+import java.time.DayOfWeek;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
@@ -238,11 +241,27 @@ public class DataSeeder implements CommandLineRunner {
                 .params(Map.of("minDays", "3"))
                 .build());
 
-        log.info("Seeded 13 default anomaly rules");
+        // Rule 14: Seasonal deviation — detect off-season anomalies (3AM spikes, weekend surges)
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-SEASONAL")
+                .name("Seasonal Deviation")
+                .description("Flag when transaction volume or amounts deviate from the expected pattern for this time-of-day or day-of-week")
+                .ruleType(RuleType.SEASONAL_DEVIATION)
+                .variancePct(80.0)
+                .riskWeight(2.0)
+                .enabled(true)
+                .params(Map.of("minSeasonalSamples", "4"))
+                .build());
+
+        log.info("Seeded 14 default anomaly rules");
     }
 
     /**
-     * Generate 30 days of transaction data for 10 clients.
+     * Generate 60 days of transaction data for 11 clients with time-aware patterns.
+     *
+     * Time-aware patterns:
+     *   - Weekdays: 90% of txns during business hours (09-17 UTC), 10% off-peak
+     *   - Weekends: 30% of weekday volume
      *
      * Client profiles:
      *   CLIENT-001: Heavy NEFT user (90% NEFT, 10% RTGS), avg amount 50K, ~200 txns/day
@@ -252,13 +271,13 @@ public class DataSeeder implements CommandLineRunner {
      *   CLIENT-005: IMPS specialist (85% IMPS, 15% UPI), avg amount 10K, ~300 txns/day
      *
      *   CLIENT-006 to CLIENT-010: Same base patterns as 001-005 but with injected anomalies
-     *   in the last 2 days (unusual types, spiked amounts, TPS bursts).
+     *   in the last 2 days (unusual types, spiked amounts, TPS bursts, 3AM activity, Sunday surges).
      */
     private void seedTransactions() {
-        log.info("Seeding transaction data for 11 clients over 30 days...");
+        log.info("Seeding transaction data for 11 clients over 60 days...");
 
         Instant endTime = Instant.now();
-        Instant startTime = endTime.minus(30, ChronoUnit.DAYS);
+        Instant startTime = endTime.minus(60, ChronoUnit.DAYS);
         AtomicInteger totalCount = new AtomicInteger(0);
 
         // Normal clients (001-005)
@@ -313,7 +332,7 @@ public class DataSeeder implements CommandLineRunner {
      * Seed a dormant client: normal activity for 28 days, then 2+ day gap, then a reactivation txn.
      */
     private void seedDormantClient(String clientId, Instant start, Instant end, AtomicInteger counter) {
-        log.info("  {} — seeding dormant client (28 days active, then 2+ day gap)", clientId);
+        log.info("  {} — seeding dormant client (56 days active, then 2+ day gap)", clientId);
 
         Instant dormancyStart = end.minus(2, ChronoUnit.DAYS).minus(6, ChronoUnit.HOURS);
         Instant activeEnd = dormancyStart; // activity stops here
@@ -321,7 +340,7 @@ public class DataSeeder implements CommandLineRunner {
         long activeEndMillis = activeEnd.toEpochMilli();
 
         int txnsPerDay = 100;
-        int activeDays = 28;
+        int activeDays = 56;
         int totalTxns = txnsPerDay * activeDays;
         double avgAmount = 30_000;
         double amountStdDev = 10_000;
@@ -377,81 +396,136 @@ public class DataSeeder implements CommandLineRunner {
                             double avgAmount, double amountStdDev,
                             boolean injectAnomalies, AtomicInteger counter) {
 
-        long startMillis = start.toEpochMilli();
         long endMillis = end.toEpochMilli();
-        long totalDurationMillis = endMillis - startMillis;
         long anomalyStartMillis = end.minus(2, ChronoUnit.DAYS).toEpochMilli();
 
-        int totalDays = 30;
-        int totalTxns = txnsPerDay * totalDays;
+        int totalDays = 60;
 
         // Generate beneficiary pool for this client (20-50 beneficiaries)
         int poolSize = 20 + random.nextInt(31);
         List<String[]> beneficiaryPool = generateBeneficiaryPool(poolSize);
 
-        // Spread transactions evenly with some jitter
-        long avgIntervalMillis = totalDurationMillis / totalTxns;
-
-        long currentTimestamp = startMillis;
         int txnCount = 0;
         int anomalyCount = 0;
+        int globalTxnIdx = 0;
 
-        for (int i = 0; i < totalTxns && currentTimestamp < endMillis; i++) {
-            boolean isAnomalyWindow = injectAnomalies && currentTimestamp >= anomalyStartMillis;
+        // Day-by-day iteration with business-hour bias and weekend dips
+        for (int day = 0; day < totalDays; day++) {
+            Instant dayStart = start.plus(day, ChronoUnit.DAYS);
+            LocalDate localDate = dayStart.atZone(ZoneOffset.UTC).toLocalDate();
+            DayOfWeek dow = localDate.getDayOfWeek();
+            boolean isWeekend = (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY);
 
-            String txnType;
-            double amount;
-            String beneIfsc = null;
-            String beneAcct = null;
+            // Weekend: 30% of weekday volume
+            int dayTxnCount = isWeekend ? (int) (txnsPerDay * 0.3) : txnsPerDay;
+            // Add ±10% daily jitter
+            dayTxnCount = (int) (dayTxnCount * (0.9 + random.nextDouble() * 0.2));
+            dayTxnCount = Math.max(1, dayTxnCount);
 
-            if (isAnomalyWindow && random.nextDouble() < 0.15) {
-                // 15% of transactions in the anomaly window are anomalous
-                int anomalyKind = random.nextInt(3);
-                switch (anomalyKind) {
-                    case 0:
-                        // Type anomaly — use a type the client never/rarely uses
-                        txnType = pickUnusualType(typePool);
-                        amount = gaussianAmount(avgAmount, amountStdDev);
-                        break;
-                    case 1:
-                        // Amount anomaly — 5x to 10x the normal amount
-                        txnType = typePool[random.nextInt(typePool.length)];
-                        amount = avgAmount * (5 + random.nextDouble() * 5);
-                        break;
-                    case 2:
-                    default:
-                        // Both: unusual type AND high amount
-                        txnType = pickUnusualType(typePool);
-                        amount = avgAmount * (3 + random.nextDouble() * 7);
-                        break;
+            long dayStartMillis = dayStart.toEpochMilli();
+
+            for (int i = 0; i < dayTxnCount; i++) {
+                // Pick hour with business-hour bias: 90% during 09-17 UTC, 10% off-peak
+                int hour;
+                if (random.nextDouble() < 0.9) {
+                    // Business hours: 09-17 (8 hours)
+                    hour = 9 + random.nextInt(8);
+                } else {
+                    // Off-peak hours: 00-08, 18-23 (16 hours)
+                    int offPeakIdx = random.nextInt(16);
+                    hour = offPeakIdx < 9 ? offPeakIdx : (offPeakIdx - 9 + 18);
                 }
-                anomalyCount++;
-            } else {
-                // Normal transaction
-                txnType = typePool[random.nextInt(typePool.length)];
-                amount = gaussianAmount(avgAmount, amountStdDev);
+                // Random minute+second within the hour
+                long tsMillis = dayStartMillis + hour * 3600_000L
+                        + (long) (random.nextDouble() * 3600_000);
+                if (tsMillis >= endMillis) continue;
+
+                boolean isAnomalyWindow = injectAnomalies && tsMillis >= anomalyStartMillis;
+
+                String txnType;
+                double amount;
+
+                if (isAnomalyWindow && random.nextDouble() < 0.15) {
+                    int anomalyKind = random.nextInt(3);
+                    switch (anomalyKind) {
+                        case 0:
+                            txnType = pickUnusualType(typePool);
+                            amount = gaussianAmount(avgAmount, amountStdDev);
+                            break;
+                        case 1:
+                            txnType = typePool[random.nextInt(typePool.length)];
+                            amount = avgAmount * (5 + random.nextDouble() * 5);
+                            break;
+                        case 2:
+                        default:
+                            txnType = pickUnusualType(typePool);
+                            amount = avgAmount * (3 + random.nextDouble() * 7);
+                            break;
+                    }
+                    anomalyCount++;
+                } else {
+                    txnType = typePool[random.nextInt(typePool.length)];
+                    amount = gaussianAmount(avgAmount, amountStdDev);
+                }
+
+                String[] bene = pickBeneficiary(beneficiaryPool);
+
+                amount = Math.max(1.0, Math.round(amount * 100.0) / 100.0);
+
+                String txnId = clientId + "-TXN-" + String.format("%06d", globalTxnIdx++);
+                writeTransaction(txnId, clientId, txnType, amount, tsMillis, bene[1], bene[0]);
+                txnCount++;
             }
-
-            // Pick a beneficiary (power-law distribution — some beneficiaries more frequent)
-            String[] bene = pickBeneficiary(beneficiaryPool);
-            beneIfsc = bene[0];
-            beneAcct = bene[1];
-
-            // Ensure amount is positive
-            amount = Math.max(1.0, Math.round(amount * 100.0) / 100.0);
-
-            String txnId = clientId + "-TXN-" + String.format("%06d", i);
-            writeTransaction(txnId, clientId, txnType, amount, currentTimestamp, beneAcct, beneIfsc);
-
-            txnCount++;
-
-            // Add jitter to timestamp (±30% of average interval)
-            long jitter = (long) (avgIntervalMillis * 0.3 * (random.nextDouble() * 2 - 1));
-            currentTimestamp += avgIntervalMillis + jitter;
         }
 
-        // For anomaly clients: inject a TPS burst (50 extra txns in a single hour)
+        // For anomaly clients: inject various anomaly patterns
         if (injectAnomalies) {
+            // === Seasonal anomaly: TPS burst at 3 AM (off-peak) ===
+            // Find a day in the anomaly window and place 30 txns at 3 AM
+            long seasonalBurstDay = anomalyStartMillis;
+            long burst3amStart = seasonalBurstDay + 3 * 3600_000L; // 3 AM
+            log.info("    {} — injecting 30 txns at 3 AM for seasonal deviation", clientId);
+            for (int i = 0; i < 30; i++) {
+                String txnId = clientId + "-SEASONAL3AM-" + String.format("%03d", i);
+                String txnType = typePool[random.nextInt(typePool.length)];
+                double amount = gaussianAmount(avgAmount, amountStdDev);
+                amount = Math.max(1.0, Math.round(amount * 100.0) / 100.0);
+                long ts = burst3amStart + (long) (random.nextDouble() * 3600_000);
+                String[] bene = pickBeneficiary(beneficiaryPool);
+                writeTransaction(txnId, clientId, txnType, amount, ts, bene[1], bene[0]);
+                txnCount++;
+                anomalyCount++;
+            }
+
+            // === Seasonal anomaly: Sunday high-volume (for low-weekend clients) ===
+            // Find the Sunday in/near the anomaly window and inject weekday-level volume
+            Instant anomalyInstant = Instant.ofEpochMilli(anomalyStartMillis);
+            LocalDate anomalyDate = anomalyInstant.atZone(ZoneOffset.UTC).toLocalDate();
+            // Find next Sunday
+            LocalDate sunday = anomalyDate;
+            while (sunday.getDayOfWeek() != DayOfWeek.SUNDAY) {
+                sunday = sunday.plusDays(1);
+            }
+            long sundayStart = sunday.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+            if (sundayStart < endMillis) {
+                int sundayBurst = txnsPerDay; // full weekday volume on Sunday
+                log.info("    {} — injecting {} Sunday txns for seasonal deviation", clientId, sundayBurst);
+                for (int i = 0; i < sundayBurst; i++) {
+                    String txnId = clientId + "-SUNDAYBURST-" + String.format("%04d", i);
+                    String txnType = typePool[random.nextInt(typePool.length)];
+                    double amount = gaussianAmount(avgAmount, amountStdDev);
+                    amount = Math.max(1.0, Math.round(amount * 100.0) / 100.0);
+                    int hour = 9 + random.nextInt(8); // business hours on a Sunday
+                    long ts = sundayStart + hour * 3600_000L + (long) (random.nextDouble() * 3600_000);
+                    ts = Math.min(ts, endMillis - 1);
+                    String[] bene = pickBeneficiary(beneficiaryPool);
+                    writeTransaction(txnId, clientId, txnType, amount, ts, bene[1], bene[0]);
+                    txnCount++;
+                    anomalyCount++;
+                }
+            }
+
+            // TPS burst (50 extra txns in a single hour)
             long burstHourStart = anomalyStartMillis + 3600_000L; // 1 hour into anomaly window
             for (int i = 0; i < 50; i++) {
                 String txnId = clientId + "-BURST-" + String.format("%03d", i);

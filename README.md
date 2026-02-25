@@ -6,7 +6,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 
 - **Spring Boot 3.2.5** (Java 17) REST API
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
-- **13 anomaly evaluators** — 12 rule-based + 1 ML (Isolation Forest)
+- **14 anomaly evaluators** — 13 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
@@ -20,7 +20,7 @@ POST /api/v1/transactions/evaluate
   │
   ├─ 1. Load/create client behavioral profile (EWMA stats)
   ├─ 2. Build evaluation context (hourly counters, beneficiary data)
-  ├─ 3. Evaluate against all active anomaly rules (13 evaluators)
+  ├─ 3. Evaluate against all active anomaly rules (14 evaluators)
   ├─ 4. Compute weighted composite risk score (0–100)
   ├─ 5. Determine action: PASS (<30) · ALERT (30–70) · BLOCK (≥70)
   ├─ 6. Update client profile with new transaction data
@@ -45,6 +45,7 @@ POST /api/v1/transactions/evaluate
 | `NEW_BENEFICIARY_VELOCITY` | Round-robin mule fan-out — too many new beneficiaries/day | 3.5 |
 | `DORMANCY_REACTIVATION` | Sudden activity after extended inactivity (configurable threshold) | 3.0 |
 | `CROSS_CHANNEL_BENEFICIARY_AMOUNT` | Same beneficiary receives large total across multiple txn types/day | 2.5 |
+| `SEASONAL_DEVIATION` | Time-slot-aware deviation — compares against hour-of-day/day-of-week baselines | 2.0 |
 | `ISOLATION_FOREST` | ML-based multi-dimensional anomaly detection (8 features) | 2.0 |
 
 **Composite Score** = Σ(triggered partial score × weight) / Σ(triggered weight), capped at 100.
@@ -301,7 +302,7 @@ Every 6 hours (configurable), the tuning job:
 
 The dashboard has a **Review Queue** tab with a two-panel layout:
 
-- **Left panel**: filter bar (action/status/client ID), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, and a sortable queue table with auto-accept countdown timers
+- **Left panel**: filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, and a sortable queue table with clickable ACTION and SCORE column headers for ascending/descending sort, plus auto-accept countdown timers
 - **Right panel**: detailed view of the selected item showing transaction info, risk score with rule breakdown, client profile summary, feedback action buttons, and weight history for involved rules
 
 ## Observability
@@ -416,7 +417,7 @@ src/main/java/com/bank/anomaly/
 ├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
 ├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue)
 ├── engine/
-│   ├── evaluators/       # 13 rule evaluators (12 rule-based + 1 Isolation Forest)
+│   ├── evaluators/       # 14 rule evaluators (13 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
 ├── repository/           # Aerospike data access (7 repositories)
@@ -431,15 +432,17 @@ grafana/provisioning/     # Grafana datasources + pre-built dashboard
 
 ## Seeded Test Data
 
-Run with `SPRING_PROFILES_ACTIVE=seed` to generate ~72,000 transactions across 30 days:
+Run with `SPRING_PROFILES_ACTIVE=seed` to generate ~100,000+ transactions across 60 days with time-aware patterns:
 
 | Clients | Behavior |
 |---------|----------|
-| CLIENT-001 to CLIENT-005 | Normal behavioral profiles (consistent patterns) |
+| CLIENT-001 to CLIENT-005 | Normal behavioral profiles with business-hour bias (90% during 09–17 UTC, weekends at 30% volume) |
 | CLIENT-006 to CLIENT-010 | Normal base + injected anomalies in last 2 days |
-| CLIENT-011 | Dormant account — 28 days active, then 2+ day gap with reactivation |
+| CLIENT-011 | Dormant account — 56 days active, then 2+ day gap with reactivation |
 
-**Injected anomalies** (clients 006–010): unusual transaction types, spiked amounts (5–10x normal), TPS bursts (50 txns/hour), structuring patterns (15–25 rapid transfers to same beneficiary), drip structuring (40–60 small txns/day), new-beneficiary fan-out (8–12 new beneficiaries/day), and cross-channel splitting (same beneficiary via multiple txn types).
+**Seasonal patterns:** Transactions follow realistic time-of-day and day-of-week distributions. Weekdays concentrate 90% of volume during business hours (09–17 UTC) with 10% off-peak. Weekends generate ~30% of weekday volume. This builds rich seasonal profiles with ~8 samples per day-of-week slot and ~2–3 per hour-of-day slot.
+
+**Injected anomalies** (clients 006–010): unusual transaction types, spiked amounts (5–10x normal), TPS bursts (50 txns/hour), structuring patterns (15–25 rapid transfers to same beneficiary), drip structuring (40–60 small txns/day), new-beneficiary fan-out (8–12 new beneficiaries/day), cross-channel splitting (same beneficiary via multiple txn types), 3 AM TPS bursts (off-peak seasonal deviation), and Sunday high-volume surges (weekend seasonal deviation).
 
 Each client has 20–50 unique beneficiaries with power-law distribution.
 
@@ -477,6 +480,8 @@ All rule parameters are configurable via `risk.rule-defaults.*` in `application.
 | `risk.rule-defaults.new-bene-variance-pct` | 200.0 | New Beneficiary Velocity |
 | `risk.rule-defaults.dormancy-days` | 30 | Dormancy Reactivation |
 | `risk.rule-defaults.cross-channel-bene-variance-pct` | 150.0 | Cross-Channel Bene Amount |
+| `risk.rule-defaults.seasonal-deviation-variance-pct` | 80.0 | Seasonal Deviation |
+| `risk.rule-defaults.seasonal-min-samples` | 4 | Seasonal Deviation (min slot samples before using seasonal baseline) |
 
 ## Aerospike Data Model
 

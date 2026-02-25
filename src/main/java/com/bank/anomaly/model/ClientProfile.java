@@ -125,6 +125,56 @@ public class ClientProfile {
     @Schema(description = "Day bucket key of the last processed day (for daily rollover)", example = "20260223")
     private String lastDayBucket;
 
+    // --- Seasonal profile maps (EWMA + Welford M2 + count per time slot) ---
+
+    @Schema(description = "Seasonal EWMA of hourly TPS by hour-of-day (keys: 00-23)")
+    @Builder.Default
+    private Map<String, Double> seasonalHourlyTps = new HashMap<>();
+
+    @Schema(description = "Welford M2 for hourly TPS by hour-of-day")
+    @Builder.Default
+    private Map<String, Double> seasonalHourlyTpsM2 = new HashMap<>();
+
+    @Schema(description = "Sample count for hourly TPS by hour-of-day")
+    @Builder.Default
+    private Map<String, Long> seasonalHourlyTpsCnt = new HashMap<>();
+
+    @Schema(description = "Seasonal EWMA of hourly amount by hour-of-day (keys: 00-23)")
+    @Builder.Default
+    private Map<String, Double> seasonalHourlyAmt = new HashMap<>();
+
+    @Schema(description = "Welford M2 for hourly amount by hour-of-day")
+    @Builder.Default
+    private Map<String, Double> seasonalHourlyAmtM2 = new HashMap<>();
+
+    @Schema(description = "Sample count for hourly amount by hour-of-day")
+    @Builder.Default
+    private Map<String, Long> seasonalHourlyAmtCnt = new HashMap<>();
+
+    @Schema(description = "Seasonal EWMA of daily amount by day-of-week (keys: 1-7, Mon=1)")
+    @Builder.Default
+    private Map<String, Double> seasonalDailyAmt = new HashMap<>();
+
+    @Schema(description = "Welford M2 for daily amount by day-of-week")
+    @Builder.Default
+    private Map<String, Double> seasonalDailyAmtM2 = new HashMap<>();
+
+    @Schema(description = "Sample count for daily amount by day-of-week")
+    @Builder.Default
+    private Map<String, Long> seasonalDailyAmtCnt = new HashMap<>();
+
+    @Schema(description = "Seasonal EWMA of daily TPS by day-of-week (keys: 1-7, Mon=1)")
+    @Builder.Default
+    private Map<String, Double> seasonalDailyTps = new HashMap<>();
+
+    @Schema(description = "Welford M2 for daily TPS by day-of-week")
+    @Builder.Default
+    private Map<String, Double> seasonalDailyTpsM2 = new HashMap<>();
+
+    @Schema(description = "Sample count for daily TPS by day-of-week")
+    @Builder.Default
+    private Map<String, Long> seasonalDailyTpsCnt = new HashMap<>();
+
     public double getBeneficiaryConcentration(String beneficiaryKey) {
         if (totalTxnCount == 0 || beneficiaryKey == null) return 0.0;
         return beneficiaryTxnCounts.getOrDefault(beneficiaryKey, 0L) / (double) totalTxnCount;
@@ -167,5 +217,29 @@ public class ClientProfile {
     public double getDailyNewBeneStdDev() {
         if (completedDaysForBeneCount < 2) return 0.0;
         return Math.sqrt(dailyNewBeneM2 / (completedDaysForBeneCount - 1));
+    }
+
+    public double getSeasonalHourlyTpsStdDev(String slot) {
+        long cnt = seasonalHourlyTpsCnt.getOrDefault(slot, 0L);
+        if (cnt < 2) return 0.0;
+        return Math.sqrt(seasonalHourlyTpsM2.getOrDefault(slot, 0.0) / (cnt - 1));
+    }
+
+    public double getSeasonalHourlyAmtStdDev(String slot) {
+        long cnt = seasonalHourlyAmtCnt.getOrDefault(slot, 0L);
+        if (cnt < 2) return 0.0;
+        return Math.sqrt(seasonalHourlyAmtM2.getOrDefault(slot, 0.0) / (cnt - 1));
+    }
+
+    public double getSeasonalDailyAmtStdDev(String slot) {
+        long cnt = seasonalDailyAmtCnt.getOrDefault(slot, 0L);
+        if (cnt < 2) return 0.0;
+        return Math.sqrt(seasonalDailyAmtM2.getOrDefault(slot, 0.0) / (cnt - 1));
+    }
+
+    public double getSeasonalDailyTpsStdDev(String slot) {
+        long cnt = seasonalDailyTpsCnt.getOrDefault(slot, 0L);
+        if (cnt < 2) return 0.0;
+        return Math.sqrt(seasonalDailyTpsM2.getOrDefault(slot, 0.0) / (cnt - 1));
     }
 }

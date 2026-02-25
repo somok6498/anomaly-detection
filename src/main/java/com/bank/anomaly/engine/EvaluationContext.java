@@ -30,4 +30,8 @@ public class EvaluationContext {
 
     // Daily total amount to the current beneficiary across all txn types (for cross-channel detection)
     private long currentDailyBeneficiaryAmountPaise;
+
+    // Seasonal time slots for the current transaction
+    private String currentHourOfDaySlot;  // "00"-"23"
+    private String currentDayOfWeekSlot;  // "1"-"7" (1=Mon, ISO)
 }

@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.time.Instant;
+import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
@@ -108,6 +109,11 @@ public class ProfileService {
 
             updateHourlyTpsStats(profile, completedHourCount);
             updateHourlyAmountStats(profile, completedHourAmount);
+
+            // Seasonal: update hour-of-day slot from the completed hour bucket
+            String completedHourOfDay = lastHourBucket.substring(8, 10); // "yyyyMMddHH" → "HH"
+            updateSeasonalHourlyTps(profile, completedHourCount, completedHourOfDay);
+            updateSeasonalHourlyAmt(profile, completedHourAmount, completedHourOfDay);
         }
         profile.setLastHourBucket(currentHourBucket);
 
@@ -123,6 +129,14 @@ public class ProfileService {
 
             updateDailyAmountStats(profile, completedDayAmountPaise);
             updateDailyNewBeneStats(profile, completedDayNewBeneCount);
+
+            // Seasonal: update day-of-week slot from the completed day bucket
+            LocalDate completedDate = LocalDate.parse(lastDayBucket, DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String completedDayOfWeek = String.valueOf(completedDate.getDayOfWeek().getValue());
+            long completedDayCount = profileRepository.getDailyCount(
+                    profile.getClientId() + ":" + lastDayBucket);
+            updateSeasonalDailyAmt(profile, completedDayAmountPaise, completedDayOfWeek);
+            updateSeasonalDailyTps(profile, completedDayCount, completedDayOfWeek);
         }
         profile.setLastDayBucket(currentDayBucket);
 
@@ -326,11 +340,103 @@ public class ProfileService {
         profile.setCompletedDaysForBeneCount(completedDays + 1);
     }
 
+    // --- Seasonal EWMA + Welford update methods ---
+
+    private void updateSeasonalHourlyTps(ClientProfile profile, long hourCount, String hourSlot) {
+        long cnt = profile.getSeasonalHourlyTpsCnt().getOrDefault(hourSlot, 0L);
+        double hourlyAlpha = Math.min(0.1, thresholdConfig.getEwmaAlpha() * 10);
+
+        if (cnt == 0) {
+            profile.getSeasonalHourlyTps().put(hourSlot, (double) hourCount);
+            profile.getSeasonalHourlyTpsM2().put(hourSlot, 0.0);
+        } else {
+            double oldMean = profile.getSeasonalHourlyTps().getOrDefault(hourSlot, 0.0);
+            double newMean = hourlyAlpha * hourCount + (1 - hourlyAlpha) * oldMean;
+            profile.getSeasonalHourlyTps().put(hourSlot, newMean);
+            double delta = hourCount - oldMean;
+            double delta2 = hourCount - newMean;
+            double oldM2 = profile.getSeasonalHourlyTpsM2().getOrDefault(hourSlot, 0.0);
+            profile.getSeasonalHourlyTpsM2().put(hourSlot, oldM2 + delta * delta2);
+        }
+        profile.getSeasonalHourlyTpsCnt().put(hourSlot, cnt + 1);
+    }
+
+    private void updateSeasonalHourlyAmt(ClientProfile profile, long hourAmountPaise, String hourSlot) {
+        double hourAmount = hourAmountPaise / 100.0;
+        long cnt = profile.getSeasonalHourlyAmtCnt().getOrDefault(hourSlot, 0L);
+        double hourlyAlpha = Math.min(0.1, thresholdConfig.getEwmaAlpha() * 10);
+
+        if (cnt == 0) {
+            profile.getSeasonalHourlyAmt().put(hourSlot, hourAmount);
+            profile.getSeasonalHourlyAmtM2().put(hourSlot, 0.0);
+        } else {
+            double oldMean = profile.getSeasonalHourlyAmt().getOrDefault(hourSlot, 0.0);
+            double newMean = hourlyAlpha * hourAmount + (1 - hourlyAlpha) * oldMean;
+            profile.getSeasonalHourlyAmt().put(hourSlot, newMean);
+            double delta = hourAmount - oldMean;
+            double delta2 = hourAmount - newMean;
+            double oldM2 = profile.getSeasonalHourlyAmtM2().getOrDefault(hourSlot, 0.0);
+            profile.getSeasonalHourlyAmtM2().put(hourSlot, oldM2 + delta * delta2);
+        }
+        profile.getSeasonalHourlyAmtCnt().put(hourSlot, cnt + 1);
+    }
+
+    private void updateSeasonalDailyAmt(ClientProfile profile, long dayAmountPaise, String daySlot) {
+        double dayAmount = dayAmountPaise / 100.0;
+        long cnt = profile.getSeasonalDailyAmtCnt().getOrDefault(daySlot, 0L);
+        double dailyAlpha = Math.min(0.1, thresholdConfig.getEwmaAlpha() * 10);
+
+        if (cnt == 0) {
+            profile.getSeasonalDailyAmt().put(daySlot, dayAmount);
+            profile.getSeasonalDailyAmtM2().put(daySlot, 0.0);
+        } else {
+            double oldMean = profile.getSeasonalDailyAmt().getOrDefault(daySlot, 0.0);
+            double newMean = dailyAlpha * dayAmount + (1 - dailyAlpha) * oldMean;
+            profile.getSeasonalDailyAmt().put(daySlot, newMean);
+            double delta = dayAmount - oldMean;
+            double delta2 = dayAmount - newMean;
+            double oldM2 = profile.getSeasonalDailyAmtM2().getOrDefault(daySlot, 0.0);
+            profile.getSeasonalDailyAmtM2().put(daySlot, oldM2 + delta * delta2);
+        }
+        profile.getSeasonalDailyAmtCnt().put(daySlot, cnt + 1);
+    }
+
+    private void updateSeasonalDailyTps(ClientProfile profile, long dayCount, String daySlot) {
+        long cnt = profile.getSeasonalDailyTpsCnt().getOrDefault(daySlot, 0L);
+        double dailyAlpha = Math.min(0.1, thresholdConfig.getEwmaAlpha() * 10);
+
+        if (cnt == 0) {
+            profile.getSeasonalDailyTps().put(daySlot, (double) dayCount);
+            profile.getSeasonalDailyTpsM2().put(daySlot, 0.0);
+        } else {
+            double oldMean = profile.getSeasonalDailyTps().getOrDefault(daySlot, 0.0);
+            double newMean = dailyAlpha * dayCount + (1 - dailyAlpha) * oldMean;
+            profile.getSeasonalDailyTps().put(daySlot, newMean);
+            double delta = dayCount - oldMean;
+            double delta2 = dayCount - newMean;
+            double oldM2 = profile.getSeasonalDailyTpsM2().getOrDefault(daySlot, 0.0);
+            profile.getSeasonalDailyTpsM2().put(daySlot, oldM2 + delta * delta2);
+        }
+        profile.getSeasonalDailyTpsCnt().put(daySlot, cnt + 1);
+    }
+
+    // --- Bucket and slot helpers ---
+
     public static String getHourBucket(long epochMillis) {
         return HOUR_BUCKET_FORMAT.format(Instant.ofEpochMilli(epochMillis));
     }
 
     public static String getDayBucket(long epochMillis) {
         return DAY_BUCKET_FORMAT.format(Instant.ofEpochMilli(epochMillis));
+    }
+
+    public static String getHourOfDaySlot(long epochMillis) {
+        return DateTimeFormatter.ofPattern("HH").withZone(ZoneOffset.UTC)
+                .format(Instant.ofEpochMilli(epochMillis));
+    }
+
+    public static String getDayOfWeekSlot(long epochMillis) {
+        return String.valueOf(Instant.ofEpochMilli(epochMillis)
+                .atZone(ZoneOffset.UTC).toLocalDate().getDayOfWeek().getValue());
     }
 }

@@ -59,6 +59,8 @@ risk:
     dormancy-days: 30
     cross-channel-bene-variance-pct: 150.0
     cross-channel-bene-min-days: 3
+    seasonal-deviation-variance-pct: 80.0
+    seasonal-min-samples: 4
 
   # Feedback loop — review queue for ALERT/BLOCK transactions + rule auto-tuning
   feedback:

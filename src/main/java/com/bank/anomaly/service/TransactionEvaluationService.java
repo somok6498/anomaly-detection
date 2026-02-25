@@ -126,7 +126,9 @@ public class TransactionEvaluationService {
                 .currentHourlyAmountPaise(currentHourlyAmount)
                 .currentDailyTxnCount(currentDailyCount)
                 .currentDailyAmountPaise(currentDailyAmount)
-                .currentDailyNewBeneficiaryCount(currentDailyNewBene);
+                .currentDailyNewBeneficiaryCount(currentDailyNewBene)
+                .currentHourOfDaySlot(ProfileService.getHourOfDaySlot(txn.getTimestamp()))
+                .currentDayOfWeekSlot(ProfileService.getDayOfWeekSlot(txn.getTimestamp()));
 
         // Populate beneficiary window data if beneficiary info is present
         String beneKey = txn.getBeneficiaryKey();
