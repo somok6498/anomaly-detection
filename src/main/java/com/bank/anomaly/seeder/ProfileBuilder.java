@@ -7,6 +7,7 @@ import com.aerospike.client.policy.ScanPolicy;
 import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.service.BeneficiaryGraphService;
 import com.bank.anomaly.service.IsolationForestTrainingService;
 import com.bank.anomaly.service.ProfileService;
 import org.slf4j.Logger;
@@ -39,15 +40,18 @@ public class ProfileBuilder implements CommandLineRunner {
     private final String namespace;
     private final ProfileService profileService;
     private final IsolationForestTrainingService ifTrainingService;
+    private final BeneficiaryGraphService beneficiaryGraphService;
 
     public ProfileBuilder(AerospikeClient aerospikeClient,
                           @Qualifier("aerospikeNamespace") String namespace,
                           ProfileService profileService,
-                          IsolationForestTrainingService ifTrainingService) {
+                          IsolationForestTrainingService ifTrainingService,
+                          BeneficiaryGraphService beneficiaryGraphService) {
         this.aerospikeClient = aerospikeClient;
         this.namespace = namespace;
         this.profileService = profileService;
         this.ifTrainingService = ifTrainingService;
+        this.beneficiaryGraphService = beneficiaryGraphService;
     }
 
     @Override
@@ -119,5 +123,10 @@ public class ProfileBuilder implements CommandLineRunner {
         List<String> clientIds = new ArrayList<>(txnsByClient.keySet());
         ifTrainingService.trainForClients(clientIds, 100, 256);
         log.info("=== Isolation Forest training complete ===");
+
+        // Step 4: Build the beneficiary graph for mule network detection
+        log.info("=== Building beneficiary graph ===");
+        beneficiaryGraphService.refreshGraph();
+        log.info("=== Beneficiary graph build complete ===");
     }
 }

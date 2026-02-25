@@ -64,6 +64,12 @@ public class RiskThresholdConfig {
         private int crossChannelBeneMinDays = 3;
         private double seasonalDeviationVariancePct = 80.0;
         private int seasonalMinSamples = 4;
+        // Rule 15: Mule network detection
+        private int muleMinFanIn = 2;
+        private double muleSharedBenePct = 20.0;
+        private double muleDensityThreshold = 0.3;
+        private double muleCompositeThreshold = 25.0;
+        private long muleGraphRefreshMs = 300000;
     }
 
     @Data

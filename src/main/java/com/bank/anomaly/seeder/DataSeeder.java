@@ -253,7 +253,20 @@ public class DataSeeder implements CommandLineRunner {
                 .params(Map.of("minSeasonalSamples", "4"))
                 .build());
 
-        log.info("Seeded 14 default anomaly rules");
+        // Rule 15: Mule network detection — graph-based detection of shared beneficiary networks
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-MULE-NET")
+                .name("Mule Network Detection")
+                .description("Graph-based detection of mule networks via shared beneficiaries, fan-in convergence, and cluster density")
+                .ruleType(RuleType.MULE_NETWORK)
+                .variancePct(25.0)  // composite score threshold
+                .riskWeight(4.0)    // high weight — mule detection is critical
+                .enabled(true)
+                .params(Map.of("minFanIn", "2", "sharedBenePctThreshold", "20.0",
+                        "densityThreshold", "0.3"))
+                .build());
+
+        log.info("Seeded 15 default anomaly rules");
     }
 
     /**
@@ -324,6 +337,9 @@ public class DataSeeder implements CommandLineRunner {
 
         // CLIENT-011: Dormant account — 28 days of history ending 2+ days ago, then one reactivation txn
         seedDormantClient("CLIENT-011", startTime, endTime, totalCount);
+
+        // Mule network patterns — shared beneficiaries across CLIENT-007, CLIENT-008, CLIENT-009
+        seedMuleNetworkPatterns(endTime, totalCount);
 
         log.info("Seeded {} total transactions", totalCount.get());
     }
@@ -645,6 +661,54 @@ public class DataSeeder implements CommandLineRunner {
         int total = counter.addAndGet(txnCount);
         log.info("  {} — {} txns seeded (anomalies: {}). Running total: {}",
                 clientId, txnCount, anomalyCount, total);
+    }
+
+    /**
+     * Seed shared mule-like beneficiary patterns across CLIENT-007, CLIENT-008, CLIENT-009.
+     *
+     * 7 shared "mule" beneficiary accounts. Each of the three clients sends 10-20
+     * transactions to each shared mule beneficiary, creating fan-in=3 per mule bene,
+     * high shared beneficiary ratio, and full network density (all 3 clients interconnected).
+     */
+    private void seedMuleNetworkPatterns(Instant end, AtomicInteger counter) {
+        log.info("  Seeding mule network patterns for CLIENT-007, CLIENT-008, CLIENT-009...");
+
+        String[][] muleBeneficiaries = {
+                {"HDFC0007001", "7001000001"},
+                {"ICIC0007002", "7002000002"},
+                {"SBIN0007003", "7003000003"},
+                {"UTIB0007004", "7004000004"},
+                {"KKBK0007005", "7005000005"},
+                {"PUNB0007006", "7006000006"},
+                {"BARB0007007", "7007000007"}
+        };
+
+        String[] muleClients = {"CLIENT-007", "CLIENT-008", "CLIENT-009"};
+
+        long windowStart = end.minus(10, ChronoUnit.DAYS).toEpochMilli();
+        long windowEnd = end.toEpochMilli();
+        int txnCount = 0;
+
+        for (String clientId : muleClients) {
+            for (int b = 0; b < muleBeneficiaries.length; b++) {
+                String beneIfsc = muleBeneficiaries[b][0];
+                String beneAcct = muleBeneficiaries[b][1];
+
+                int txnsToThisBene = 10 + random.nextInt(11); // 10-20 txns
+                for (int i = 0; i < txnsToThisBene; i++) {
+                    String txnId = clientId + "-MULE-B" + b + "-" + String.format("%03d", i);
+                    double amount = 20_000 + random.nextDouble() * 80_000; // 20K-100K
+                    amount = Math.round(amount * 100.0) / 100.0;
+                    long ts = windowStart + (long) (random.nextDouble() * (windowEnd - windowStart));
+                    writeTransaction(txnId, clientId, "NEFT", amount, ts, beneAcct, beneIfsc);
+                    txnCount++;
+                }
+            }
+        }
+
+        int total = counter.addAndGet(txnCount);
+        log.info("  Mule network: {} txns across 3 clients and 7 shared beneficiaries. Running total: {}",
+                txnCount, total);
     }
 
     /**

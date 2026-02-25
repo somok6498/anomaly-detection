@@ -6,7 +6,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 
 - **Spring Boot 3.2.5** (Java 17) REST API
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
-- **14 anomaly evaluators** — 13 rule-based + 1 ML (Isolation Forest)
+- **15 anomaly evaluators** — 14 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
@@ -20,7 +20,7 @@ POST /api/v1/transactions/evaluate
   │
   ├─ 1. Load/create client behavioral profile (EWMA stats)
   ├─ 2. Build evaluation context (hourly counters, beneficiary data)
-  ├─ 3. Evaluate against all active anomaly rules (14 evaluators)
+  ├─ 3. Evaluate against all active anomaly rules (15 evaluators)
   ├─ 4. Compute weighted composite risk score (0–100)
   ├─ 5. Determine action: PASS (<30) · ALERT (30–70) · BLOCK (≥70)
   ├─ 6. Update client profile with new transaction data
@@ -46,6 +46,7 @@ POST /api/v1/transactions/evaluate
 | `DORMANCY_REACTIVATION` | Sudden activity after extended inactivity (configurable threshold) | 3.0 |
 | `CROSS_CHANNEL_BENEFICIARY_AMOUNT` | Same beneficiary receives large total across multiple txn types/day | 2.5 |
 | `SEASONAL_DEVIATION` | Time-slot-aware deviation — compares against hour-of-day/day-of-week baselines | 2.0 |
+| `MULE_NETWORK` | Graph-based mule network detection via shared beneficiaries, fan-in convergence, and cluster density | 4.0 |
 | `ISOLATION_FOREST` | ML-based multi-dimensional anomaly detection (8 features) | 2.0 |
 
 **Composite Score** = Σ(triggered partial score × weight) / Σ(triggered weight), capped at 100.
@@ -228,6 +229,14 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 | POST | `/api/v1/models/train/{clientId}?numTrees=100&sampleSize=256` | Train model for client |
 | POST | `/api/v1/models/train?numTrees=100&sampleSize=256` | Train models for all clients |
 | GET | `/api/v1/models/{clientId}` | Get model metadata |
+
+### Beneficiary Graph (Mule Network)
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/graph/status` | Graph metadata: total beneficiaries, clients, last refresh, isReady |
+| GET | `/api/v1/graph/beneficiary/{ifsc}/{account}` | Fan-in count and sender list for a beneficiary |
+| GET | `/api/v1/graph/client/{clientId}` | Shared beneficiary count, ratio, and network density |
 
 ### Silence Detection
 
@@ -415,9 +424,9 @@ The "Silence Detection" row in the Grafana dashboard shows:
 ```
 src/main/java/com/bank/anomaly/
 ├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
-├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue)
+├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue, Graph)
 ├── engine/
-│   ├── evaluators/       # 14 rule evaluators (13 rule-based + 1 Isolation Forest)
+│   ├── evaluators/       # 15 rule evaluators (14 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
 ├── repository/           # Aerospike data access (7 repositories)
@@ -438,6 +447,7 @@ Run with `SPRING_PROFILES_ACTIVE=seed` to generate ~100,000+ transactions across
 |---------|----------|
 | CLIENT-001 to CLIENT-005 | Normal behavioral profiles with business-hour bias (90% during 09–17 UTC, weekends at 30% volume) |
 | CLIENT-006 to CLIENT-010 | Normal base + injected anomalies in last 2 days |
+| CLIENT-007, CLIENT-008, CLIENT-009 | Mule network patterns — 7 shared beneficiaries with fan-in=3, ~288 cross-client transactions |
 | CLIENT-011 | Dormant account — 56 days active, then 2+ day gap with reactivation |
 
 **Seasonal patterns:** Transactions follow realistic time-of-day and day-of-week distributions. Weekdays concentrate 90% of volume during business hours (09–17 UTC) with 10% off-peak. Weekends generate ~30% of weekday volume. This builds rich seasonal profiles with ~8 samples per day-of-week slot and ~2–3 per hour-of-day slot.
@@ -482,6 +492,11 @@ All rule parameters are configurable via `risk.rule-defaults.*` in `application.
 | `risk.rule-defaults.cross-channel-bene-variance-pct` | 150.0 | Cross-Channel Bene Amount |
 | `risk.rule-defaults.seasonal-deviation-variance-pct` | 80.0 | Seasonal Deviation |
 | `risk.rule-defaults.seasonal-min-samples` | 4 | Seasonal Deviation (min slot samples before using seasonal baseline) |
+| `risk.rule-defaults.mule-min-fan-in` | 2 | Mule Network (min other senders to flag a beneficiary) |
+| `risk.rule-defaults.mule-shared-bene-pct` | 20.0 | Mule Network (% of client's beneficiaries shared with others) |
+| `risk.rule-defaults.mule-density-threshold` | 0.3 | Mule Network (network density threshold 0–1) |
+| `risk.rule-defaults.mule-composite-threshold` | 25.0 | Mule Network (min composite score to trigger) |
+| `risk.rule-defaults.mule-graph-refresh-ms` | 300000 | Mule Network (graph rebuild interval, 5 min) |
 
 ## Aerospike Data Model
 

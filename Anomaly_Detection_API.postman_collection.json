@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints plus targeted evaluation scenarios that trigger each of the 14 anomaly rules.\n\n**Setup:** Seed data first with `docker compose run --rm -e SPRING_PROFILES_ACTIVE=seed app`\n\n**Base URL:** http://localhost:8080",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints plus targeted evaluation scenarios that trigger each of the 15 anomaly rules.\n\n**Setup:** Seed data first with `docker compose run --rm -e SPRING_PROFILES_ACTIVE=seed app`\n\n**Base URL:** http://localhost:8080",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -450,6 +450,21 @@
               "raw": "{\n  \"txnId\": \"TRIGGER-SEASONAL-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 50000,\n  \"beneficiaryAccount\": \"SEASONAL-TARGET-001\",\n  \"beneficiaryIfsc\": \"HDFC0001234\"\n}"
             }
           }
+        },
+        {
+          "name": "Rule 15: Mule Network — CLIENT-007 to shared beneficiary",
+          "description": "CLIENT-007, CLIENT-008, and CLIENT-009 all send to 7 shared 'mule' beneficiaries. Sending a transaction from CLIENT-007 to one of these shared beneficiaries triggers MULE_NETWORK — fan-in=3, shared bene ratio >20%, network density=1.0.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/transactions/evaluate",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"TRIGGER-MULE-{{$randomInt}}\",\n  \"clientId\": \"CLIENT-007\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 50000,\n  \"beneficiaryAccount\": \"7001000001\",\n  \"beneficiaryIfsc\": \"HDFC0007001\"\n}"
+            }
+          }
         }
       ]
     },
@@ -723,6 +738,72 @@
                 { "key": "ruleId", "value": "RULE-AMOUNT" },
                 { "key": "limit", "value": "20" }
               ]
+            },
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Beneficiary Graph",
+      "item": [
+        {
+          "name": "Graph Status",
+          "description": "Returns graph metadata: total beneficiaries, total clients, last refresh time, and whether the graph is ready.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/graph/status",
+            "header": []
+          }
+        },
+        {
+          "name": "Beneficiary Fan-In — Mule Beneficiary",
+          "description": "Returns fan-in count and sender list for a known mule beneficiary. Expect fanIn=3 with senders CLIENT-007, CLIENT-008, CLIENT-009.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/graph/beneficiary/HDFC0007001/7001000001",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "graph", "beneficiary", "HDFC0007001", "7001000001"]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Beneficiary Fan-In — Normal Beneficiary",
+          "description": "Returns fan-in for a normal beneficiary. Expect fanIn=1 (only one sender).",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/graph/beneficiary/HDFC0001001/1001000001",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "graph", "beneficiary", "HDFC0001001", "1001000001"]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Client Graph Metrics — Mule Client",
+          "description": "Returns shared beneficiary count, ratio, and network density for CLIENT-007 (mule network participant). Expect high shared % and density=1.0.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/graph/client/CLIENT-007",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "graph", "client", "CLIENT-007"]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Client Graph Metrics — Normal Client",
+          "description": "Returns graph metrics for CLIENT-001 (normal behavior). Expect low/zero shared beneficiaries and low density.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/graph/client/CLIENT-001",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "graph", "client", "CLIENT-001"]
             },
             "header": []
           }

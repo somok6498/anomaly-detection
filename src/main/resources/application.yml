@@ -61,6 +61,12 @@ risk:
     cross-channel-bene-min-days: 3
     seasonal-deviation-variance-pct: 80.0
     seasonal-min-samples: 4
+    # Rule 15: Mule network detection
+    mule-min-fan-in: 2
+    mule-shared-bene-pct: 20.0
+    mule-density-threshold: 0.3
+    mule-composite-threshold: 25.0
+    mule-graph-refresh-ms: 300000
 
   # Feedback loop — review queue for ALERT/BLOCK transactions + rule auto-tuning
   feedback:
