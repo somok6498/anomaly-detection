@@ -32,7 +32,7 @@ class ApiService {
   }
 
   Future<List<EvaluationResult>> getEvalsByClient(String clientId,
-      {int limit = 20}) async {
+      {int limit = 200}) async {
     final response = await http.get(
         Uri.parse('$baseUrl/transactions/results/client/$clientId?limit=$limit'));
     if (response.statusCode != 200) {
@@ -162,5 +162,38 @@ class ApiService {
     return data
         .map((j) => RuleWeightChange.fromJson(j as Map<String, dynamic>))
         .toList();
+  }
+
+  // ── Analytics API ──
+
+  Future<List<RulePerformance>> getRulePerformance() async {
+    final response =
+        await http.get(Uri.parse('$baseUrl/analytics/rules/performance'));
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to load rule performance: ${response.statusCode}');
+    }
+    final List<dynamic> data = jsonDecode(response.body);
+    return data
+        .map((j) => RulePerformance.fromJson(j as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<NetworkGraph> getClientNetwork(String clientId) async {
+    final response = await http
+        .get(Uri.parse('$baseUrl/analytics/graph/client/$clientId/network'));
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Failed to load client network: ${response.statusCode}');
+    }
+    return NetworkGraph.fromJson(jsonDecode(response.body));
+  }
+
+  Future<GraphStatus> getGraphStatus() async {
+    final response = await http.get(Uri.parse('$baseUrl/graph/status'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load graph status: ${response.statusCode}');
+    }
+    return GraphStatus.fromJson(jsonDecode(response.body));
   }
 }

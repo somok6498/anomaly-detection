@@ -811,6 +811,46 @@
       ]
     },
     {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Rule Performance Stats",
+          "description": "Returns per-rule TP/FP counts and precision based on review queue feedback. Includes all 15 rules, sorted by trigger count.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/analytics/rules/performance",
+            "header": []
+          }
+        },
+        {
+          "name": "Client Network — Mule Client",
+          "description": "Returns nodes and edges for beneficiary network visualization centered on CLIENT-007 (mule network participant). Expect shared beneficiaries with fan-in=3 and neighbor clients CLIENT-008/009.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/graph/client/CLIENT-007/network",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "graph", "client", "CLIENT-007", "network"]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Client Network — Normal Client",
+          "description": "Returns network graph for CLIENT-001 (normal behavior). Expect all beneficiaries with fan-in=1 and no neighbor clients.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/graph/client/CLIENT-001/network",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "graph", "client", "CLIENT-001", "network"]
+            },
+            "header": []
+          }
+        }
+      ]
+    },
+    {
       "name": "Silence Detection",
       "item": [
         {

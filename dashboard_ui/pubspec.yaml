@@ -33,6 +33,10 @@ dependencies:
   cupertino_icons: ^1.0.8
   http: ^1.2.0
   intl: ^0.20.0
+  fl_chart: ^0.70.2
+  csv: ^6.0.0
+  pdf: ^3.11.2
+  printing: ^5.13.4
 
 dev_dependencies:
   flutter_test:

@@ -1,10 +1,12 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
 import 'services/api_service.dart';
+import 'services/export_service.dart';
 import 'models/models.dart';
 import 'screens/client_view.dart';
 import 'screens/transaction_view.dart';
 import 'screens/review_queue_page.dart';
+import 'screens/analytics_page.dart';
 
 void main() {
   runApp(const AnomalyDashboardApp());
@@ -52,9 +54,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
   bool _hasResults = false;
 
-  // Tab navigation: 0 = Investigation, 1 = Review Queue
+  // Tab navigation: 0 = Investigation, 1 = Review Queue, 2 = Analytics
   int _activeTab = 0;
   int _pendingCount = 0;
+
+  // Analytics page key for accessing state
+  final _analyticsKey = GlobalKey<AnalyticsPageState>();
 
   @override
   void initState() {
@@ -144,6 +149,64 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // ── Export helpers ──
+
+  void _exportClientCsv() {
+    if (_profile == null) return;
+    final rows = <List<String>>[
+      ['TXN ID', 'TYPE', 'AMOUNT', 'TIMESTAMP'],
+      ...(_transactions.map((t) => [
+        t.txnId, t.txnType, t.amount.toStringAsFixed(2),
+        DateTime.fromMillisecondsSinceEpoch(t.timestamp).toIso8601String(),
+      ])),
+    ];
+    ExportService.downloadCsv('${_profile!.clientId}_transactions.csv', rows);
+  }
+
+  void _exportClientPdf() {
+    if (_profile == null) return;
+    final rows = _transactions.map((t) => [
+      t.txnId, t.txnType, t.amount.toStringAsFixed(2),
+      DateTime.fromMillisecondsSinceEpoch(t.timestamp).toIso8601String(),
+    ]).toList();
+    ExportService.downloadPdf(
+      'Client Report: ${_profile!.clientId}',
+      ['TXN ID', 'TYPE', 'AMOUNT', 'TIMESTAMP'],
+      rows,
+      '${_profile!.clientId}_report.pdf',
+    );
+  }
+
+  void _exportRulesCsv() {
+    final stats = _analyticsKey.currentState?.ruleStats ?? [];
+    if (stats.isEmpty) return;
+    final rows = <List<String>>[
+      ['RULE', 'TYPE', 'WEIGHT', 'TRIGGERS', 'TP', 'FP', 'PRECISION'],
+      ...(stats.map((r) => [
+        r.ruleName, r.ruleType, r.currentWeight.toStringAsFixed(1),
+        r.triggerCount.toString(), r.tpCount.toString(), r.fpCount.toString(),
+        r.triggerCount > 0 ? '${(r.precision * 100).toStringAsFixed(1)}%' : '-',
+      ])),
+    ];
+    ExportService.downloadCsv('rule_performance.csv', rows);
+  }
+
+  void _exportRulesPdf() {
+    final stats = _analyticsKey.currentState?.ruleStats ?? [];
+    if (stats.isEmpty) return;
+    final rows = stats.map((r) => [
+      r.ruleName, r.ruleType, r.currentWeight.toStringAsFixed(1),
+      r.triggerCount.toString(), r.tpCount.toString(), r.fpCount.toString(),
+      r.triggerCount > 0 ? '${(r.precision * 100).toStringAsFixed(1)}%' : '-',
+    ]).toList();
+    ExportService.downloadPdf(
+      'Rule Performance Report',
+      ['RULE', 'TYPE', 'WEIGHT', 'TRIGGERS', 'TP', 'FP', 'PRECISION'],
+      rows,
+      'rule_performance.pdf',
+    );
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
@@ -168,11 +231,17 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                     ),
                   )
-                : ReviewQueuePage(
-                    onPendingCountChanged: (count) {
-                      setState(() => _pendingCount = count);
-                    },
-                  ),
+                : _activeTab == 1
+                    ? ReviewQueuePage(
+                        onPendingCountChanged: (count) {
+                          setState(() => _pendingCount = count);
+                        },
+                      )
+                    : AnalyticsPage(
+                        key: _analyticsKey,
+                        onExportRulesCsv: _exportRulesCsv,
+                        onExportRulesPdf: _exportRulesPdf,
+                      ),
           ),
         ],
       ),
@@ -201,6 +270,8 @@ class _DashboardPageState extends State<DashboardPage> {
           _buildTabButton(0, 'Investigation', Icons.search),
           const SizedBox(width: 8),
           _buildTabButton(1, 'Review Queue', Icons.rate_review, badge: _pendingCount),
+          const SizedBox(width: 8),
+          _buildTabButton(2, 'Analytics', Icons.analytics),
         ],
       ),
     );
@@ -367,6 +438,8 @@ class _DashboardPageState extends State<DashboardPage> {
         transactions: _transactions,
         evaluations: _evaluations,
         onTxnTap: (txnId) => _doSearch(txnId, SearchType.txn),
+        onExportCsv: _exportClientCsv,
+        onExportPdf: _exportClientPdf,
       );
     }
 

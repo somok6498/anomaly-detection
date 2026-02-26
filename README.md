@@ -238,6 +238,13 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 | GET | `/api/v1/graph/beneficiary/{ifsc}/{account}` | Fan-in count and sender list for a beneficiary |
 | GET | `/api/v1/graph/client/{clientId}` | Shared beneficiary count, ratio, and network density |
 
+### Analytics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/analytics/rules/performance` | Per-rule TP/FP counts and precision from feedback |
+| GET | `/api/v1/analytics/graph/client/{clientId}/network` | Network graph nodes + edges for visualization |
+
 ### Silence Detection
 
 | Method | Endpoint | Description |
@@ -309,10 +316,13 @@ Every 6 hours (configurable), the tuning job:
 
 ### Flutter Dashboard
 
-The dashboard has a **Review Queue** tab with a two-panel layout:
+The dashboard has three tabs:
 
-- **Left panel**: filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, and a sortable queue table with clickable ACTION and SCORE column headers for ascending/descending sort, plus auto-accept countdown timers
-- **Right panel**: detailed view of the selected item showing transaction info, risk score with rule breakdown, client profile summary, feedback action buttons, and weight history for involved rules
+1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Includes CSV/PDF export buttons.
+
+2. **Review Queue** — Two-panel layout with filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with rule breakdown.
+
+3. **Analytics** — Rule performance analytics (precision bar chart + TP/FP breakdown table for all 15 rules based on review queue feedback) and beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). Includes CSV/PDF export for rule performance data.
 
 ## Observability
 

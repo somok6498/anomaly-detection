@@ -204,4 +204,9 @@ public class BeneficiaryGraphService {
     public int getTotalClientCount() {
         return clientToBeneficiaries.size();
     }
+
+    /** All beneficiary keys for a given client (from graph snapshot). */
+    public Set<String> getBeneficiariesForClient(String clientId) {
+        return clientToBeneficiaries.getOrDefault(clientId, Collections.emptySet());
+    }
 }

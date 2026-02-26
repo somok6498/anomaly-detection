@@ -6,6 +6,7 @@ import '../models/models.dart';
 import '../widgets/badge_widget.dart';
 import '../widgets/section_card.dart';
 import '../widgets/stat_card.dart';
+import '../services/export_service.dart';
 
 class ReviewQueuePage extends StatefulWidget {
   final ValueChanged<int>? onPendingCountChanged;
@@ -332,6 +333,42 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               ),
               child: const Text('Apply', style: TextStyle(fontSize: 12)),
             ),
+          ),
+          const SizedBox(width: 8),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.download, color: AppTheme.textSecondary, size: 18),
+            color: AppTheme.surface,
+            tooltip: 'Export',
+            onSelected: (v) {
+              final filtered = _filteredItems;
+              if (filtered.isEmpty) return;
+              if (v == 'csv') {
+                final rows = <List<String>>[
+                  ['TXN ID', 'CLIENT', 'ACTION', 'SCORE', 'RISK', 'STATUS', 'ENQUEUED'],
+                  ...filtered.map((i) => [
+                    i.txnId, i.clientId, i.action, i.compositeScore.toStringAsFixed(1),
+                    i.riskLevel, i.feedbackStatus,
+                    DateTime.fromMillisecondsSinceEpoch(i.enqueuedAt).toIso8601String(),
+                  ]),
+                ];
+                ExportService.downloadCsv('review_queue.csv', rows);
+              } else if (v == 'pdf') {
+                ExportService.downloadPdf(
+                  'Review Queue Report',
+                  ['TXN ID', 'CLIENT', 'ACTION', 'SCORE', 'RISK', 'STATUS', 'ENQUEUED'],
+                  filtered.map((i) => [
+                    i.txnId, i.clientId, i.action, i.compositeScore.toStringAsFixed(1),
+                    i.riskLevel, i.feedbackStatus,
+                    DateTime.fromMillisecondsSinceEpoch(i.enqueuedAt).toIso8601String(),
+                  ]).toList(),
+                  'review_queue.pdf',
+                );
+              }
+            },
+            itemBuilder: (_) => [
+              const PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+              const PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+            ],
           ),
         ],
       ),

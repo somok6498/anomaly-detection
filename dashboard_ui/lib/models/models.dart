@@ -232,6 +232,122 @@ class ReviewStats {
   }
 }
 
+class RulePerformance {
+  final String ruleId;
+  final String ruleName;
+  final String ruleType;
+  final double currentWeight;
+  final int triggerCount;
+  final int tpCount;
+  final int fpCount;
+  final double precision;
+
+  RulePerformance({
+    required this.ruleId,
+    required this.ruleName,
+    required this.ruleType,
+    required this.currentWeight,
+    required this.triggerCount,
+    required this.tpCount,
+    required this.fpCount,
+    required this.precision,
+  });
+
+  factory RulePerformance.fromJson(Map<String, dynamic> json) {
+    return RulePerformance(
+      ruleId: json['ruleId'] ?? '',
+      ruleName: json['ruleName'] ?? '',
+      ruleType: json['ruleType'] ?? '',
+      currentWeight: (json['currentWeight'] ?? 0).toDouble(),
+      triggerCount: (json['triggerCount'] ?? 0).toInt(),
+      tpCount: (json['tpCount'] ?? 0).toInt(),
+      fpCount: (json['fpCount'] ?? 0).toInt(),
+      precision: (json['precision'] ?? 0).toDouble(),
+    );
+  }
+}
+
+class NetworkNode {
+  final String id;
+  final String label;
+  final String type;
+  final int fanIn;
+  final bool isCenter;
+
+  NetworkNode({
+    required this.id,
+    required this.label,
+    required this.type,
+    this.fanIn = 0,
+    this.isCenter = false,
+  });
+
+  factory NetworkNode.fromJson(Map<String, dynamic> json) {
+    return NetworkNode(
+      id: json['id'] ?? '',
+      label: json['label'] ?? '',
+      type: json['type'] ?? '',
+      fanIn: (json['fanIn'] ?? 0).toInt(),
+      isCenter: json['isCenter'] ?? false,
+    );
+  }
+}
+
+class NetworkEdge {
+  final String from;
+  final String to;
+
+  NetworkEdge({required this.from, required this.to});
+
+  factory NetworkEdge.fromJson(Map<String, dynamic> json) {
+    return NetworkEdge(
+      from: json['from'] ?? '',
+      to: json['to'] ?? '',
+    );
+  }
+}
+
+class NetworkGraph {
+  final List<NetworkNode> nodes;
+  final List<NetworkEdge> edges;
+
+  NetworkGraph({required this.nodes, required this.edges});
+
+  factory NetworkGraph.fromJson(Map<String, dynamic> json) {
+    return NetworkGraph(
+      nodes: (json['nodes'] as List<dynamic>? ?? [])
+          .map((n) => NetworkNode.fromJson(n as Map<String, dynamic>))
+          .toList(),
+      edges: (json['edges'] as List<dynamic>? ?? [])
+          .map((e) => NetworkEdge.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class GraphStatus {
+  final bool isReady;
+  final int totalBeneficiaries;
+  final int totalClients;
+  final String lastRefreshTime;
+
+  GraphStatus({
+    required this.isReady,
+    required this.totalBeneficiaries,
+    required this.totalClients,
+    required this.lastRefreshTime,
+  });
+
+  factory GraphStatus.fromJson(Map<String, dynamic> json) {
+    return GraphStatus(
+      isReady: json['isReady'] ?? false,
+      totalBeneficiaries: (json['totalBeneficiaries'] ?? 0).toInt(),
+      totalClients: (json['totalClients'] ?? 0).toInt(),
+      lastRefreshTime: json['lastRefreshTime']?.toString() ?? '',
+    );
+  }
+}
+
 class RuleWeightChange {
   final String ruleId;
   final double oldWeight;

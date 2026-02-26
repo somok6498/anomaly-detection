@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../models/models.dart';
 import '../theme/app_theme.dart';
 import '../widgets/stat_card.dart';
@@ -11,6 +12,8 @@ class ClientView extends StatelessWidget {
   final List<Transaction> transactions;
   final List<EvaluationResult> evaluations;
   final void Function(String txnId) onTxnTap;
+  final VoidCallback? onExportCsv;
+  final VoidCallback? onExportPdf;
 
   const ClientView({
     super.key,
@@ -18,6 +21,8 @@ class ClientView extends StatelessWidget {
     required this.transactions,
     required this.evaluations,
     required this.onTxnTap,
+    this.onExportCsv,
+    this.onExportPdf,
   });
 
   String _formatAmount(double n) {
@@ -41,6 +46,7 @@ class ClientView extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildProfileCard(),
+        if (evaluations.isNotEmpty) _buildScoreTrendChart(),
         Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -58,6 +64,20 @@ class ClientView extends StatelessWidget {
   Widget _buildProfileCard() {
     return SectionCard(
       title: 'Client Profile: ${profile.clientId}',
+      trailing: (onExportCsv != null || onExportPdf != null)
+          ? PopupMenuButton<String>(
+              icon: const Icon(Icons.download, color: AppTheme.textSecondary, size: 20),
+              color: AppTheme.surface,
+              onSelected: (v) {
+                if (v == 'csv') onExportCsv?.call();
+                if (v == 'pdf') onExportPdf?.call();
+              },
+              itemBuilder: (_) => [
+                const PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+                const PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+              ],
+            )
+          : null,
       child: Wrap(
         spacing: 14,
         runSpacing: 14,
@@ -69,6 +89,141 @@ class ClientView extends StatelessWidget {
           SizedBox(width: 180, child: StatCard(label: 'TPS Std Dev', value: profile.tpsStdDev.toStringAsFixed(2))),
           SizedBox(width: 180, child: StatCard(label: 'Last Updated', value: _formatTime(profile.lastUpdated))),
         ],
+      ),
+    );
+  }
+
+  Widget _buildScoreTrendChart() {
+    // Sort evaluations by time ascending for the chart
+    final sorted = List<EvaluationResult>.from(evaluations)
+      ..sort((a, b) => a.evaluatedAt.compareTo(b.evaluatedAt));
+
+    final spots = sorted.asMap().entries.map((entry) {
+      return FlSpot(entry.key.toDouble(), entry.value.compositeScore);
+    }).toList();
+
+    return SectionCard(
+      title: 'Risk Score Trend (${sorted.length} evaluations)',
+      child: SizedBox(
+        height: 220,
+        child: LineChart(
+          LineChartData(
+            minY: 0,
+            maxY: 100,
+            clipData: const FlClipData.all(),
+            gridData: FlGridData(
+              show: true,
+              drawVerticalLine: false,
+              horizontalInterval: 10,
+              getDrawingHorizontalLine: (value) => FlLine(
+                color: AppTheme.cardBorder.withValues(alpha: 0.5),
+                strokeWidth: 0.5,
+              ),
+            ),
+            titlesData: FlTitlesData(
+              leftTitles: AxisTitles(
+                sideTitles: SideTitles(
+                  showTitles: true,
+                  reservedSize: 36,
+                  interval: 20,
+                  getTitlesWidget: (value, meta) => Text(
+                    value.toInt().toString(),
+                    style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                  ),
+                ),
+              ),
+              bottomTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+              rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+            ),
+            borderData: FlBorderData(show: false),
+            // Colored zones: PASS (green), ALERT (orange), BLOCK (red)
+            rangeAnnotations: RangeAnnotations(
+              horizontalRangeAnnotations: [
+                HorizontalRangeAnnotation(y1: 0, y2: 30, color: AppTheme.pass.withValues(alpha: 0.07)),
+                HorizontalRangeAnnotation(y1: 30, y2: 70, color: AppTheme.alert.withValues(alpha: 0.07)),
+                HorizontalRangeAnnotation(y1: 70, y2: 100, color: AppTheme.block.withValues(alpha: 0.07)),
+              ],
+            ),
+            // Threshold lines
+            extraLinesData: ExtraLinesData(
+              horizontalLines: [
+                HorizontalLine(
+                  y: 30,
+                  color: AppTheme.alert.withValues(alpha: 0.4),
+                  strokeWidth: 1,
+                  dashArray: [5, 5],
+                  label: HorizontalLineLabel(
+                    show: true,
+                    alignment: Alignment.topRight,
+                    style: const TextStyle(fontSize: 9, color: AppTheme.alert),
+                    labelResolver: (_) => 'ALERT 30',
+                  ),
+                ),
+                HorizontalLine(
+                  y: 70,
+                  color: AppTheme.block.withValues(alpha: 0.4),
+                  strokeWidth: 1,
+                  dashArray: [5, 5],
+                  label: HorizontalLineLabel(
+                    show: true,
+                    alignment: Alignment.topRight,
+                    style: const TextStyle(fontSize: 9, color: AppTheme.block),
+                    labelResolver: (_) => 'BLOCK 70',
+                  ),
+                ),
+              ],
+            ),
+            lineTouchData: LineTouchData(
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipColor: (_) => AppTheme.surface,
+                getTooltipItems: (spots) {
+                  return spots.map((spot) {
+                    final idx = spot.x.toInt();
+                    if (idx < 0 || idx >= sorted.length) return null;
+                    final eval = sorted[idx];
+                    return LineTooltipItem(
+                      '${eval.action} ${eval.compositeScore.toStringAsFixed(1)}\n${eval.txnId}',
+                      TextStyle(
+                        color: AppTheme.actionColor(eval.action),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    );
+                  }).toList();
+                },
+              ),
+            ),
+            lineBarsData: [
+              LineChartBarData(
+                spots: spots,
+                isCurved: true,
+                curveSmoothness: 0.2,
+                color: AppTheme.accent,
+                barWidth: 2,
+                dotData: FlDotData(
+                  show: true,
+                  getDotPainter: (spot, _, __, ___) {
+                    final idx = spot.x.toInt();
+                    Color dotColor = AppTheme.accent;
+                    if (idx >= 0 && idx < sorted.length) {
+                      dotColor = AppTheme.actionColor(sorted[idx].action);
+                    }
+                    return FlDotCirclePainter(
+                      radius: 3,
+                      color: dotColor,
+                      strokeWidth: 0,
+                    );
+                  },
+                ),
+                belowBarData: BarAreaData(
+                  show: true,
+                  color: AppTheme.accent.withValues(alpha: 0.08),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
