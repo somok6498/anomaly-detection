@@ -372,7 +372,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
           else if (_networkError != null)
             Text(_networkError!, style: const TextStyle(color: AppTheme.critical))
           else if (_networkGraph != null) ...[
-            // Legend
+            // Legend + stats row
             Row(
               children: [
                 _legendDot(AppTheme.pass, 'Center Client'),
@@ -380,20 +380,28 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                 _legendDot(AppTheme.accent, 'Other Client'),
                 const SizedBox(width: 16),
                 _legendDot(AppTheme.alert, 'Beneficiary'),
+                const SizedBox(width: 16),
+                _legendDot(AppTheme.critical, 'High Fan-in (badge)'),
+                const Spacer(),
+                Text(
+                  '${_networkGraph!.nodes.length} nodes, ${_networkGraph!.edges.length} edges',
+                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                ),
               ],
             ),
-            const SizedBox(height: 8),
-            Text(
-              '${_networkGraph!.nodes.length} nodes, ${_networkGraph!.edges.length} edges',
-              style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+            const SizedBox(height: 4),
+            const Text(
+              'Click a node to highlight its connections. Click again to deselect.',
+              style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
-                color: AppTheme.surface,
+                color: AppTheme.cardBg,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: AppTheme.cardBorder),
               ),
+              clipBehavior: Clip.antiAlias,
               child: NetworkGraphWidget(graph: _networkGraph!),
             ),
           ] else
