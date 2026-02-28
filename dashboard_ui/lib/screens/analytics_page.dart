@@ -67,7 +67,8 @@ class AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
-  Future<void> _loadNetwork(String clientId) async {
+  Future<void> _loadNetwork(String rawClientId) async {
+    final clientId = rawClientId.toUpperCase();
     if (clientId.isEmpty) return;
     setState(() {
       _loadingNetwork = true;

@@ -76,7 +76,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
           action: _actionFilter == 'ALL' ? null : _actionFilter,
           clientId: _clientFilterController.text.trim().isEmpty
               ? null
-              : _clientFilterController.text.trim(),
+              : _clientFilterController.text.trim().toUpperCase(),
         ),
         _api.getReviewStats(),
         _api.getWeightHistory(limit: 20),

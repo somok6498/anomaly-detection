@@ -42,7 +42,7 @@ services:
       - TWILIO_TO_NUMBER=${TWILIO_TO_NUMBER:-+919830709527}
       - TWILIO_ENABLED=${TWILIO_ENABLED:-true}
       - TWILIO_CHANNEL=${TWILIO_CHANNEL:-whatsapp}
-      # Set SPRING_PROFILES_ACTIVE=seed for first run to load demo data
+      - SPRING_PROFILES_ACTIVE=${SPRING_PROFILES_ACTIVE:-}
     depends_on:
       aerospike:
         condition: service_healthy

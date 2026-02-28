@@ -77,7 +77,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _doSearch([String? overrideQuery, SearchType? overrideType]) {
-    final query = overrideQuery ?? _searchController.text.trim();
+    final query = (overrideQuery ?? _searchController.text.trim()).toUpperCase();
     final type = overrideType ?? _searchType;
 
     if (query.isEmpty) return;
