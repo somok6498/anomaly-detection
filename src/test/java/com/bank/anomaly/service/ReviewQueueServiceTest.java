@@ -39,12 +39,13 @@ class ReviewQueueServiceTest {
 
     @Test
     void getQueueItems_delegatesToRepository() {
-        List<ReviewQueueItem> expected = List.of(
-                TestDataFactory.createReviewQueueItem("T1", "C-1", ReviewStatus.PENDING));
-        when(reviewQueueRepo.findByFilters("ALERT", "C-1", null, null, null, 100))
+        PagedResponse<ReviewQueueItem> expected = new PagedResponse<>(List.of(
+                TestDataFactory.createReviewQueueItem("T1", "C-1", ReviewStatus.PENDING)),
+                false, null);
+        when(reviewQueueRepo.findByFilters("ALERT", "C-1", null, null, null, 100, null))
                 .thenReturn(expected);
 
-        List<ReviewQueueItem> result = service.getQueueItems("ALERT", "C-1", null, null, null, 100);
+        PagedResponse<ReviewQueueItem> result = service.getQueueItems("ALERT", "C-1", null, null, null, 100, null);
         assertThat(result).isEqualTo(expected);
     }
 

@@ -1,6 +1,7 @@
 package com.bank.anomaly.controller;
 
 import com.bank.anomaly.model.EvaluationResult;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.service.TransactionEvaluationService;
@@ -10,8 +11,6 @@ import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/v1/transactions")
@@ -62,15 +61,17 @@ public class TransactionController {
     }
 
     @Operation(summary = "List transactions by client ID",
-            description = "Retrieves recent transactions for a specific client, ordered by timestamp.")
+            description = "Retrieves recent transactions for a specific client, ordered by timestamp. Supports cursor-based pagination.")
     @GetMapping("/client/{clientId}")
-    public ResponseEntity<List<Transaction>> getTransactionsByClient(
+    public ResponseEntity<PagedResponse<Transaction>> getTransactionsByClient(
             @Parameter(description = "Client ID", example = "CLIENT-001")
             @PathVariable String clientId,
             @Parameter(description = "Max number of transactions to return", example = "50")
-            @RequestParam(defaultValue = "50") int limit) {
-        List<Transaction> txns = transactionService.getTransactionsByClientId(clientId, limit);
-        return ResponseEntity.ok(txns);
+            @RequestParam(defaultValue = "50") int limit,
+            @Parameter(description = "Cursor: return records with timestamp before this value")
+            @RequestParam(required = false) Long before) {
+        PagedResponse<Transaction> response = transactionService.getTransactionsByClientId(clientId, limit, before);
+        return ResponseEntity.ok(response);
     }
 
     @Operation(summary = "Get evaluation result for a transaction",
@@ -87,14 +88,16 @@ public class TransactionController {
     }
 
     @Operation(summary = "List evaluation results by client ID",
-            description = "Retrieves recent evaluation results for a specific client.")
+            description = "Retrieves recent evaluation results for a specific client. Supports cursor-based pagination.")
     @GetMapping("/results/client/{clientId}")
-    public ResponseEntity<List<EvaluationResult>> getResultsByClient(
+    public ResponseEntity<PagedResponse<EvaluationResult>> getResultsByClient(
             @Parameter(description = "Client ID", example = "CLIENT-001")
             @PathVariable String clientId,
             @Parameter(description = "Max number of results to return", example = "20")
-            @RequestParam(defaultValue = "20") int limit) {
-        List<EvaluationResult> results = riskResultRepository.findByClientId(clientId, limit);
+            @RequestParam(defaultValue = "20") int limit,
+            @Parameter(description = "Cursor: return records with evaluatedAt before this value")
+            @RequestParam(required = false) Long before) {
+        PagedResponse<EvaluationResult> results = riskResultRepository.findByClientId(clientId, limit, before);
         return ResponseEntity.ok(results);
     }
 }

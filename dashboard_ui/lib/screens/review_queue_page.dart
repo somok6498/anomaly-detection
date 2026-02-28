@@ -7,6 +7,8 @@ import '../widgets/badge_widget.dart';
 import '../widgets/section_card.dart';
 import '../widgets/stat_card.dart';
 import '../services/export_service.dart';
+import '../utils/toast_helper.dart';
+import '../widgets/skeleton_loader.dart';
 
 class ReviewQueuePage extends StatefulWidget {
   final ValueChanged<int>? onPendingCountChanged;
@@ -82,10 +84,13 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
         _api.getWeightHistory(limit: 20),
       ]);
 
+      final queuePage = results[0] as PagedResponse<ReviewQueueItem>;
+      final weightPage = results[2] as PagedResponse<RuleWeightChange>;
+
       setState(() {
-        _queueItems = results[0] as List<ReviewQueueItem>;
+        _queueItems = queuePage.data;
         _stats = results[1] as ReviewStats;
-        _weightHistory = results[2] as List<RuleWeightChange>;
+        _weightHistory = weightPage.data;
         _loading = false;
         _selectedTxnIds.clear();
         _selectAll = false;
@@ -151,6 +156,9 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
         _loadingDetail = false;
         _selectedDetail = null;
       });
+      if (mounted) {
+        ToastHelper.showError(context, 'Failed to load details: ${e.toString().replaceFirst("Exception: ", "")}');
+      }
     }
   }
 
@@ -163,9 +171,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to submit feedback: $e')),
-        );
+        ToastHelper.showError(context, 'Failed to submit feedback: ${e.toString().replaceFirst("Exception: ", "")}');
       }
     }
   }
@@ -177,16 +183,12 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       final count = await _api.submitBulkFeedback(
           _selectedTxnIds.toList(), status, 'ops');
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Updated $count items as ${_statusLabel(status)}')),
-        );
+        ToastHelper.showSuccess(context, 'Updated $count items as ${_statusLabel(status)}');
       }
       _loadQueue();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Bulk update failed: $e')),
-        );
+        ToastHelper.showError(context, 'Bulk update failed: ${e.toString().replaceFirst("Exception: ", "")}');
       }
     }
   }
@@ -202,16 +204,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   @override
   Widget build(BuildContext context) {
     if (_loading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(color: AppTheme.accent),
-            SizedBox(height: 16),
-            Text('Loading review queue...', style: TextStyle(color: AppTheme.textSecondary)),
-          ],
-        ),
-      );
+      return const ReviewQueueSkeleton();
     }
 
     if (_error != null) {
@@ -260,7 +253,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
         // Queue list
         Expanded(
           child: items.isEmpty
-              ? const Center(
+              ? Center(
                   child: Text('No items in queue matching filters.',
                       style: TextStyle(color: AppTheme.textSecondary)),
                 )
@@ -309,7 +302,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               height: 36,
               child: TextField(
                 controller: _clientFilterController,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 12),
                 decoration: InputDecoration(
                   hintText: 'Client ID...',
                   hintStyle: const TextStyle(fontSize: 12),
@@ -336,7 +329,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
           ),
           const SizedBox(width: 8),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.download, color: AppTheme.textSecondary, size: 18),
+            icon: Icon(Icons.download, color: AppTheme.textSecondary, size: 18),
             color: AppTheme.surface,
             tooltip: 'Export',
             onSelected: (v) {
@@ -366,8 +359,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               }
             },
             itemBuilder: (_) => [
-              const PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
-              const PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+              PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+              PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
             ],
           ),
         ],
@@ -396,7 +389,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
           value: value,
           isExpanded: true,
           dropdownColor: AppTheme.surface,
-          style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+          style: TextStyle(color: AppTheme.textPrimary, fontSize: 12),
           items: items
               .map((v) => DropdownMenuItem(
                     value: v,
@@ -415,7 +408,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
       child: Row(
         children: [
-          const Text('Score', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+          Text('Score', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
           const SizedBox(width: 8),
           _buildDropdown(
             value: _scoreOp,
@@ -434,7 +427,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               controller: _scoreThresholdController,
               enabled: _scoreOp != 'none',
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 12),
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 12),
               decoration: InputDecoration(
                 hintText: 'e.g. 50',
                 hintStyle: TextStyle(
@@ -458,7 +451,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
                 _scoreOp = 'none';
                 _scoreThresholdController.clear();
               }),
-              child: const Icon(Icons.close, color: AppTheme.textSecondary, size: 16),
+              child: Icon(Icons.close, color: AppTheme.textSecondary, size: 16),
             ),
         ],
       ),
@@ -513,7 +506,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
                 value.toString(),
                 style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w700),
               ),
-              Text(label, style: const TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
+              Text(label, style: TextStyle(color: AppTheme.textSecondary, fontSize: 10)),
             ],
           ),
         ),
@@ -593,7 +586,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
             ),
           ),
           const SizedBox(width: 4),
-          const Expanded(
+          Expanded(
               flex: 3,
               child: Text('TXN ID', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w700))),
           Expanded(
@@ -602,7 +595,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
           Expanded(
               flex: 1,
               child: _buildSortableHeader('SCORE', 'score')),
-          const Expanded(
+          Expanded(
               flex: 2,
               child: Text('STATUS', style: TextStyle(color: AppTheme.textSecondary, fontSize: 10, fontWeight: FontWeight.w700))),
         ],
@@ -645,7 +638,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               color: AppTheme.accent,
             )
           else
-            const Icon(Icons.unfold_more, size: 10, color: AppTheme.textSecondary),
+            Icon(Icons.unfold_more, size: 10, color: AppTheme.textSecondary),
         ],
       ),
     );
@@ -698,12 +691,12 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
                 children: [
                   Text(
                     item.txnId,
-                    style: const TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w500),
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
                     '${item.clientId}  ${_formatTime(item.enqueuedAt)}',
-                    style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9),
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 9),
                   ),
                 ],
               ),
@@ -730,7 +723,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
                     Padding(
                       padding: const EdgeInsets.only(top: 2),
                       child: Text(timeLeft,
-                          style: const TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
+                          style: TextStyle(color: AppTheme.textSecondary, fontSize: 9)),
                     ),
                 ],
               ),
@@ -752,7 +745,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
 
   Widget _buildRightPanel() {
     if (_selectedTxnId == null) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -766,7 +759,16 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
     }
 
     if (_loadingDetail) {
-      return const Center(child: CircularProgressIndicator(color: AppTheme.accent));
+      return const Padding(
+        padding: EdgeInsets.all(20),
+        child: Column(
+          children: [
+            SkeletonCard(),
+            SizedBox(height: 16),
+            SkeletonTable(rows: 4, columns: 5),
+          ],
+        ),
+      );
     }
 
     if (_selectedDetail == null) {
@@ -819,12 +821,12 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
           if (qi.feedbackBy != null) ...[
             const SizedBox(width: 12),
             Text('by ${qi.feedbackBy}',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
           ],
           if (qi.feedbackAt > 0) ...[
             const SizedBox(width: 12),
             Text('at ${_formatTimeFull(qi.feedbackAt)}',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
           ],
           const Spacer(),
           if (isPending) ...[
@@ -912,7 +914,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               const Spacer(),
               Text(
                 '${eval.ruleResults.where((r) => r.triggered).length} of ${eval.ruleResults.length} rules triggered',
-                style: const TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
               ),
             ],
           ),

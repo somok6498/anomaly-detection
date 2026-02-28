@@ -1,6 +1,7 @@
 package com.bank.anomaly.service;
 
 import com.bank.anomaly.config.MetricsConfig;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.*;
 import com.bank.anomaly.repository.ClientProfileRepository;
 import com.bank.anomaly.repository.ReviewQueueRepository;
@@ -37,10 +38,10 @@ public class ReviewQueueService {
         this.metricsConfig = metricsConfig;
     }
 
-    public List<ReviewQueueItem> getQueueItems(String action, String clientId,
+    public PagedResponse<ReviewQueueItem> getQueueItems(String action, String clientId,
                                                 Long fromDate, Long toDate,
-                                                String ruleId, int limit) {
-        return reviewQueueRepo.findByFilters(action, clientId, fromDate, toDate, ruleId, limit);
+                                                String ruleId, int limit, Long before) {
+        return reviewQueueRepo.findByFilters(action, clientId, fromDate, toDate, ruleId, limit, before);
     }
 
     public ReviewQueueDetail getQueueItemDetail(String txnId) {

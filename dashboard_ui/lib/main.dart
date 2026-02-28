@@ -1,12 +1,16 @@
 import 'package:flutter/material.dart';
 import 'theme/app_theme.dart';
+import 'theme/theme_notifier.dart';
 import 'services/api_service.dart';
 import 'services/export_service.dart';
 import 'models/models.dart';
+import 'widgets/skeleton_loader.dart';
 import 'screens/client_view.dart';
 import 'screens/transaction_view.dart';
 import 'screens/review_queue_page.dart';
 import 'screens/analytics_page.dart';
+
+final themeNotifier = ThemeNotifier();
 
 void main() {
   runApp(const AnomalyDashboardApp());
@@ -17,11 +21,19 @@ class AnomalyDashboardApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Anomaly Detection Dashboard',
-      theme: AppTheme.darkTheme,
-      debugShowCheckedModeBanner: false,
-      home: const DashboardPage(),
+    return ListenableBuilder(
+      listenable: themeNotifier,
+      builder: (context, _) {
+        AppTheme.isDark = themeNotifier.isDark;
+        return MaterialApp(
+          title: 'Anomaly Detection Dashboard',
+          theme: AppTheme.lightTheme,
+          darkTheme: AppTheme.darkTheme,
+          themeMode: themeNotifier.mode,
+          debugShowCheckedModeBanner: false,
+          home: const DashboardPage(),
+        );
+      },
     );
   }
 }
@@ -47,6 +59,9 @@ class _DashboardPageState extends State<DashboardPage> {
   ClientProfile? _profile;
   List<Transaction> _transactions = [];
   List<EvaluationResult> _evaluations = [];
+  bool _txnHasMore = false;
+  String? _txnNextCursor;
+  bool _loadingMore = false;
 
   // Transaction search results
   Transaction? _txnDetail;
@@ -110,10 +125,15 @@ class _DashboardPageState extends State<DashboardPage> {
         _api.getEvalsByClient(clientId),
       ]);
 
+      final txnPage = results[1] as PagedResponse<Transaction>;
+      final evalPage = results[2] as PagedResponse<EvaluationResult>;
+
       setState(() {
         _profile = results[0] as ClientProfile;
-        _transactions = results[1] as List<Transaction>;
-        _evaluations = results[2] as List<EvaluationResult>;
+        _transactions = txnPage.data;
+        _evaluations = evalPage.data;
+        _txnHasMore = txnPage.hasMore;
+        _txnNextCursor = txnPage.nextCursor;
         _txnDetail = null;
         _evalDetail = null;
         _hasResults = true;
@@ -124,6 +144,25 @@ class _DashboardPageState extends State<DashboardPage> {
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
       });
+    }
+  }
+
+  Future<void> _loadMoreTransactions() async {
+    if (_loadingMore || !_txnHasMore || _profile == null) return;
+    setState(() => _loadingMore = true);
+    try {
+      final page = await _api.getTransactionsByClient(
+        _profile!.clientId,
+        before: _txnNextCursor,
+      );
+      setState(() {
+        _transactions = [..._transactions, ...page.data];
+        _txnHasMore = page.hasMore;
+        _txnNextCursor = page.nextCursor;
+        _loadingMore = false;
+      });
+    } catch (e) {
+      setState(() => _loadingMore = false);
     }
   }
 
@@ -256,11 +295,11 @@ class _DashboardPageState extends State<DashboardPage> {
         children: [
           Icon(Icons.security, color: AppTheme.accent, size: 28),
           const SizedBox(width: 12),
-          const Column(
+          Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('Anomaly Detection Dashboard',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: Colors.white)),
+                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w600, color: AppTheme.textPrimary)),
               Text('Real-time behavioral anomaly detection for banking transactions',
                   style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
             ],
@@ -272,6 +311,16 @@ class _DashboardPageState extends State<DashboardPage> {
           _buildTabButton(1, 'Review Queue', Icons.rate_review, badge: _pendingCount),
           const SizedBox(width: 8),
           _buildTabButton(2, 'Analytics', Icons.analytics),
+          const SizedBox(width: 16),
+          IconButton(
+            onPressed: () => setState(() => themeNotifier.toggle()),
+            icon: Icon(
+              themeNotifier.isDark ? Icons.light_mode : Icons.dark_mode,
+              color: AppTheme.textSecondary,
+              size: 20,
+            ),
+            tooltip: themeNotifier.isDark ? 'Switch to light mode' : 'Switch to dark mode',
+          ),
         ],
       ),
     );
@@ -344,7 +393,7 @@ class _DashboardPageState extends State<DashboardPage> {
               child: DropdownButton<SearchType>(
                 value: _searchType,
                 dropdownColor: AppTheme.surface,
-                style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                 items: const [
                   DropdownMenuItem(value: SearchType.client, child: Text('Client ID')),
                   DropdownMenuItem(value: SearchType.txn, child: Text('Transaction ID')),
@@ -364,7 +413,7 @@ class _DashboardPageState extends State<DashboardPage> {
           Expanded(
             child: TextField(
               controller: _searchController,
-              style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
               decoration: InputDecoration(
                 hintText: _searchType == SearchType.client
                     ? 'Enter Client ID (e.g. CLIENT-001)...'
@@ -394,18 +443,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildContent() {
     if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 80),
-        child: Center(
-          child: Column(
-            children: [
-              CircularProgressIndicator(color: AppTheme.accent),
-              SizedBox(height: 16),
-              Text('Searching...', style: TextStyle(color: AppTheme.textSecondary)),
-            ],
-          ),
-        ),
-      );
+      return const InvestigationSkeleton();
     }
 
     if (_error != null) {
@@ -422,8 +460,8 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     if (!_hasResults) {
-      return const Padding(
-        padding: EdgeInsets.only(top: 80),
+      return Padding(
+        padding: const EdgeInsets.only(top: 80),
         child: Center(
           child: Text('Search for a client or transaction to get started.',
               style: TextStyle(color: AppTheme.textSecondary, fontSize: 15)),
@@ -440,6 +478,9 @@ class _DashboardPageState extends State<DashboardPage> {
         onTxnTap: (txnId) => _doSearch(txnId, SearchType.txn),
         onExportCsv: _exportClientCsv,
         onExportPdf: _exportClientPdf,
+        hasMoreTransactions: _txnHasMore,
+        loadingMore: _loadingMore,
+        onLoadMore: _loadMoreTransactions,
       );
     }
 

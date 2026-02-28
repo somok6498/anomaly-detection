@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../widgets/section_card.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/network_graph_widget.dart';
+import '../utils/toast_helper.dart';
 
 class AnalyticsPage extends StatefulWidget {
   final VoidCallback? onExportRulesCsv;
@@ -59,10 +60,12 @@ class AnalyticsPageState extends State<AnalyticsPage> {
       }
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
         setState(() {
-          _rulesError = e.toString().replaceFirst('Exception: ', '');
+          _rulesError = msg;
           _loadingRules = false;
         });
+        ToastHelper.showError(context, 'Failed to load analytics: $msg');
       }
     }
   }
@@ -85,10 +88,12 @@ class AnalyticsPageState extends State<AnalyticsPage> {
       }
     } catch (e) {
       if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
         setState(() {
-          _networkError = e.toString().replaceFirst('Exception: ', '');
+          _networkError = msg;
           _loadingNetwork = false;
         });
+        ToastHelper.showError(context, 'Failed to load network: $msg');
       }
     }
   }
@@ -145,15 +150,15 @@ class AnalyticsPageState extends State<AnalyticsPage> {
       title: 'Rule Performance Analytics',
       trailing: (widget.onExportRulesCsv != null || widget.onExportRulesPdf != null)
           ? PopupMenuButton<String>(
-              icon: const Icon(Icons.download, color: AppTheme.textSecondary, size: 20),
+              icon: Icon(Icons.download, color: AppTheme.textSecondary, size: 20),
               color: AppTheme.surface,
               onSelected: (v) {
                 if (v == 'csv') widget.onExportRulesCsv?.call();
                 if (v == 'pdf') widget.onExportRulesPdf?.call();
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
-                const PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+                PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+                PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
               ],
             )
           : null,
@@ -162,7 +167,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
         children: [
           // Precision bar chart
           if (rulesWithTriggers.isNotEmpty) ...[
-            const Text('Precision by Rule (feedback-based)',
+            Text('Precision by Rule (feedback-based)',
                 style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
             const SizedBox(height: 12),
             SizedBox(
@@ -178,7 +183,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                         final rule = rulesWithTriggers[group.x];
                         return BarTooltipItem(
                           '${rule.ruleName}\nPrecision: ${(rule.precision * 100).toStringAsFixed(1)}%\nTP: ${rule.tpCount} FP: ${rule.fpCount}',
-                          const TextStyle(color: AppTheme.textPrimary, fontSize: 11),
+                          TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                         );
                       },
                     ),
@@ -191,7 +196,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                         interval: 0.25,
                         getTitlesWidget: (value, meta) => Text(
                           '${(value * 100).toInt()}%',
-                          style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                          style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                         ),
                       ),
                     ),
@@ -209,7 +214,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                               quarterTurns: -1,
                               child: Text(
                                 name.length > 18 ? '${name.substring(0, 16)}...' : name,
-                                style: const TextStyle(fontSize: 9, color: AppTheme.textSecondary),
+                                style: TextStyle(fontSize: 9, color: AppTheme.textSecondary),
                               ),
                             ),
                           );
@@ -257,7 +262,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
             const SizedBox(height: 24),
           ],
           // Full table
-          const Text('All Rules',
+          Text('All Rules',
               style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
           const SizedBox(height: 8),
           SingleChildScrollView(
@@ -265,7 +270,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
             child: DataTable(
               headingRowColor: WidgetStateProperty.all(Colors.transparent),
               dataRowColor: WidgetStateProperty.all(Colors.transparent),
-              columns: const [
+              columns: [
                 DataColumn(label: Text('RULE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
                 DataColumn(label: Text('TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
                 DataColumn(label: Text('WEIGHT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
@@ -286,9 +291,9 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                   }
                 }
                 return DataRow(cells: [
-                  DataCell(Text(r.ruleName, style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
-                  DataCell(Text(r.ruleType, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
-                  DataCell(Text(r.currentWeight.toStringAsFixed(1), style: const TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+                  DataCell(Text(r.ruleName, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+                  DataCell(Text(r.ruleType, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
+                  DataCell(Text(r.currentWeight.toStringAsFixed(1), style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
                   DataCell(Text(r.triggerCount.toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white))),
                   DataCell(Text(r.tpCount.toString(), style: const TextStyle(fontSize: 12, color: AppTheme.pass))),
                   DataCell(Text(r.fpCount.toString(), style: const TextStyle(fontSize: 12, color: AppTheme.critical))),
@@ -340,7 +345,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
               Expanded(
                 child: TextField(
                   controller: _networkClientController,
-                  style: const TextStyle(color: AppTheme.textPrimary, fontSize: 14),
+                  style: TextStyle(color: AppTheme.textPrimary, fontSize: 14),
                   decoration: const InputDecoration(
                     hintText: 'Enter Client ID (e.g. CLIENT-007)...',
                     contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -386,12 +391,12 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                 const Spacer(),
                 Text(
                   '${_networkGraph!.nodes.length} nodes, ${_networkGraph!.edges.length} edges',
-                  style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
                 ),
               ],
             ),
             const SizedBox(height: 4),
-            const Text(
+            Text(
               'Click a node to highlight its connections. Click again to deselect.',
               style: TextStyle(fontSize: 11, color: AppTheme.textSecondary),
             ),
@@ -406,7 +411,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
               child: NetworkGraphWidget(graph: _networkGraph!),
             ),
           ] else
-            const Center(
+            Center(
               child: Padding(
                 padding: EdgeInsets.all(40),
                 child: Text(
@@ -429,7 +434,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
           decoration: BoxDecoration(color: color, shape: BoxShape.circle),
         ),
         const SizedBox(width: 6),
-        Text(label, style: const TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
+        Text(label, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary)),
       ],
     );
   }

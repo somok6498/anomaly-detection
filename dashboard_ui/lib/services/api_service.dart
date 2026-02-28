@@ -18,30 +18,44 @@ class ApiService {
     return ClientProfile.fromJson(jsonDecode(response.body));
   }
 
-  Future<List<Transaction>> getTransactionsByClient(String clientId,
-      {int limit = 50}) async {
-    final response = await http
-        .get(Uri.parse('$baseUrl/transactions/client/$clientId?limit=$limit'));
+  Future<PagedResponse<Transaction>> getTransactionsByClient(String clientId,
+      {int limit = 50, String? before}) async {
+    final params = <String, String>{'limit': limit.toString()};
+    if (before != null) params['before'] = before;
+    final uri = Uri.parse('$baseUrl/transactions/client/$clientId')
+        .replace(queryParameters: params);
+    final response = await http.get(uri);
     if (response.statusCode != 200) {
       throw Exception('Failed to load transactions: ${response.statusCode}');
     }
-    final List<dynamic> data = jsonDecode(response.body);
-    return data
-        .map((j) => Transaction.fromJson(j as Map<String, dynamic>))
-        .toList();
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return PagedResponse<Transaction>(
+      data: (json['data'] as List<dynamic>)
+          .map((j) => Transaction.fromJson(j as Map<String, dynamic>))
+          .toList(),
+      hasMore: json['hasMore'] ?? false,
+      nextCursor: json['nextCursor'],
+    );
   }
 
-  Future<List<EvaluationResult>> getEvalsByClient(String clientId,
-      {int limit = 200}) async {
-    final response = await http.get(
-        Uri.parse('$baseUrl/transactions/results/client/$clientId?limit=$limit'));
+  Future<PagedResponse<EvaluationResult>> getEvalsByClient(String clientId,
+      {int limit = 200, String? before}) async {
+    final params = <String, String>{'limit': limit.toString()};
+    if (before != null) params['before'] = before;
+    final uri = Uri.parse('$baseUrl/transactions/results/client/$clientId')
+        .replace(queryParameters: params);
+    final response = await http.get(uri);
     if (response.statusCode != 200) {
       throw Exception('Failed to load evaluations: ${response.statusCode}');
     }
-    final List<dynamic> data = jsonDecode(response.body);
-    return data
-        .map((j) => EvaluationResult.fromJson(j as Map<String, dynamic>))
-        .toList();
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return PagedResponse<EvaluationResult>(
+      data: (json['data'] as List<dynamic>)
+          .map((j) => EvaluationResult.fromJson(j as Map<String, dynamic>))
+          .toList(),
+      hasMore: json['hasMore'] ?? false,
+      nextCursor: json['nextCursor'],
+    );
   }
 
   Future<Transaction> getTransaction(String txnId) async {
@@ -68,13 +82,14 @@ class ApiService {
 
   // ── Review Queue API ──
 
-  Future<List<ReviewQueueItem>> getReviewQueue({
+  Future<PagedResponse<ReviewQueueItem>> getReviewQueue({
     String? action,
     String? clientId,
     int? fromDate,
     int? toDate,
     String? ruleId,
     int limit = 100,
+    String? before,
   }) async {
     final params = <String, String>{'limit': limit.toString()};
     if (action != null && action.isNotEmpty) params['action'] = action;
@@ -82,6 +97,7 @@ class ApiService {
     if (fromDate != null) params['fromDate'] = fromDate.toString();
     if (toDate != null) params['toDate'] = toDate.toString();
     if (ruleId != null && ruleId.isNotEmpty) params['ruleId'] = ruleId;
+    if (before != null) params['before'] = before;
 
     final uri = Uri.parse('$baseUrl/review/queue')
         .replace(queryParameters: params);
@@ -89,10 +105,14 @@ class ApiService {
     if (response.statusCode != 200) {
       throw Exception('Failed to load review queue: ${response.statusCode}');
     }
-    final List<dynamic> data = jsonDecode(response.body);
-    return data
-        .map((j) => ReviewQueueItem.fromJson(j as Map<String, dynamic>))
-        .toList();
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return PagedResponse<ReviewQueueItem>(
+      data: (json['data'] as List<dynamic>)
+          .map((j) => ReviewQueueItem.fromJson(j as Map<String, dynamic>))
+          .toList(),
+      hasMore: json['hasMore'] ?? false,
+      nextCursor: json['nextCursor'],
+    );
   }
 
   Future<ReviewQueueDetail> getReviewDetail(String txnId) async {
@@ -146,10 +166,11 @@ class ApiService {
     return ReviewStats.fromJson(jsonDecode(response.body));
   }
 
-  Future<List<RuleWeightChange>> getWeightHistory(
-      {String? ruleId, int limit = 50}) async {
+  Future<PagedResponse<RuleWeightChange>> getWeightHistory(
+      {String? ruleId, int limit = 50, String? before}) async {
     final params = <String, String>{'limit': limit.toString()};
     if (ruleId != null && ruleId.isNotEmpty) params['ruleId'] = ruleId;
+    if (before != null) params['before'] = before;
 
     final uri = Uri.parse('$baseUrl/review/weight-history')
         .replace(queryParameters: params);
@@ -158,10 +179,14 @@ class ApiService {
       throw Exception(
           'Failed to load weight history: ${response.statusCode}');
     }
-    final List<dynamic> data = jsonDecode(response.body);
-    return data
-        .map((j) => RuleWeightChange.fromJson(j as Map<String, dynamic>))
-        .toList();
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return PagedResponse<RuleWeightChange>(
+      data: (json['data'] as List<dynamic>)
+          .map((j) => RuleWeightChange.fromJson(j as Map<String, dynamic>))
+          .toList(),
+      hasMore: json['hasMore'] ?? false,
+      nextCursor: json['nextCursor'],
+    );
   }
 
   // ── Analytics API ──

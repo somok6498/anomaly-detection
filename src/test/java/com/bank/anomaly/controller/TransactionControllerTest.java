@@ -1,6 +1,7 @@
 package com.bank.anomaly.controller;
 
 import com.bank.anomaly.model.EvaluationResult;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.service.TransactionEvaluationService;
@@ -86,13 +87,31 @@ class TransactionControllerTest {
 
     @Test
     void getTransactionsByClient_success() throws Exception {
-        when(transactionService.getTransactionsByClientId("C-1", 50))
-                .thenReturn(List.of(TestDataFactory.createTransaction("TXN-1", "C-1", "NEFT", 50000)));
+        PagedResponse<Transaction> pagedResponse = new PagedResponse<>(
+                List.of(TestDataFactory.createTransaction("TXN-1", "C-1", "NEFT", 50000)),
+                false, null);
+        when(transactionService.getTransactionsByClientId(eq("C-1"), eq(50), isNull()))
+                .thenReturn(pagedResponse);
 
         mockMvc.perform(get("/api/v1/transactions/client/C-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$[0].txnId").value("TXN-1"));
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].txnId").value("TXN-1"))
+                .andExpect(jsonPath("$.hasMore").value(false));
+    }
+
+    @Test
+    void getResultsByClient_success() throws Exception {
+        EvaluationResult result = TestDataFactory.createEvaluationResult("TXN-1", "C-1", 45.0, "ALERT");
+        PagedResponse<EvaluationResult> pagedResponse = new PagedResponse<>(List.of(result), false, null);
+        when(riskResultRepository.findByClientId(eq("C-1"), eq(20), isNull()))
+                .thenReturn(pagedResponse);
+
+        mockMvc.perform(get("/api/v1/transactions/results/client/C-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].compositeScore").value(45.0))
+                .andExpect(jsonPath("$.hasMore").value(false));
     }
 
     @Test

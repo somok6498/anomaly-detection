@@ -26,7 +26,7 @@ class StatCard extends StatelessWidget {
         children: [
           Text(
             label.toUpperCase(),
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               color: AppTheme.textSecondary,
               fontWeight: FontWeight.w600,

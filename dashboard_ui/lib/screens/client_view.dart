@@ -14,6 +14,9 @@ class ClientView extends StatelessWidget {
   final void Function(String txnId) onTxnTap;
   final VoidCallback? onExportCsv;
   final VoidCallback? onExportPdf;
+  final bool hasMoreTransactions;
+  final bool loadingMore;
+  final VoidCallback? onLoadMore;
 
   const ClientView({
     super.key,
@@ -23,6 +26,9 @@ class ClientView extends StatelessWidget {
     required this.onTxnTap,
     this.onExportCsv,
     this.onExportPdf,
+    this.hasMoreTransactions = false,
+    this.loadingMore = false,
+    this.onLoadMore,
   });
 
   String _formatAmount(double n) {
@@ -66,15 +72,15 @@ class ClientView extends StatelessWidget {
       title: 'Client Profile: ${profile.clientId}',
       trailing: (onExportCsv != null || onExportPdf != null)
           ? PopupMenuButton<String>(
-              icon: const Icon(Icons.download, color: AppTheme.textSecondary, size: 20),
+              icon: Icon(Icons.download, color: AppTheme.textSecondary, size: 20),
               color: AppTheme.surface,
               onSelected: (v) {
                 if (v == 'csv') onExportCsv?.call();
                 if (v == 'pdf') onExportPdf?.call();
               },
               itemBuilder: (_) => [
-                const PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
-                const PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+                PopupMenuItem(value: 'csv', child: Text('Export CSV', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
+                PopupMenuItem(value: 'pdf', child: Text('Export PDF', style: TextStyle(color: AppTheme.textPrimary, fontSize: 13))),
               ],
             )
           : null,
@@ -128,7 +134,7 @@ class ClientView extends StatelessWidget {
                   interval: 20,
                   getTitlesWidget: (value, meta) => Text(
                     value.toInt().toString(),
-                    style: const TextStyle(fontSize: 10, color: AppTheme.textSecondary),
+                    style: TextStyle(fontSize: 10, color: AppTheme.textSecondary),
                   ),
                 ),
               ),
@@ -249,7 +255,7 @@ class ClientView extends StatelessWidget {
               children: [
                 SizedBox(
                   width: 50,
-                  child: Text(type, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary), textAlign: TextAlign.right),
+                  child: Text(type, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary), textAlign: TextAlign.right),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -270,7 +276,7 @@ class ClientView extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 10),
-                SizedBox(width: 50, child: Text('${pct.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary))),
+                SizedBox(width: 50, child: Text('${pct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 12, color: AppTheme.textSecondary))),
               ],
             ),
           );
@@ -298,7 +304,7 @@ class ClientView extends StatelessWidget {
             padding: const EdgeInsets.only(bottom: 10),
             child: Row(
               children: [
-                SizedBox(width: 50, child: Text(type, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary), textAlign: TextAlign.right)),
+                SizedBox(width: 50, child: Text(type, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.textSecondary), textAlign: TextAlign.right)),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Stack(
@@ -328,34 +334,50 @@ class ClientView extends StatelessWidget {
 
   Widget _buildTransactionHistory() {
     return SectionCard(
-      title: 'Transaction History (Latest ${transactions.length})',
+      title: 'Transaction History (${transactions.length}${hasMoreTransactions ? '+' : ''})',
       child: transactions.isEmpty
-          ? const Center(child: Text('No transactions found.', style: TextStyle(color: AppTheme.textSecondary)))
-          : SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                headingRowColor: WidgetStateProperty.all(Colors.transparent),
-                dataRowColor: WidgetStateProperty.all(Colors.transparent),
-                columns: const [
-                  DataColumn(label: Text('TXN ID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
-                  DataColumn(label: Text('TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
-                  DataColumn(label: Text('AMOUNT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
-                  DataColumn(label: Text('TIMESTAMP', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
-                ],
-                rows: transactions.map((t) {
-                  return DataRow(cells: [
-                    DataCell(
-                      GestureDetector(
-                        onTap: () => onTxnTap(t.txnId),
-                        child: Text(t.txnId, style: const TextStyle(color: AppTheme.accent, fontSize: 13)),
-                      ),
-                    ),
-                    DataCell(Text(t.txnType, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
-                    DataCell(Text(_formatAmount(t.amount), style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
-                    DataCell(Text(_formatTime(t.timestamp), style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
-                  ]);
-                }).toList(),
-              ),
+          ? Center(child: Text('No transactions found.', style: TextStyle(color: AppTheme.textSecondary)))
+          : Column(
+              children: [
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: DataTable(
+                    headingRowColor: WidgetStateProperty.all(Colors.transparent),
+                    dataRowColor: WidgetStateProperty.all(Colors.transparent),
+                    columns: [
+                      DataColumn(label: Text('TXN ID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
+                      DataColumn(label: Text('TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
+                      DataColumn(label: Text('AMOUNT', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
+                      DataColumn(label: Text('TIMESTAMP', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
+                    ],
+                    rows: transactions.map((t) {
+                      return DataRow(cells: [
+                        DataCell(
+                          GestureDetector(
+                            onTap: () => onTxnTap(t.txnId),
+                            child: Text(t.txnId, style: const TextStyle(color: AppTheme.accent, fontSize: 13)),
+                          ),
+                        ),
+                        DataCell(Text(t.txnType, style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                        DataCell(Text(_formatAmount(t.amount), style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                        DataCell(Text(_formatTime(t.timestamp), style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
+                if (hasMoreTransactions)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: loadingMore
+                        ? const SizedBox(height: 24, width: 24, child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent))
+                        : TextButton.icon(
+                            onPressed: onLoadMore,
+                            icon: const Icon(Icons.expand_more, size: 18),
+                            label: const Text('Load More'),
+                            style: TextButton.styleFrom(foregroundColor: AppTheme.accent),
+                          ),
+                  ),
+              ],
             ),
     );
   }
@@ -364,13 +386,13 @@ class ClientView extends StatelessWidget {
     return SectionCard(
       title: 'Evaluation History (Latest ${evaluations.length})',
       child: evaluations.isEmpty
-          ? const Center(child: Text('No evaluations found. Submit transactions via /evaluate API first.', style: TextStyle(color: AppTheme.textSecondary)))
+          ? Center(child: Text('No evaluations found. Submit transactions via /evaluate API first.', style: TextStyle(color: AppTheme.textSecondary)))
           : SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(Colors.transparent),
                 dataRowColor: WidgetStateProperty.all(Colors.transparent),
-                columns: const [
+                columns: [
                   DataColumn(label: Text('TXN ID', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
                   DataColumn(label: Text('SCORE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
                   DataColumn(label: Text('RISK', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
@@ -390,8 +412,8 @@ class ClientView extends StatelessWidget {
                     DataCell(Text(e.compositeScore.toStringAsFixed(1), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white))),
                     DataCell(RiskBadge(level: e.riskLevel)),
                     DataCell(ActionBadge(action: e.action)),
-                    DataCell(Text('$triggered/${e.ruleResults.length}', style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
-                    DataCell(Text(_formatTime(e.evaluatedAt), style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                    DataCell(Text('$triggered/${e.ruleResults.length}', style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                    DataCell(Text(_formatTime(e.evaluatedAt), style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
                   ]);
                 }).toList(),
               ),

@@ -127,7 +127,7 @@ class _NetworkGraphWidgetState extends State<NetworkGraphWidget> {
   @override
   Widget build(BuildContext context) {
     if (widget.graph.nodes.isEmpty) {
-      return const SizedBox(
+      return SizedBox(
         height: 200,
         child: Center(
           child: Text('No graph data available.',
@@ -256,7 +256,7 @@ class _NetworkGraphWidgetState extends State<NetworkGraphWidget> {
           // Node ID
           Text(
             node.id,
-            style: const TextStyle(
+            style: TextStyle(
               color: AppTheme.textPrimary,
               fontSize: 13,
               fontWeight: FontWeight.w600,
@@ -276,7 +276,7 @@ class _NetworkGraphWidgetState extends State<NetworkGraphWidget> {
           const SizedBox(width: 16),
           Text(
             '${neighbors.length} connection${neighbors.length == 1 ? '' : 's'}',
-            style: const TextStyle(color: AppTheme.textSecondary, fontSize: 12),
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 12),
           ),
           const Spacer(),
           // Connected nodes chips
@@ -308,7 +308,7 @@ class _NetworkGraphWidgetState extends State<NetworkGraphWidget> {
           const SizedBox(width: 8),
           InkWell(
             onTap: () => setState(() => _selectedNodeId = null),
-            child: const Icon(Icons.close, size: 16, color: AppTheme.textSecondary),
+            child: Icon(Icons.close, size: 16, color: AppTheme.textSecondary),
           ),
         ],
       ),

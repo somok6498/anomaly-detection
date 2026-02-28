@@ -37,23 +37,28 @@ class ReviewQueueControllerTest {
 
     @Test
     void getQueueItems_success() throws Exception {
-        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), anyInt()))
-                .thenReturn(List.of(TestDataFactory.createReviewQueueItem("TXN-1", "C-1", ReviewStatus.PENDING)));
+        PagedResponse<ReviewQueueItem> pagedResponse = new PagedResponse<>(
+                List.of(TestDataFactory.createReviewQueueItem("TXN-1", "C-1", ReviewStatus.PENDING)),
+                false, null);
+        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), anyInt(), any()))
+                .thenReturn(pagedResponse);
 
         mockMvc.perform(get("/api/v1/review/queue"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$[0].txnId").value("TXN-1"));
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].txnId").value("TXN-1"))
+                .andExpect(jsonPath("$.hasMore").value(false));
     }
 
     @Test
     void getQueueItems_withFilters() throws Exception {
-        when(reviewQueueService.getQueueItems(eq("ALERT"), eq("C-1"), any(), any(), any(), anyInt()))
-                .thenReturn(List.of());
+        PagedResponse<ReviewQueueItem> pagedResponse = new PagedResponse<>(List.of(), false, null);
+        when(reviewQueueService.getQueueItems(eq("ALERT"), eq("C-1"), any(), any(), any(), anyInt(), any()))
+                .thenReturn(pagedResponse);
 
         mockMvc.perform(get("/api/v1/review/queue?action=ALERT&clientId=C-1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray());
+                .andExpect(jsonPath("$.data").isArray());
     }
 
     @Test
@@ -146,22 +151,29 @@ class ReviewQueueControllerTest {
 
     @Test
     void getWeightHistory_success() throws Exception {
-        when(weightHistoryRepo.findAll(50))
-                .thenReturn(List.of(TestDataFactory.createRuleWeightChange("R1", 1.0, 1.2)));
+        PagedResponse<RuleWeightChange> pagedResponse = new PagedResponse<>(
+                List.of(TestDataFactory.createRuleWeightChange("R1", 1.0, 1.2)),
+                false, null);
+        when(weightHistoryRepo.findAll(eq(50), isNull()))
+                .thenReturn(pagedResponse);
 
         mockMvc.perform(get("/api/v1/review/weight-history"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$").isArray())
-                .andExpect(jsonPath("$[0].ruleId").value("R1"));
+                .andExpect(jsonPath("$.data").isArray())
+                .andExpect(jsonPath("$.data[0].ruleId").value("R1"))
+                .andExpect(jsonPath("$.hasMore").value(false));
     }
 
     @Test
     void getWeightHistory_byRuleId() throws Exception {
-        when(weightHistoryRepo.findByRuleId("R1", 50))
-                .thenReturn(List.of(TestDataFactory.createRuleWeightChange("R1", 1.0, 1.2)));
+        PagedResponse<RuleWeightChange> pagedResponse = new PagedResponse<>(
+                List.of(TestDataFactory.createRuleWeightChange("R1", 1.0, 1.2)),
+                false, null);
+        when(weightHistoryRepo.findByRuleId(eq("R1"), eq(50), isNull()))
+                .thenReturn(pagedResponse);
 
         mockMvc.perform(get("/api/v1/review/weight-history?ruleId=R1"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].ruleId").value("R1"));
+                .andExpect(jsonPath("$.data[0].ruleId").value("R1"));
     }
 }

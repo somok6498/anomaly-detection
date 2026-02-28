@@ -8,6 +8,7 @@ import com.aerospike.client.policy.Policy;
 import com.aerospike.client.policy.ScanPolicy;
 import com.aerospike.client.policy.WritePolicy;
 import com.bank.anomaly.config.AerospikeConfig;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Repository;
@@ -60,16 +61,17 @@ public class TransactionRepository {
         return mapRecord(txnId, record);
     }
 
-    public List<Transaction> findByClientId(String clientId, int limit) {
+    public PagedResponse<Transaction> findByClientId(String clientId, int limit, Long before) {
         List<Transaction> results = new ArrayList<>();
         ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.maxRecords = 0; // scan all, filter in callback
+        scanPolicy.maxRecords = 0;
         scanPolicy.concurrentNodes = true;
 
         client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_TRANSACTIONS,
                 (key, record) -> {
                     String recClientId = record.getString("clientId");
                     if (clientId.equals(recClientId)) {
+                        if (before != null && record.getLong("timestamp") >= before) return;
                         synchronized (results) {
                             results.add(mapRecord(record.getString("txnId"), record));
                         }
@@ -77,10 +79,10 @@ public class TransactionRepository {
                 });
 
         results.sort(Comparator.comparingLong(Transaction::getTimestamp).reversed());
-        if (results.size() > limit) {
-            return results.subList(0, limit);
-        }
-        return results;
+        boolean hasMore = results.size() > limit;
+        List<Transaction> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
+        String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getTimestamp()) : null;
+        return new PagedResponse<>(page, hasMore, nextCursor);
     }
 
     private Transaction mapRecord(String txnId, Record record) {

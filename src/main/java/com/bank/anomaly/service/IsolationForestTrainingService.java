@@ -47,8 +47,8 @@ public class IsolationForestTrainingService {
             return;
         }
 
-        // Load all transactions for this client
-        List<Transaction> txns = transactionRepository.findByClientId(clientId, 10000);
+        // Load all transactions for this client (no cursor — fetch all)
+        List<Transaction> txns = transactionRepository.findByClientId(clientId, 10000, null).data();
         if (txns.isEmpty()) {
             log.warn("No transactions found for {}. Skipping IF training.", clientId);
             return;
@@ -84,9 +84,7 @@ public class IsolationForestTrainingService {
     public void trainAll(int numTrees, int sampleSize) {
         log.info("=== Starting IF model training for all clients ===");
 
-        // Get all unique clientIds from transactions
-        List<Transaction> allTxns = transactionRepository.findByClientId("", 0);
-        // That won't work — we need a different approach. Let's scan all transactions to find unique clients.
+        // Get all unique clientIds from transactions — use hardcoded list for POC
         Set<String> clientIds = findAllClientIds();
 
         for (String clientId : clientIds) {
@@ -116,9 +114,6 @@ public class IsolationForestTrainingService {
     }
 
     private Set<String> findAllClientIds() {
-        // Scan all transactions to find unique client IDs
-        List<Transaction> sample = transactionRepository.findByClientId("*", 50000);
-        // This is hacky — better to scan and collect unique IDs
         // For the POC, we'll use the known client IDs
         return Set.of(
                 "CLIENT-001", "CLIENT-002", "CLIENT-003", "CLIENT-004", "CLIENT-005",

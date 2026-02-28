@@ -76,6 +76,12 @@ public class DataSeeder implements CommandLineRunner {
     public void run(String... args) throws Exception {
         log.info("=== Starting data seeding ===");
 
+        List<AnomalyRule> existing = ruleRepository.findAll();
+        if (!existing.isEmpty()) {
+            log.info("Data already seeded ({} rules found), skipping. To re-seed, clear the Aerospike data first.", existing.size());
+            return;
+        }
+
         seedDefaultRules();
         seedTransactions();
 

@@ -17,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Repository;
 
+import com.bank.anomaly.model.PagedResponse;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -93,9 +95,9 @@ public class ReviewQueueRepository {
         return results;
     }
 
-    public List<ReviewQueueItem> findByFilters(String action, String clientId,
+    public PagedResponse<ReviewQueueItem> findByFilters(String action, String clientId,
                                                 Long fromDate, Long toDate,
-                                                String ruleId, int limit) {
+                                                String ruleId, int limit, Long before) {
         List<ReviewQueueItem> results = new ArrayList<>();
         ScanPolicy scanPolicy = new ScanPolicy();
         scanPolicy.concurrentNodes = true;
@@ -113,6 +115,7 @@ public class ReviewQueueRepository {
                             if (!clientId.equalsIgnoreCase(recClientId)) return;
                         }
                         long enqueuedAt = record.getLong("enqueuedAt");
+                        if (before != null && enqueuedAt >= before) return;
                         if (fromDate != null && enqueuedAt < fromDate) return;
                         if (toDate != null && enqueuedAt > toDate) return;
 
@@ -130,10 +133,10 @@ public class ReviewQueueRepository {
                 });
 
         results.sort(Comparator.comparingLong(ReviewQueueItem::getEnqueuedAt).reversed());
-        if (results.size() > limit) {
-            return results.subList(0, limit);
-        }
-        return results;
+        boolean hasMore = results.size() > limit;
+        List<ReviewQueueItem> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
+        String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getEnqueuedAt()) : null;
+        return new PagedResponse<>(page, hasMore, nextCursor);
     }
 
     /**

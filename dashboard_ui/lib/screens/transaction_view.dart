@@ -37,7 +37,7 @@ class TransactionView extends StatelessWidget {
         if (evaluation == null)
           SectionCard(
             title: 'Risk Evaluation',
-            child: const Center(
+            child: Center(
               child: Padding(
                 padding: EdgeInsets.all(20),
                 child: Text(
@@ -108,7 +108,7 @@ class TransactionView extends StatelessWidget {
                   const SizedBox(height: 6),
                   Row(
                     children: [
-                      const Text('Risk Level: ', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
+                      Text('Risk Level: ', style: TextStyle(fontSize: 13, color: AppTheme.textSecondary)),
                       RiskBadge(level: eval.riskLevel),
                     ],
                   ),
@@ -120,14 +120,14 @@ class TransactionView extends StatelessWidget {
 
           // Rule results table
           if (eval.ruleResults.isNotEmpty) ...[
-            const Text('Rule Evaluation Details', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+            Text('Rule Evaluation Details', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
             const SizedBox(height: 12),
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: DataTable(
                 headingRowColor: WidgetStateProperty.all(Colors.transparent),
                 dataRowColor: WidgetStateProperty.all(Colors.transparent),
-                columns: const [
+                columns: [
                   DataColumn(label: Text('RULE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
                   DataColumn(label: Text('TYPE', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
                   DataColumn(label: Text('TRIGGERED', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary))),
@@ -139,17 +139,17 @@ class TransactionView extends StatelessWidget {
                 rows: eval.ruleResults.map((r) {
                   return DataRow(cells: [
                     DataCell(Text(r.ruleName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white))),
-                    DataCell(Text(r.ruleType, style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                    DataCell(Text(r.ruleType, style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
                     DataCell(Text(
                       r.triggered ? 'YES' : 'NO',
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: r.triggered ? AppTheme.critical : AppTheme.low),
                     )),
-                    DataCell(Text('${r.deviationPct.toStringAsFixed(1)}%', style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
-                    DataCell(Text(r.partialScore.toStringAsFixed(1), style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
-                    DataCell(Text(r.riskWeight.toString(), style: const TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                    DataCell(Text('${r.deviationPct.toStringAsFixed(1)}%', style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                    DataCell(Text(r.partialScore.toStringAsFixed(1), style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
+                    DataCell(Text(r.riskWeight.toString(), style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
                     DataCell(SizedBox(
                       width: 300,
-                      child: Text(r.reason, style: const TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
+                      child: Text(r.reason, style: TextStyle(fontSize: 12, color: AppTheme.textSecondary)),
                     )),
                   ]);
                 }).toList(),

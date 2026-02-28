@@ -1,3 +1,11 @@
+class PagedResponse<T> {
+  final List<T> data;
+  final bool hasMore;
+  final String? nextCursor;
+
+  PagedResponse({required this.data, required this.hasMore, this.nextCursor});
+}
+
 class Transaction {
   final String txnId;
   final String clientId;

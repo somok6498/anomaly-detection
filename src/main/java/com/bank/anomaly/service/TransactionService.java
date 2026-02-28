@@ -1,10 +1,9 @@
 package com.bank.anomaly.service;
 
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.TransactionRepository;
 import org.springframework.stereotype.Service;
-
-import java.util.List;
 
 @Service
 public class TransactionService {
@@ -19,7 +18,7 @@ public class TransactionService {
         return transactionRepository.findByTxnId(txnId);
     }
 
-    public List<Transaction> getTransactionsByClientId(String clientId, int limit) {
-        return transactionRepository.findByClientId(clientId, limit);
+    public PagedResponse<Transaction> getTransactionsByClientId(String clientId, int limit, Long before) {
+        return transactionRepository.findByClientId(clientId, limit, before);
     }
 }

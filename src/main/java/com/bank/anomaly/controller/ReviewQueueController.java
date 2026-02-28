@@ -1,12 +1,10 @@
 package com.bank.anomaly.controller;
 
-import com.bank.anomaly.model.ReviewQueueDetail;
-import com.bank.anomaly.model.ReviewQueueItem;
-import com.bank.anomaly.model.ReviewStatus;
-import com.bank.anomaly.model.RuleWeightChange;
+import com.bank.anomaly.model.*;
 import com.bank.anomaly.repository.RuleWeightHistoryRepository;
 import com.bank.anomaly.service.ReviewQueueService;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -31,16 +29,18 @@ public class ReviewQueueController {
 
     @GetMapping("/queue")
     @Operation(summary = "List review queue items",
-               description = "Returns ALERT/BLOCK transactions pending ops review. Supports filters.")
-    public ResponseEntity<List<ReviewQueueItem>> getQueueItems(
+               description = "Returns ALERT/BLOCK transactions pending ops review. Supports filters and cursor-based pagination.")
+    public ResponseEntity<PagedResponse<ReviewQueueItem>> getQueueItems(
             @RequestParam(required = false) String action,
             @RequestParam(required = false) String clientId,
             @RequestParam(required = false) Long fromDate,
             @RequestParam(required = false) Long toDate,
             @RequestParam(required = false) String ruleId,
-            @RequestParam(defaultValue = "100") int limit) {
-        List<ReviewQueueItem> items = reviewQueueService.getQueueItems(
-                action, clientId, fromDate, toDate, ruleId, limit);
+            @RequestParam(defaultValue = "100") int limit,
+            @Parameter(description = "Cursor: return records with enqueuedAt before this value")
+            @RequestParam(required = false) Long before) {
+        PagedResponse<ReviewQueueItem> items = reviewQueueService.getQueueItems(
+                action, clientId, fromDate, toDate, ruleId, limit, before);
         return ResponseEntity.ok(items);
     }
 
@@ -117,13 +117,15 @@ public class ReviewQueueController {
 
     @GetMapping("/weight-history")
     @Operation(summary = "Get rule weight change history",
-               description = "Returns history of auto-tuning weight adjustments. Optionally filter by ruleId.")
-    public ResponseEntity<List<RuleWeightChange>> getWeightHistory(
+               description = "Returns history of auto-tuning weight adjustments. Supports cursor-based pagination.")
+    public ResponseEntity<PagedResponse<RuleWeightChange>> getWeightHistory(
             @RequestParam(required = false) String ruleId,
-            @RequestParam(defaultValue = "50") int limit) {
+            @RequestParam(defaultValue = "50") int limit,
+            @Parameter(description = "Cursor: return records with adjustedAt before this value")
+            @RequestParam(required = false) Long before) {
         if (ruleId != null && !ruleId.isEmpty()) {
-            return ResponseEntity.ok(weightHistoryRepo.findByRuleId(ruleId, limit));
+            return ResponseEntity.ok(weightHistoryRepo.findByRuleId(ruleId, limit, before));
         }
-        return ResponseEntity.ok(weightHistoryRepo.findAll(limit));
+        return ResponseEntity.ok(weightHistoryRepo.findAll(limit, before));
     }
 }

@@ -13,6 +13,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Repository;
 
+import com.bank.anomaly.model.PagedResponse;
+
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -51,7 +53,7 @@ public class RuleWeightHistoryRepository {
                 tpCountBin, fpCountBin, tpFpRatioBin, adjustedAtBin);
     }
 
-    public List<RuleWeightChange> findByRuleId(String ruleId, int limit) {
+    public PagedResponse<RuleWeightChange> findByRuleId(String ruleId, int limit, Long before) {
         List<RuleWeightChange> results = new ArrayList<>();
         ScanPolicy scanPolicy = new ScanPolicy();
         scanPolicy.concurrentNodes = true;
@@ -61,6 +63,7 @@ public class RuleWeightHistoryRepository {
                     try {
                         String recRuleId = record.getString("ruleId");
                         if (ruleId.equals(recRuleId)) {
+                            if (before != null && record.getLong("adjustedAt") >= before) return;
                             synchronized (results) {
                                 results.add(mapRecord(record));
                             }
@@ -71,13 +74,13 @@ public class RuleWeightHistoryRepository {
                 });
 
         results.sort(Comparator.comparingLong(RuleWeightChange::getAdjustedAt).reversed());
-        if (results.size() > limit) {
-            return results.subList(0, limit);
-        }
-        return results;
+        boolean hasMore = results.size() > limit;
+        List<RuleWeightChange> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
+        String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getAdjustedAt()) : null;
+        return new PagedResponse<>(page, hasMore, nextCursor);
     }
 
-    public List<RuleWeightChange> findAll(int limit) {
+    public PagedResponse<RuleWeightChange> findAll(int limit, Long before) {
         List<RuleWeightChange> results = new ArrayList<>();
         ScanPolicy scanPolicy = new ScanPolicy();
         scanPolicy.concurrentNodes = true;
@@ -85,6 +88,7 @@ public class RuleWeightHistoryRepository {
         client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_WEIGHT_HISTORY,
                 (key, record) -> {
                     try {
+                        if (before != null && record.getLong("adjustedAt") >= before) return;
                         synchronized (results) {
                             results.add(mapRecord(record));
                         }
@@ -94,10 +98,10 @@ public class RuleWeightHistoryRepository {
                 });
 
         results.sort(Comparator.comparingLong(RuleWeightChange::getAdjustedAt).reversed());
-        if (results.size() > limit) {
-            return results.subList(0, limit);
-        }
-        return results;
+        boolean hasMore = results.size() > limit;
+        List<RuleWeightChange> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
+        String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getAdjustedAt()) : null;
+        return new PagedResponse<>(page, hasMore, nextCursor);
     }
 
     private RuleWeightChange mapRecord(Record record) {

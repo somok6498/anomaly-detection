@@ -91,6 +91,10 @@ public class RuleRepository {
         return cachedRules.get();
     }
 
+    public List<AnomalyRule> findAll() {
+        return scanAllRules();
+    }
+
     public AnomalyRule findById(String ruleId) {
         Key key = new Key(namespace, AerospikeConfig.SET_ANOMALY_RULES, ruleId);
         Record record = client.get(readPolicy, key);

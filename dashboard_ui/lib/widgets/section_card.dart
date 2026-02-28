@@ -38,7 +38,7 @@ class SectionCard extends StatelessWidget {
               ],
             ),
           ),
-          const Divider(color: AppTheme.cardBorder, height: 1),
+          Divider(color: AppTheme.cardBorder, height: 1),
           Padding(
             padding: const EdgeInsets.all(24),
             child: child,

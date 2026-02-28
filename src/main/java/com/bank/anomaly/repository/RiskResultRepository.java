@@ -19,6 +19,8 @@ import org.springframework.stereotype.Repository;
 
 import com.aerospike.client.policy.ScanPolicy;
 
+import com.bank.anomaly.model.PagedResponse;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -78,7 +80,7 @@ public class RiskResultRepository {
                 .build();
     }
 
-    public List<EvaluationResult> findByClientId(String clientId, int limit) {
+    public PagedResponse<EvaluationResult> findByClientId(String clientId, int limit, Long before) {
         List<EvaluationResult> results = new ArrayList<>();
         ScanPolicy scanPolicy = new ScanPolicy();
         scanPolicy.concurrentNodes = true;
@@ -87,6 +89,7 @@ public class RiskResultRepository {
                 (key, record) -> {
                     String recClientId = record.getString("clientId");
                     if (clientId.equals(recClientId)) {
+                        if (before != null && record.getLong("evaluatedAt") >= before) return;
                         synchronized (results) {
                             results.add(mapRecord(record));
                         }
@@ -94,10 +97,10 @@ public class RiskResultRepository {
                 });
 
         results.sort(Comparator.comparingLong(EvaluationResult::getEvaluatedAt).reversed());
-        if (results.size() > limit) {
-            return results.subList(0, limit);
-        }
-        return results;
+        boolean hasMore = results.size() > limit;
+        List<EvaluationResult> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
+        String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getEvaluatedAt()) : null;
+        return new PagedResponse<>(page, hasMore, nextCursor);
     }
 
     private EvaluationResult mapRecord(Record record) {
