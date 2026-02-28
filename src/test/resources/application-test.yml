@@ -1,0 +1,24 @@
+spring:
+  main:
+    allow-bean-definition-overriding: true
+  application:
+    name: anomaly-detection-test
+
+# Disable Twilio in tests
+twilio:
+  enabled: false
+  account-sid: test
+  auth-token: test
+  from-number: "+10000000000"
+  to-number: "+10000000000"
+
+# Disable silence detection scheduler
+risk:
+  silence-detection:
+    enabled: false
+
+# Disable OTEL tracing in tests
+management:
+  tracing:
+    sampling:
+      probability: 0.0
