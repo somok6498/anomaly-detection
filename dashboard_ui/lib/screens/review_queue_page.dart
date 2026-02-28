@@ -221,19 +221,28 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       );
     }
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Left panel — queue list (~40%)
-        SizedBox(
-          width: MediaQuery.of(context).size.width * 0.42,
-          child: _buildLeftPanel(),
-        ),
-        // Divider
-        Container(width: 1, color: AppTheme.cardBorder),
-        // Right panel — detail (~60%)
-        Expanded(child: _buildRightPanel()),
-      ],
+    return Container(
+      margin: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBg,
+        border: Border.all(color: AppTheme.cardBorder),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Left panel — queue list (~42%)
+          SizedBox(
+            width: MediaQuery.of(context).size.width * 0.42,
+            child: _buildLeftPanel(),
+          ),
+          // Divider
+          Container(width: 1, color: AppTheme.cardBorder),
+          // Right panel — detail (~58%)
+          Expanded(child: _buildRightPanel()),
+        ],
+      ),
     );
   }
 
@@ -654,9 +663,9 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? AppTheme.accent.withValues(alpha: 0.08) : Colors.transparent,
+          color: isSelected ? AppTheme.accent.withValues(alpha: 0.08) : AppTheme.cardBg,
           border: Border(
-            bottom: BorderSide(color: AppTheme.cardBorder.withValues(alpha: 0.3)),
+            bottom: BorderSide(color: AppTheme.cardBorder),
             left: isSelected
                 ? const BorderSide(color: AppTheme.accent, width: 3)
                 : BorderSide.none,

@@ -409,7 +409,7 @@ class ClientView extends StatelessWidget {
                         child: Text(e.txnId, style: const TextStyle(color: AppTheme.accent, fontSize: 13)),
                       ),
                     ),
-                    DataCell(Text(e.compositeScore.toStringAsFixed(1), style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Colors.white))),
+                    DataCell(Text(e.compositeScore.toStringAsFixed(1), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: AppTheme.textPrimary))),
                     DataCell(RiskBadge(level: e.riskLevel)),
                     DataCell(ActionBadge(action: e.action)),
                     DataCell(Text('$triggered/${e.ruleResults.length}', style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),

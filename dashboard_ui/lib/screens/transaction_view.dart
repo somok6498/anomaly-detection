@@ -97,7 +97,7 @@ class TransactionView extends StatelessWidget {
                 alignment: Alignment.center,
                 child: Text(
                   eval.compositeScore.toStringAsFixed(1),
-                  style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: Colors.white),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: AppTheme.textPrimary),
                 ),
               ),
               const SizedBox(width: 20),
@@ -138,7 +138,7 @@ class TransactionView extends StatelessWidget {
                 ],
                 rows: eval.ruleResults.map((r) {
                   return DataRow(cells: [
-                    DataCell(Text(r.ruleName, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.white))),
+                    DataCell(Text(r.ruleName, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textPrimary))),
                     DataCell(Text(r.ruleType, style: TextStyle(fontSize: 13, color: AppTheme.textPrimary))),
                     DataCell(Text(
                       r.triggered ? 'YES' : 'NO',

@@ -294,7 +294,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                   DataCell(Text(r.ruleName, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
                   DataCell(Text(r.ruleType, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
                   DataCell(Text(r.currentWeight.toStringAsFixed(1), style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
-                  DataCell(Text(r.triggerCount.toString(), style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.white))),
+                  DataCell(Text(r.triggerCount.toString(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary))),
                   DataCell(Text(r.tpCount.toString(), style: const TextStyle(fontSize: 12, color: AppTheme.pass))),
                   DataCell(Text(r.fpCount.toString(), style: const TextStyle(fontSize: 12, color: AppTheme.critical))),
                   DataCell(Text(
