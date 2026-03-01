@@ -1,5 +1,6 @@
 package com.bank.anomaly.controller;
 
+import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
@@ -12,6 +13,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/v1/transactions")
 @Tag(name = "Transactions", description = "Submit transactions for anomaly evaluation and query transaction history")
@@ -20,13 +23,16 @@ public class TransactionController {
     private final TransactionEvaluationService evaluationService;
     private final RiskResultRepository riskResultRepository;
     private final TransactionService transactionService;
+    private final RiskThresholdConfig thresholdConfig;
 
     public TransactionController(TransactionEvaluationService evaluationService,
                                  RiskResultRepository riskResultRepository,
-                                 TransactionService transactionService) {
+                                 TransactionService transactionService,
+                                 RiskThresholdConfig thresholdConfig) {
         this.evaluationService = evaluationService;
         this.riskResultRepository = riskResultRepository;
         this.transactionService = transactionService;
+        this.thresholdConfig = thresholdConfig;
     }
 
     @Operation(summary = "Evaluate a transaction for anomalies",
@@ -34,9 +40,16 @@ public class TransactionController {
                     "(including the Isolation Forest ML model). Returns composite risk score, risk level, " +
                     "action (PASS/ALERT/BLOCK), and per-rule breakdown.")
     @PostMapping("/evaluate")
-    public ResponseEntity<EvaluationResult> evaluateTransaction(@RequestBody Transaction txn) {
+    public ResponseEntity<?> evaluateTransaction(@RequestBody Transaction txn) {
         if (txn.getTxnId() == null || txn.getClientId() == null || txn.getTxnType() == null) {
             return ResponseEntity.badRequest().build();
+        }
+
+        if (!thresholdConfig.getTransactionTypes().contains(txn.getTxnType())) {
+            return ResponseEntity.badRequest().body(Map.of(
+                    "error", "Invalid transaction type: " + txn.getTxnType(),
+                    "validTypes", thresholdConfig.getTransactionTypes()
+            ));
         }
 
         if (txn.getTimestamp() == 0) {

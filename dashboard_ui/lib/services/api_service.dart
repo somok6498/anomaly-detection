@@ -221,4 +221,88 @@ class ApiService {
     }
     return GraphStatus.fromJson(jsonDecode(response.body));
   }
+
+  // ── Config API ──
+
+  Future<List<AnomalyRuleModel>> getRules() async {
+    final response = await http.get(Uri.parse('$baseUrl/rules'));
+    if (response.statusCode != 200) throw Exception('Failed to load rules');
+    final list = jsonDecode(response.body) as List<dynamic>;
+    return list.map((j) => AnomalyRuleModel.fromJson(j)).toList();
+  }
+
+  Future<AnomalyRuleModel> updateRule(String ruleId, AnomalyRuleModel rule) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/rules/$ruleId'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(rule.toJson()),
+    );
+    if (response.statusCode != 200) throw Exception('Failed to update rule: ${response.body}');
+    return AnomalyRuleModel.fromJson(jsonDecode(response.body));
+  }
+
+  Future<ThresholdConfig> getThresholds() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/thresholds'));
+    if (response.statusCode != 200) throw Exception('Failed to load thresholds');
+    return ThresholdConfig.fromJson(jsonDecode(response.body));
+  }
+
+  Future<ThresholdConfig> updateThresholds(ThresholdConfig config) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/config/thresholds'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(config.toJson()),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update thresholds');
+    }
+    return ThresholdConfig.fromJson(jsonDecode(response.body));
+  }
+
+  Future<FeedbackConfigModel> getFeedbackConfig() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/feedback'));
+    if (response.statusCode != 200) throw Exception('Failed to load feedback config');
+    return FeedbackConfigModel.fromJson(jsonDecode(response.body));
+  }
+
+  Future<FeedbackConfigModel> updateFeedbackConfig(FeedbackConfigModel config) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/config/feedback'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(config.toJson()),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update feedback config');
+    }
+    return FeedbackConfigModel.fromJson(jsonDecode(response.body));
+  }
+
+  Future<List<String>> getTransactionTypes() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/transaction-types'));
+    if (response.statusCode != 200) throw Exception('Failed to load transaction types');
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return (json['transactionTypes'] as List<dynamic>).cast<String>();
+  }
+
+  Future<List<String>> updateTransactionTypes(List<String> types) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/config/transaction-types'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'transactionTypes': types}),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update transaction types');
+    }
+    final json = jsonDecode(response.body) as Map<String, dynamic>;
+    return (json['transactionTypes'] as List<dynamic>).cast<String>();
+  }
+
+  Future<AerospikeInfo> getAerospikeInfo() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/aerospike'));
+    if (response.statusCode != 200) throw Exception('Failed to load Aerospike info');
+    return AerospikeInfo.fromJson(jsonDecode(response.body));
+  }
 }

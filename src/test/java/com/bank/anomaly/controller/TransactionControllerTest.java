@@ -1,5 +1,6 @@
 package com.bank.anomaly.controller;
 
+import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
@@ -8,6 +9,7 @@ import com.bank.anomaly.service.TransactionEvaluationService;
 import com.bank.anomaly.service.TransactionService;
 import com.bank.anomaly.testutil.TestDataFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -39,6 +41,15 @@ class TransactionControllerTest {
 
     @MockBean
     private TransactionService transactionService;
+
+    @MockBean
+    private RiskThresholdConfig thresholdConfig;
+
+    @BeforeEach
+    void setUp() {
+        when(thresholdConfig.getTransactionTypes())
+                .thenReturn(List.of("NEFT", "RTGS", "IMPS", "UPI", "IFT"));
+    }
 
     @Test
     void evaluateTransaction_success() throws Exception {
@@ -130,5 +141,18 @@ class TransactionControllerTest {
 
         mockMvc.perform(get("/api/v1/transactions/results/MISSING"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void evaluateTransaction_invalidTxnType_returns400() throws Exception {
+        Transaction txn = TestDataFactory.createTransaction("TXN-1", "C-1", "INVALID_TYPE", 50000);
+
+        mockMvc.perform(post("/api/v1/transactions/evaluate")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(txn)))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").value("Invalid transaction type: INVALID_TYPE"))
+                .andExpect(jsonPath("$.validTypes").isArray())
+                .andExpect(jsonPath("$.validTypes[0]").value("NEFT"));
     }
 }

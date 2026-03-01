@@ -9,6 +9,7 @@ import 'screens/client_view.dart';
 import 'screens/transaction_view.dart';
 import 'screens/review_queue_page.dart';
 import 'screens/analytics_page.dart';
+import 'screens/settings_page.dart';
 
 final themeNotifier = ThemeNotifier();
 
@@ -69,7 +70,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   bool _hasResults = false;
 
-  // Tab navigation: 0 = Investigation, 1 = Review Queue, 2 = Analytics
+  // Tab navigation: 0 = Investigation, 1 = Review Queue, 2 = Analytics, 3 = Settings
   int _activeTab = 0;
   int _pendingCount = 0;
 
@@ -276,11 +277,13 @@ class _DashboardPageState extends State<DashboardPage> {
                           setState(() => _pendingCount = count);
                         },
                       )
-                    : AnalyticsPage(
-                        key: _analyticsKey,
-                        onExportRulesCsv: _exportRulesCsv,
-                        onExportRulesPdf: _exportRulesPdf,
-                      ),
+                    : _activeTab == 2
+                        ? AnalyticsPage(
+                            key: _analyticsKey,
+                            onExportRulesCsv: _exportRulesCsv,
+                            onExportRulesPdf: _exportRulesPdf,
+                          )
+                        : const SettingsPage(),
           ),
         ],
       ),
@@ -311,6 +314,8 @@ class _DashboardPageState extends State<DashboardPage> {
           _buildTabButton(1, 'Review Queue', Icons.rate_review, badge: _pendingCount),
           const SizedBox(width: 8),
           _buildTabButton(2, 'Analytics', Icons.analytics),
+          const SizedBox(width: 8),
+          _buildTabButton(3, 'Settings', Icons.settings),
           const SizedBox(width: 16),
           IconButton(
             onPressed: () => setState(() => themeNotifier.toggle()),

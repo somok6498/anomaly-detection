@@ -387,3 +387,136 @@ class RuleWeightChange {
     );
   }
 }
+
+// ── Config models ──
+
+class ThresholdConfig {
+  double alertThreshold;
+  double blockThreshold;
+  double ewmaAlpha;
+  int minProfileTxns;
+
+  ThresholdConfig({
+    required this.alertThreshold,
+    required this.blockThreshold,
+    required this.ewmaAlpha,
+    required this.minProfileTxns,
+  });
+
+  factory ThresholdConfig.fromJson(Map<String, dynamic> json) {
+    return ThresholdConfig(
+      alertThreshold: (json['alertThreshold'] ?? 30.0).toDouble(),
+      blockThreshold: (json['blockThreshold'] ?? 70.0).toDouble(),
+      ewmaAlpha: (json['ewmaAlpha'] ?? 0.01).toDouble(),
+      minProfileTxns: (json['minProfileTxns'] ?? 20).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'alertThreshold': alertThreshold,
+    'blockThreshold': blockThreshold,
+    'ewmaAlpha': ewmaAlpha,
+    'minProfileTxns': minProfileTxns,
+  };
+}
+
+class FeedbackConfigModel {
+  int autoAcceptTimeoutMs;
+  int tuningIntervalHours;
+  int minSamplesForTuning;
+  double weightFloor;
+  double weightCeiling;
+  double maxAdjustmentPct;
+
+  FeedbackConfigModel({
+    required this.autoAcceptTimeoutMs,
+    required this.tuningIntervalHours,
+    required this.minSamplesForTuning,
+    required this.weightFloor,
+    required this.weightCeiling,
+    required this.maxAdjustmentPct,
+  });
+
+  factory FeedbackConfigModel.fromJson(Map<String, dynamic> json) {
+    return FeedbackConfigModel(
+      autoAcceptTimeoutMs: (json['autoAcceptTimeoutMs'] ?? 3600000).toInt(),
+      tuningIntervalHours: (json['tuningIntervalHours'] ?? 6).toInt(),
+      minSamplesForTuning: (json['minSamplesForTuning'] ?? 50).toInt(),
+      weightFloor: (json['weightFloor'] ?? 0.5).toDouble(),
+      weightCeiling: (json['weightCeiling'] ?? 5.0).toDouble(),
+      maxAdjustmentPct: (json['maxAdjustmentPct'] ?? 0.10).toDouble(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'autoAcceptTimeoutMs': autoAcceptTimeoutMs,
+    'tuningIntervalHours': tuningIntervalHours,
+    'minSamplesForTuning': minSamplesForTuning,
+    'weightFloor': weightFloor,
+    'weightCeiling': weightCeiling,
+    'maxAdjustmentPct': maxAdjustmentPct,
+  };
+}
+
+class AerospikeInfo {
+  final String host;
+  final int port;
+  final String namespace;
+
+  AerospikeInfo({required this.host, required this.port, required this.namespace});
+
+  factory AerospikeInfo.fromJson(Map<String, dynamic> json) {
+    return AerospikeInfo(
+      host: json['host'] ?? '',
+      port: (json['port'] ?? 0).toInt(),
+      namespace: json['namespace'] ?? '',
+    );
+  }
+}
+
+class AnomalyRuleModel {
+  final String ruleId;
+  final String name;
+  final String description;
+  final String ruleType;
+  double variancePct;
+  double riskWeight;
+  bool enabled;
+  Map<String, String> params;
+
+  AnomalyRuleModel({
+    required this.ruleId,
+    required this.name,
+    required this.description,
+    required this.ruleType,
+    required this.variancePct,
+    required this.riskWeight,
+    required this.enabled,
+    required this.params,
+  });
+
+  factory AnomalyRuleModel.fromJson(Map<String, dynamic> json) {
+    return AnomalyRuleModel(
+      ruleId: json['ruleId'] ?? '',
+      name: json['name'] ?? '',
+      description: json['description'] ?? '',
+      ruleType: json['ruleType'] ?? '',
+      variancePct: (json['variancePct'] ?? 0).toDouble(),
+      riskWeight: (json['riskWeight'] ?? 1.0).toDouble(),
+      enabled: json['enabled'] ?? true,
+      params: (json['params'] as Map<String, dynamic>?)
+          ?.map((k, v) => MapEntry(k, v.toString())) ?? {},
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'ruleId': ruleId,
+    'name': name,
+    'description': description,
+    'ruleType': ruleType,
+    'variancePct': variancePct,
+    'riskWeight': riskWeight,
+    'enabled': enabled,
+    'params': params,
+  };
+}
