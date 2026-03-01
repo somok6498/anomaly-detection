@@ -1,4 +1,7 @@
+import 'dart:js_interop';
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
+import 'package:web/web.dart' as web;
 import 'theme/app_theme.dart';
 import 'theme/theme_notifier.dart';
 import 'services/api_service.dart';
@@ -14,6 +17,7 @@ import 'screens/settings_page.dart';
 final themeNotifier = ThemeNotifier();
 
 void main() {
+  usePathUrlStrategy();
   runApp(const AnomalyDashboardApp());
 }
 
@@ -74,12 +78,27 @@ class _DashboardPageState extends State<DashboardPage> {
   int _activeTab = 0;
   int _pendingCount = 0;
 
-  // Analytics page key for accessing state
+  // Page keys for accessing state
   final _analyticsKey = GlobalKey<AnalyticsPageState>();
+  final _settingsKey = GlobalKey<SettingsPageState>();
+
+  static const _tabRoutes = ['investigation', 'review-queue', 'analytics', 'settings'];
+
+  int _tabFromUrl() {
+    final path = web.window.location.pathname.replaceFirst('/', '');
+    final idx = _tabRoutes.indexOf(path);
+    return idx >= 0 ? idx : 0;
+  }
+
+  void _updateUrl(int tab) {
+    web.window.history.replaceState(''.toJS, '', '/${_tabRoutes[tab]}');
+  }
 
   @override
   void initState() {
     super.initState();
+    _activeTab = _tabFromUrl();
+    _updateUrl(_activeTab);
     _loadPendingCount();
   }
 
@@ -283,7 +302,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             onExportRulesCsv: _exportRulesCsv,
                             onExportRulesPdf: _exportRulesPdf,
                           )
-                        : const SettingsPage(),
+                        : SettingsPage(key: _settingsKey),
           ),
         ],
       ),
@@ -331,13 +350,48 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  Future<void> _switchTab(int index) async {
+    // If leaving Settings tab, check for unsaved changes
+    if (_activeTab == 3 && index != 3) {
+      final hasUnsaved = _settingsKey.currentState?.hasUnsavedChanges ?? false;
+      if (hasUnsaved) {
+        final discard = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppTheme.cardBg,
+            title: Text('Unsaved Changes',
+                style: TextStyle(color: AppTheme.textPrimary, fontSize: 16)),
+            content: Text(
+                'You have unsaved changes on the Settings page. Do you want to discard them?',
+                style: TextStyle(color: AppTheme.textSecondary, fontSize: 14)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: Text('Stay', style: TextStyle(color: AppTheme.accent)),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(ctx, true),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.critical,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('Discard'),
+              ),
+            ],
+          ),
+        );
+        if (discard != true) return;
+      }
+    }
+    setState(() => _activeTab = index);
+    _updateUrl(index);
+    if (index == 1) _loadPendingCount();
+  }
+
   Widget _buildTabButton(int index, String label, IconData icon, {int badge = 0}) {
     final isActive = _activeTab == index;
     return InkWell(
-      onTap: () {
-        setState(() => _activeTab = index);
-        if (index == 1) _loadPendingCount();
-      },
+      onTap: () => _switchTab(index),
       borderRadius: BorderRadius.circular(8),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),

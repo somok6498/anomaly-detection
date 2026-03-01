@@ -10,10 +10,10 @@ class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  State<SettingsPage> createState() => _SettingsPageState();
+  State<SettingsPage> createState() => SettingsPageState();
 }
 
-class _SettingsPageState extends State<SettingsPage> {
+class SettingsPageState extends State<SettingsPage> {
   final _api = ApiService();
   bool _loading = true;
 
@@ -51,6 +51,37 @@ class _SettingsPageState extends State<SettingsPage> {
 
   // Txn type add
   final _newTypeCtrl = TextEditingController();
+
+  // Original values for dirty checking
+  List<String> _origTxnTypes = [];
+  bool _origSilenceEnabled = false;
+
+  bool get hasUnsavedChanges {
+    if (_dirtyRuleIds.isNotEmpty) return true;
+    if (_thresholds != null && (
+      _alertCtrl.text != _thresholds!.alertThreshold.toString() ||
+      _blockCtrl.text != _thresholds!.blockThreshold.toString() ||
+      _ewmaCtrl.text != _thresholds!.ewmaAlpha.toString() ||
+      _minTxnsCtrl.text != _thresholds!.minProfileTxns.toString()
+    )) return true;
+    if (_feedback != null && (
+      _timeoutCtrl.text != _feedback!.autoAcceptTimeoutMs.toString() ||
+      _tuningHrsCtrl.text != _feedback!.tuningIntervalHours.toString() ||
+      _minSamplesCtrl.text != _feedback!.minSamplesForTuning.toString() ||
+      _floorCtrl.text != _feedback!.weightFloor.toString() ||
+      _ceilingCtrl.text != _feedback!.weightCeiling.toString() ||
+      _maxAdjCtrl.text != _feedback!.maxAdjustmentPct.toString()
+    )) return true;
+    if (_txnTypes.join(',') != _origTxnTypes.join(',')) return true;
+    if (_silenceConfig != null && (
+      _silenceEnabled != _origSilenceEnabled ||
+      _silenceIntervalCtrl.text != _silenceConfig!.checkIntervalMinutes.toString() ||
+      _silenceMultiplierCtrl.text != _silenceConfig!.silenceMultiplier.toString() ||
+      _silenceMinTpsCtrl.text != _silenceConfig!.minExpectedTps.toString() ||
+      _silenceMinHoursCtrl.text != _silenceConfig!.minCompletedHours.toString()
+    )) return true;
+    return false;
+  }
 
   // Rule text controllers keyed by ruleId
   final Map<String, TextEditingController> _varianceControllers = {};
@@ -131,6 +162,10 @@ class _SettingsPageState extends State<SettingsPage> {
         _weightControllers[r.ruleId] = TextEditingController(text: r.riskWeight.toString());
       }
       _dirtyRuleIds.clear();
+
+      // Snapshot original values for dirty checking
+      _origTxnTypes = List.from(_txnTypes);
+      _origSilenceEnabled = _silenceEnabled;
     } catch (e) {
       if (mounted) ToastHelper.showError(context, 'Failed to load config: $e');
     }
@@ -207,7 +242,10 @@ class _SettingsPageState extends State<SettingsPage> {
   Future<void> _saveTxnTypes() async {
     try {
       final updated = await _api.updateTransactionTypes(_txnTypes);
-      setState(() => _txnTypes = updated);
+      setState(() {
+        _txnTypes = updated;
+        _origTxnTypes = List.from(updated);
+      });
       if (mounted) ToastHelper.showSuccess(context, 'Transaction types saved');
     } catch (e) {
       if (mounted) ToastHelper.showError(context, '$e');
@@ -232,6 +270,7 @@ class _SettingsPageState extends State<SettingsPage> {
         minCompletedHours: minHours,
       ));
       _silenceConfig = updated;
+      _origSilenceEnabled = updated.enabled;
       if (mounted) ToastHelper.showSuccess(context, 'Silence config saved');
     } catch (e) {
       if (mounted) ToastHelper.showError(context, '$e');
@@ -382,9 +421,13 @@ class _SettingsPageState extends State<SettingsPage> {
   }
 
   void _showParamsDialog(AnomalyRuleModel rule) {
-    final entries = Map<String, String>.from(rule.params);
-    final keyCtrl = TextEditingController();
-    final valCtrl = TextEditingController();
+    final keys = List<String>.from(rule.params.keys);
+    final controllers = <String, TextEditingController>{
+      for (final k in keys) k: TextEditingController(text: rule.params[k] ?? ''),
+    };
+    final newKeyCtrl = TextEditingController();
+    final newValCtrl = TextEditingController();
+    String? validationError;
 
     showDialog(
       context: context,
@@ -398,22 +441,30 @@ class _SettingsPageState extends State<SettingsPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                ...entries.entries.map((e) => Padding(
+                ...keys.map((key) => Padding(
                   padding: const EdgeInsets.only(bottom: 6),
                   child: Row(
                     children: [
-                      SizedBox(width: 140, child: Text(e.key,
+                      SizedBox(width: 140, child: Text(key,
                           style: TextStyle(color: AppTheme.textSecondary, fontSize: 12, fontWeight: FontWeight.w600))),
                       const SizedBox(width: 8),
                       Expanded(child: TextField(
-                        controller: TextEditingController(text: e.value),
+                        controller: controllers[key],
                         style: TextStyle(color: AppTheme.textPrimary, fontSize: 12),
                         decoration: _compactInputDecor(),
-                        onChanged: (v) => entries[e.key] = v,
+                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                        maxLength: 7,
+                        buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
+                        onChanged: (_) {
+                          if (validationError != null) setDialogState(() => validationError = null);
+                        },
                       )),
                       IconButton(
                         icon: Icon(Icons.close, size: 16, color: AppTheme.critical),
-                        onPressed: () => setDialogState(() => entries.remove(e.key)),
+                        onPressed: () => setDialogState(() {
+                          keys.remove(key);
+                          controllers.remove(key);
+                        }),
                       ),
                     ],
                   ),
@@ -422,28 +473,39 @@ class _SettingsPageState extends State<SettingsPage> {
                 Row(
                   children: [
                     Expanded(child: TextField(
-                      controller: keyCtrl,
+                      controller: newKeyCtrl,
                       style: TextStyle(color: AppTheme.textPrimary, fontSize: 12),
                       decoration: _compactInputDecor().copyWith(hintText: 'Key'),
                     )),
                     const SizedBox(width: 8),
                     Expanded(child: TextField(
-                      controller: valCtrl,
+                      controller: newValCtrl,
                       style: TextStyle(color: AppTheme.textPrimary, fontSize: 12),
                       decoration: _compactInputDecor().copyWith(hintText: 'Value'),
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      maxLength: 7,
+                      buildCounter: (_, {required currentLength, required isFocused, maxLength}) => null,
                     )),
                     IconButton(
                       icon: const Icon(Icons.add, size: 18, color: AppTheme.accent),
                       onPressed: () {
-                        if (keyCtrl.text.isNotEmpty) {
-                          setDialogState(() => entries[keyCtrl.text] = valCtrl.text);
-                          keyCtrl.clear();
-                          valCtrl.clear();
+                        final k = newKeyCtrl.text.trim();
+                        if (k.isNotEmpty && !keys.contains(k)) {
+                          setDialogState(() {
+                            keys.add(k);
+                            controllers[k] = TextEditingController(text: newValCtrl.text);
+                          });
+                          newKeyCtrl.clear();
+                          newValCtrl.clear();
                         }
                       },
                     ),
                   ],
                 ),
+                if (validationError != null) ...[
+                  const SizedBox(height: 10),
+                  Text(validationError!, style: const TextStyle(color: AppTheme.critical, fontSize: 12)),
+                ],
               ],
             ),
           ),
@@ -454,8 +516,20 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             ElevatedButton(
               onPressed: () {
+                // Read current values directly from controllers
+                for (final key in keys) {
+                  final val = controllers[key]?.text ?? '';
+                  final n = double.tryParse(val);
+                  if (val.isEmpty || n == null || n < 0 || n > 9999) {
+                    setDialogState(() => validationError = '$key: must be a number between 0 and 9999');
+                    return;
+                  }
+                }
+                final result = <String, String>{
+                  for (final key in keys) key: controllers[key]!.text,
+                };
                 setState(() {
-                  rule.params = Map<String, String>.from(entries);
+                  rule.params = result;
                   _dirtyRuleIds.add(rule.ruleId);
                 });
                 Navigator.pop(ctx);
@@ -678,3 +752,4 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
+
