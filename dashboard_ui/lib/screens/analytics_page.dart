@@ -7,6 +7,7 @@ import '../widgets/section_card.dart';
 import '../widgets/stat_card.dart';
 import '../widgets/network_graph_widget.dart';
 import '../utils/toast_helper.dart';
+import '../widgets/time_range_selector.dart';
 
 class AnalyticsPage extends StatefulWidget {
   final VoidCallback? onExportRulesCsv;
@@ -24,13 +25,22 @@ class AnalyticsPageState extends State<AnalyticsPage> {
 
   bool _loadingRules = true;
   bool _loadingNetwork = false;
+  bool _loadingSilence = true;
+  bool _checkingSilence = false;
   String? _rulesError;
   String? _networkError;
+  String? _silenceError;
 
   List<RulePerformance> _ruleStats = [];
   NetworkGraph? _networkGraph;
   GraphStatus? _graphStatus;
   String? _networkClientId;
+  SilenceStatus? _silenceStatus;
+
+  // Time range filter
+  TimeRangePreset _timePreset = TimeRangePreset.min15;
+  int? _fromDate;
+  int? _toDate;
 
   // Expose rule stats for export
   List<RulePerformance> get ruleStats => _ruleStats;
@@ -38,17 +48,28 @@ class AnalyticsPageState extends State<AnalyticsPage> {
   @override
   void initState() {
     super.initState();
+    final defaultRange = TimeRange.fromPreset(TimeRangePreset.min15);
+    _fromDate = defaultRange.fromEpochMs;
+    _toDate = defaultRange.toEpochMs;
     _loadRulePerformance();
+    _loadSilenceStatus();
   }
 
   Future<void> _loadRulePerformance() async {
+    // Recompute relative time range for non-custom presets
+    if (_timePreset != TimeRangePreset.custom) {
+      final range = TimeRange.fromPreset(_timePreset);
+      _fromDate = range.fromEpochMs;
+      _toDate = range.toEpochMs;
+    }
+
     setState(() {
       _loadingRules = true;
       _rulesError = null;
     });
     try {
       final results = await Future.wait([
-        _api.getRulePerformance(),
+        _api.getRulePerformance(fromDate: _fromDate, toDate: _toDate),
         _api.getGraphStatus(),
       ]);
       if (mounted) {
@@ -98,6 +119,46 @@ class AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
+  Future<void> _loadSilenceStatus() async {
+    setState(() {
+      _loadingSilence = true;
+      _silenceError = null;
+    });
+    try {
+      final status = await _api.getSilenceStatus();
+      if (mounted) {
+        setState(() {
+          _silenceStatus = status;
+          _loadingSilence = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        final msg = e.toString().replaceFirst('Exception: ', '');
+        setState(() {
+          _silenceError = msg;
+          _loadingSilence = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _triggerSilenceCheck() async {
+    setState(() => _checkingSilence = true);
+    try {
+      await _api.triggerSilenceCheck();
+      await _loadSilenceStatus();
+    } catch (e) {
+      if (mounted) {
+        ToastHelper.showError(context, 'Silence check failed: ${e.toString().replaceFirst('Exception: ', '')}');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _checkingSilence = false);
+      }
+    }
+  }
+
   @override
   void dispose() {
     _networkClientController.dispose();
@@ -114,9 +175,25 @@ class AnalyticsPageState extends State<AnalyticsPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Container(
+                margin: const EdgeInsets.only(bottom: 16),
+                child: TimeRangeSelector(
+                  initialPreset: _timePreset,
+                  onChanged: (range) {
+                    setState(() {
+                      _timePreset = range.preset;
+                      _fromDate = range.fromEpochMs;
+                      _toDate = range.toEpochMs;
+                    });
+                    _loadRulePerformance();
+                  },
+                ),
+              ),
               _buildRulePerformanceSection(),
               const SizedBox(height: 8),
               _buildNetworkSection(),
+              const SizedBox(height: 8),
+              _buildSilenceSection(),
             ],
           ),
         ),
@@ -423,6 +500,151 @@ class AnalyticsPageState extends State<AnalyticsPage> {
         ],
       ),
     );
+  }
+
+  Widget _buildSilenceSection() {
+    return SectionCard(
+      title: 'Silence Detection Monitor',
+      trailing: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (_checkingSilence)
+            SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2))
+          else
+            IconButton(
+              onPressed: _triggerSilenceCheck,
+              icon: Icon(Icons.refresh, color: AppTheme.textSecondary, size: 20),
+              tooltip: 'Run silence check now',
+            ),
+        ],
+      ),
+      child: _loadingSilence
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(40),
+                child: CircularProgressIndicator(color: AppTheme.accent),
+              ),
+            )
+          : _silenceError != null
+              ? Text(_silenceError!, style: const TextStyle(color: AppTheme.critical))
+              : _buildSilenceContent(),
+    );
+  }
+
+  Widget _buildSilenceContent() {
+    final status = _silenceStatus;
+    if (status == null || status.silentClientCount == 0) {
+      return Container(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.check_circle, color: AppTheme.pass, size: 20),
+            const SizedBox(width: 8),
+            Text('All clients active — no silence alerts',
+                style: TextStyle(fontSize: 14, color: AppTheme.pass, fontWeight: FontWeight.w500)),
+          ],
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Summary stat cards
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Wrap(
+            spacing: 14,
+            runSpacing: 8,
+            children: [
+              SizedBox(width: 160, child: StatCard(
+                label: 'Silent Clients',
+                value: status.silentClientCount.toString(),
+                valueColor: status.silentClientCount > 0 ? AppTheme.critical : AppTheme.pass,
+              )),
+            ],
+          ),
+        ),
+        // Client table
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: WidgetStateProperty.all(Colors.transparent),
+            dataRowColor: WidgetStateProperty.all(Colors.transparent),
+            columns: [
+              DataColumn(label: Text('CLIENT', style: _colStyle)),
+              DataColumn(label: Text('SILENT FOR', style: _colStyle)),
+              DataColumn(label: Text('LAST TXN', style: _colStyle)),
+              DataColumn(label: Text('EXPECTED GAP', style: _colStyle)),
+              DataColumn(label: Text('RATIO', style: _colStyle)),
+              DataColumn(label: Text('EWMA TPS', style: _colStyle)),
+              DataColumn(label: Text('AVG AMOUNT', style: _colStyle)),
+              DataColumn(label: Text('TOTAL TXNS', style: _colStyle)),
+            ],
+            rows: status.clients.map((c) {
+              Color ratioColor = AppTheme.textPrimary;
+              if (c.silenceRatio >= 5) {
+                ratioColor = AppTheme.critical;
+              } else if (c.silenceRatio >= 3) {
+                ratioColor = AppTheme.alert;
+              }
+
+              return DataRow(cells: [
+                DataCell(Text(c.clientId, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppTheme.accent))),
+                DataCell(Text(_formatDuration(c.silentForMinutes), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.critical))),
+                DataCell(Text(
+                  c.lastTransactionAt > 0 ? _formatTimeAgo(c.lastTransactionAt) : '-',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                )),
+                DataCell(Text(
+                  c.expectedGapMinutes > 0 ? '${c.expectedGapMinutes.toStringAsFixed(1)} min' : '-',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                )),
+                DataCell(Text(
+                  c.silenceRatio > 0 ? '${c.silenceRatio.toStringAsFixed(1)}x' : '-',
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: ratioColor),
+                )),
+                DataCell(Text(
+                  c.ewmaHourlyTps > 0 ? '${c.ewmaHourlyTps.toStringAsFixed(1)}/hr' : '-',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                )),
+                DataCell(Text(
+                  c.ewmaAmount > 0 ? '₹${c.ewmaAmount.toStringAsFixed(0)}' : '-',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textPrimary),
+                )),
+                DataCell(Text(
+                  c.totalTxnCount > 0 ? c.totalTxnCount.toString() : '-',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                )),
+              ]);
+            }).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  TextStyle get _colStyle => TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textSecondary);
+
+  String _formatDuration(int minutes) {
+    if (minutes < 60) return '${minutes}m';
+    final hours = minutes ~/ 60;
+    final mins = minutes % 60;
+    if (hours < 24) return '${hours}h ${mins}m';
+    final days = hours ~/ 24;
+    final remHours = hours % 24;
+    return '${days}d ${remHours}h';
+  }
+
+  String _formatTimeAgo(int epochMs) {
+    final diff = DateTime.now().millisecondsSinceEpoch - epochMs;
+    final minutes = diff ~/ 60000;
+    if (minutes < 60) return '${minutes}m ago';
+    final hours = minutes ~/ 60;
+    if (hours < 24) return '${hours}h ${minutes % 60}m ago';
+    final days = hours ~/ 24;
+    return '${days}d ${hours % 24}h ago';
   }
 
   Widget _legendDot(Color color, String label) {

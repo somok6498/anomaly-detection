@@ -207,6 +207,65 @@ class ConfigControllerTest {
                 .andExpect(jsonPath("$.field").value("transactionTypes"));
     }
 
+    // ── Silence Detection ──
+
+    @Test
+    void getSilenceConfig_success() throws Exception {
+        RiskThresholdConfig.SilenceDetection sd = new RiskThresholdConfig.SilenceDetection();
+        sd.setEnabled(true);
+        sd.setCheckIntervalMinutes(5);
+        sd.setSilenceMultiplier(3.0);
+        sd.setMinExpectedTps(1.0);
+        sd.setMinCompletedHours(48);
+        when(thresholdConfig.getSilenceDetection()).thenReturn(sd);
+
+        mockMvc.perform(get("/api/v1/config/silence"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.checkIntervalMinutes").value(5))
+                .andExpect(jsonPath("$.silenceMultiplier").value(3.0))
+                .andExpect(jsonPath("$.minExpectedTps").value(1.0))
+                .andExpect(jsonPath("$.minCompletedHours").value(48));
+    }
+
+    @Test
+    void updateSilenceConfig_success() throws Exception {
+        RiskThresholdConfig.SilenceDetection sd = new RiskThresholdConfig.SilenceDetection();
+        sd.setEnabled(false);
+        sd.setCheckIntervalMinutes(10);
+        sd.setSilenceMultiplier(5.0);
+        sd.setMinExpectedTps(2.0);
+        sd.setMinCompletedHours(24);
+        when(thresholdConfig.getSilenceDetection()).thenReturn(sd);
+
+        mockMvc.perform(put("/api/v1/config/silence")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "enabled", false,
+                                "checkIntervalMinutes", 10,
+                                "silenceMultiplier", 5.0,
+                                "minExpectedTps", 2.0,
+                                "minCompletedHours", 24
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.silenceMultiplier").value(5.0));
+    }
+
+    @Test
+    void updateSilenceConfig_invalidMultiplier_returns400() throws Exception {
+        RiskThresholdConfig.SilenceDetection sd = new RiskThresholdConfig.SilenceDetection();
+        when(thresholdConfig.getSilenceDetection()).thenReturn(sd);
+
+        mockMvc.perform(put("/api/v1/config/silence")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "silenceMultiplier", 0
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("silenceMultiplier"));
+    }
+
     // ── Aerospike (read-only) ──
 
     @Test

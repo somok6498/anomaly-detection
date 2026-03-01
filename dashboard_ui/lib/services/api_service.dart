@@ -191,9 +191,14 @@ class ApiService {
 
   // ── Analytics API ──
 
-  Future<List<RulePerformance>> getRulePerformance() async {
-    final response =
-        await http.get(Uri.parse('$baseUrl/analytics/rules/performance'));
+  Future<List<RulePerformance>> getRulePerformance({int? fromDate, int? toDate}) async {
+    final params = <String, String>{};
+    if (fromDate != null) params['fromDate'] = fromDate.toString();
+    if (toDate != null) params['toDate'] = toDate.toString();
+
+    final uri = Uri.parse('$baseUrl/analytics/rules/performance')
+        .replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await http.get(uri);
     if (response.statusCode != 200) {
       throw Exception(
           'Failed to load rule performance: ${response.statusCode}');
@@ -304,5 +309,46 @@ class ApiService {
     final response = await http.get(Uri.parse('$baseUrl/config/aerospike'));
     if (response.statusCode != 200) throw Exception('Failed to load Aerospike info');
     return AerospikeInfo.fromJson(jsonDecode(response.body));
+  }
+
+  // ── Silence Detection API ──
+
+  Future<SilenceStatus> getSilenceStatus() async {
+    final response = await http.get(Uri.parse('$baseUrl/silence'));
+    if (response.statusCode != 200) throw Exception('Failed to load silence status');
+    return SilenceStatus.fromJson(jsonDecode(response.body));
+  }
+
+  Future<Map<String, dynamic>> triggerSilenceCheck() async {
+    final response = await http.post(Uri.parse('$baseUrl/silence/check'));
+    if (response.statusCode != 200) throw Exception('Failed to trigger silence check');
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
+  Future<SilenceConfig> getSilenceConfig() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/silence'));
+    if (response.statusCode != 200) throw Exception('Failed to load silence config');
+    return SilenceConfig.fromJson(jsonDecode(response.body));
+  }
+
+  Future<SilenceConfig> updateSilenceConfig(SilenceConfig config) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/config/silence'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(config.toJson()),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update silence config');
+    }
+    return SilenceConfig.fromJson(jsonDecode(response.body));
+  }
+
+  // ── Demo Data API ──
+
+  Future<Map<String, dynamic>> generateDemoData() async {
+    final response = await http.post(Uri.parse('$baseUrl/demo/generate'));
+    if (response.statusCode != 200) throw Exception('Failed to generate demo data');
+    return jsonDecode(response.body) as Map<String, dynamic>;
   }
 }

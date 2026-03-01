@@ -41,6 +41,14 @@ class _SettingsPageState extends State<SettingsPage> {
   final _ceilingCtrl = TextEditingController();
   final _maxAdjCtrl = TextEditingController();
 
+  // Silence detection
+  SilenceConfig? _silenceConfig;
+  bool _silenceEnabled = false;
+  final _silenceIntervalCtrl = TextEditingController();
+  final _silenceMultiplierCtrl = TextEditingController();
+  final _silenceMinTpsCtrl = TextEditingController();
+  final _silenceMinHoursCtrl = TextEditingController();
+
   // Txn type add
   final _newTypeCtrl = TextEditingController();
 
@@ -67,6 +75,10 @@ class _SettingsPageState extends State<SettingsPage> {
     _ceilingCtrl.dispose();
     _maxAdjCtrl.dispose();
     _newTypeCtrl.dispose();
+    _silenceIntervalCtrl.dispose();
+    _silenceMultiplierCtrl.dispose();
+    _silenceMinTpsCtrl.dispose();
+    _silenceMinHoursCtrl.dispose();
     for (final c in _varianceControllers.values) { c.dispose(); }
     for (final c in _weightControllers.values) { c.dispose(); }
     super.dispose();
@@ -81,12 +93,14 @@ class _SettingsPageState extends State<SettingsPage> {
         _api.getFeedbackConfig(),
         _api.getTransactionTypes(),
         _api.getAerospikeInfo(),
+        _api.getSilenceConfig(),
       ]);
       _rules = results[0] as List<AnomalyRuleModel>;
       _thresholds = results[1] as ThresholdConfig;
       _feedback = results[2] as FeedbackConfigModel;
       _txnTypes = results[3] as List<String>;
       _aerospike = results[4] as AerospikeInfo;
+      _silenceConfig = results[5] as SilenceConfig;
 
       // Init threshold controllers
       _alertCtrl.text = _thresholds!.alertThreshold.toString();
@@ -101,6 +115,13 @@ class _SettingsPageState extends State<SettingsPage> {
       _floorCtrl.text = _feedback!.weightFloor.toString();
       _ceilingCtrl.text = _feedback!.weightCeiling.toString();
       _maxAdjCtrl.text = _feedback!.maxAdjustmentPct.toString();
+
+      // Init silence detection controllers
+      _silenceEnabled = _silenceConfig!.enabled;
+      _silenceIntervalCtrl.text = _silenceConfig!.checkIntervalMinutes.toString();
+      _silenceMultiplierCtrl.text = _silenceConfig!.silenceMultiplier.toString();
+      _silenceMinTpsCtrl.text = _silenceConfig!.minExpectedTps.toString();
+      _silenceMinHoursCtrl.text = _silenceConfig!.minCompletedHours.toString();
 
       // Init rule controllers
       _varianceControllers.clear();
@@ -193,6 +214,30 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _saveSilenceConfig() async {
+    final interval = int.tryParse(_silenceIntervalCtrl.text);
+    final multiplier = double.tryParse(_silenceMultiplierCtrl.text);
+    final minTps = double.tryParse(_silenceMinTpsCtrl.text);
+    final minHours = int.tryParse(_silenceMinHoursCtrl.text);
+    if (interval == null || multiplier == null || minTps == null || minHours == null) {
+      ToastHelper.showError(context, 'Invalid number format');
+      return;
+    }
+    try {
+      final updated = await _api.updateSilenceConfig(SilenceConfig(
+        enabled: _silenceEnabled,
+        checkIntervalMinutes: interval,
+        silenceMultiplier: multiplier,
+        minExpectedTps: minTps,
+        minCompletedHours: minHours,
+      ));
+      _silenceConfig = updated;
+      if (mounted) ToastHelper.showSuccess(context, 'Silence config saved');
+    } catch (e) {
+      if (mounted) ToastHelper.showError(context, '$e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -212,6 +257,7 @@ class _SettingsPageState extends State<SettingsPage> {
               _buildThresholdsSection(),
               _buildFeedbackSection(),
               _buildTxnTypesSection(),
+              _buildSilenceConfigSection(),
               _buildAerospikeSection(),
             ],
           ),
@@ -234,7 +280,7 @@ class _SettingsPageState extends State<SettingsPage> {
           const Icon(Icons.info_outline, color: AppTheme.alert),
           const SizedBox(width: 12),
           Expanded(child: Text(
-            'Threshold, feedback, and transaction type changes apply immediately but reset '
+            'Threshold, feedback, silence detection, and transaction type changes apply immediately but reset '
             'to application.yml defaults on restart. Rule changes are persisted to Aerospike.',
             style: TextStyle(color: AppTheme.alert, fontSize: 13),
           )),
@@ -528,6 +574,43 @@ class _SettingsPageState extends State<SettingsPage> {
     }
     setState(() => _txnTypes.add(type));
     _newTypeCtrl.clear();
+  }
+
+  // ── Silence Detection ──
+
+  Widget _buildSilenceConfigSection() {
+    if (_silenceConfig == null) return const SizedBox();
+    return SectionCard(
+      title: 'Silence Detection',
+      trailing: _buildSaveBtn(_saveSilenceConfig),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Enabled', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              Switch(
+                value: _silenceEnabled,
+                activeTrackColor: AppTheme.accent,
+                onChanged: (v) => setState(() => _silenceEnabled = v),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 24,
+            runSpacing: 16,
+            children: [
+              _buildField('Check Interval (min)', _silenceIntervalCtrl, 140),
+              _buildField('Silence Multiplier', _silenceMultiplierCtrl, 130),
+              _buildField('Min Expected TPS', _silenceMinTpsCtrl, 130),
+              _buildField('Min Completed Hours', _silenceMinHoursCtrl, 150),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
   // ── Aerospike ──

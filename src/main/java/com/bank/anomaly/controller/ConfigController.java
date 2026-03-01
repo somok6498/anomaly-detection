@@ -140,6 +140,49 @@ public class ConfigController {
         return getTransactionTypes();
     }
 
+    // ── Silence Detection ──
+
+    @Operation(summary = "Get silence detection configuration")
+    @GetMapping("/silence")
+    public ResponseEntity<Map<String, Object>> getSilenceConfig() {
+        RiskThresholdConfig.SilenceDetection sd = thresholdConfig.getSilenceDetection();
+        return ResponseEntity.ok(Map.of(
+                "enabled", sd.isEnabled(),
+                "checkIntervalMinutes", sd.getCheckIntervalMinutes(),
+                "silenceMultiplier", sd.getSilenceMultiplier(),
+                "minExpectedTps", sd.getMinExpectedTps(),
+                "minCompletedHours", sd.getMinCompletedHours()
+        ));
+    }
+
+    @Operation(summary = "Update silence detection configuration",
+            description = "Changes apply immediately but reset on restart.")
+    @PutMapping("/silence")
+    public ResponseEntity<?> updateSilenceConfig(@RequestBody Map<String, Object> body) {
+        RiskThresholdConfig.SilenceDetection sd = thresholdConfig.getSilenceDetection();
+
+        boolean enabled = body.containsKey("enabled")
+                ? Boolean.parseBoolean(body.get("enabled").toString())
+                : sd.isEnabled();
+        int interval = toInt(body, "checkIntervalMinutes", sd.getCheckIntervalMinutes());
+        double multiplier = toDouble(body, "silenceMultiplier", sd.getSilenceMultiplier());
+        double minTps = toDouble(body, "minExpectedTps", sd.getMinExpectedTps());
+        long minHours = toLong(body, "minCompletedHours", sd.getMinCompletedHours());
+
+        if (interval <= 0) return badRequest("checkIntervalMinutes must be > 0", "checkIntervalMinutes");
+        if (multiplier <= 0) return badRequest("silenceMultiplier must be > 0", "silenceMultiplier");
+        if (minTps < 0) return badRequest("minExpectedTps must be >= 0", "minExpectedTps");
+        if (minHours < 0) return badRequest("minCompletedHours must be >= 0", "minCompletedHours");
+
+        sd.setEnabled(enabled);
+        sd.setCheckIntervalMinutes(interval);
+        sd.setSilenceMultiplier(multiplier);
+        sd.setMinExpectedTps(minTps);
+        sd.setMinCompletedHours(minHours);
+
+        return getSilenceConfig();
+    }
+
     // ── Aerospike (read-only) ──
 
     @Operation(summary = "Get Aerospike connection info (read-only)")

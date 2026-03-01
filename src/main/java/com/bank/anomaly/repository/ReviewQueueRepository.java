@@ -174,6 +174,10 @@ public class ReviewQueueRepository {
     }
 
     public List<ReviewQueueItem> findAllWithFeedback() {
+        return findAllWithFeedback(null, null);
+    }
+
+    public List<ReviewQueueItem> findAllWithFeedback(Long fromDate, Long toDate) {
         List<ReviewQueueItem> results = new ArrayList<>();
         ScanPolicy scanPolicy = new ScanPolicy();
         scanPolicy.concurrentNodes = true;
@@ -183,6 +187,9 @@ public class ReviewQueueRepository {
                     try {
                         String status = record.getString("feedbackStatus");
                         if ("TRUE_POSITIVE".equals(status) || "FALSE_POSITIVE".equals(status)) {
+                            long enqueuedAt = record.getLong("enqueuedAt");
+                            if (fromDate != null && enqueuedAt < fromDate) return;
+                            if (toDate != null && enqueuedAt > toDate) return;
                             synchronized (results) {
                                 results.add(mapRecord(record));
                             }

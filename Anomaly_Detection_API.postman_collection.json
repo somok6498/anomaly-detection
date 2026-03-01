@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints plus targeted evaluation scenarios that trigger each of the 15 anomaly rules.\n\n**Setup:** Seed data first with `docker compose run --rm -e SPRING_PROFILES_ACTIVE=seed app`\n\n**Base URL:** http://localhost:8080",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 15 anomaly rules, configuration management, silence detection, analytics with time filtering, and demo data generation.\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -42,6 +42,21 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/v3/api-docs",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Demo Data",
+      "description": "Generate realistic demo data after startup. Evaluates ~166 transactions across 10 scenarios, populates review queue, submits feedback, and fires Prometheus metrics.",
+      "item": [
+        {
+          "name": "Generate Demo Data",
+          "description": "Generates ~166 transactions: 125 warm-up (builds profiles) + 41 anomalous (triggers rules). Then submits feedback on ~60% of pending review items. Returns summary with PASS/ALERT/BLOCK counts.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/demo/generate",
             "header": []
           }
         }
@@ -605,6 +620,38 @@
           }
         },
         {
+          "name": "List Queue Items (time-filtered, last 24h)",
+          "description": "Filter queue items by time range. fromDate and toDate are epoch milliseconds. This example uses a pre-script to compute last 24 hours.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = Date.now();",
+                  "const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);",
+                  "pm.variables.set('fromDate', twentyFourHoursAgo);",
+                  "pm.variables.set('toDate', now);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/queue?fromDate={{fromDate}}&toDate={{toDate}}&limit=50",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "review", "queue"],
+              "query": [
+                { "key": "fromDate", "value": "{{fromDate}}" },
+                { "key": "toDate", "value": "{{toDate}}" },
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
           "name": "List Queue Items (ALERT only)",
           "description": "Filter queue to show only ALERT actions.",
           "request": {
@@ -812,13 +859,45 @@
     },
     {
       "name": "Analytics",
+      "description": "Rule performance analytics and network visualization. Rule performance supports optional fromDate/toDate (epoch ms) for time-filtered stats.",
       "item": [
         {
-          "name": "Rule Performance Stats",
-          "description": "Returns per-rule TP/FP counts and precision based on review queue feedback. Includes all 15 rules, sorted by trigger count.",
+          "name": "Rule Performance Stats (all time)",
+          "description": "Returns per-rule TP/FP counts and precision based on review queue feedback. Without time params, includes all feedback data.",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/analytics/rules/performance",
+            "header": []
+          }
+        },
+        {
+          "name": "Rule Performance Stats (time-filtered, last 24h)",
+          "description": "Returns rule performance filtered by time range. Uses pre-request script to compute last 24 hours.",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const now = Date.now();",
+                  "const twentyFourHoursAgo = now - (24 * 60 * 60 * 1000);",
+                  "pm.variables.set('fromDate', twentyFourHoursAgo);",
+                  "pm.variables.set('toDate', now);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/rules/performance?fromDate={{fromDate}}&toDate={{toDate}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "analytics", "rules", "performance"],
+              "query": [
+                { "key": "fromDate", "value": "{{fromDate}}" },
+                { "key": "toDate", "value": "{{toDate}}" }
+              ]
+            },
             "header": []
           }
         },
@@ -851,10 +930,123 @@
       ]
     },
     {
+      "name": "Configuration",
+      "description": "Runtime configuration management. All changes apply immediately but reset to application.yml defaults on restart.",
+      "item": [
+        {
+          "name": "Get Risk Thresholds",
+          "description": "Returns alertThreshold, blockThreshold, ewmaAlpha, minProfileTxns.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/config/thresholds",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Risk Thresholds",
+          "description": "Update global thresholds. alertThreshold must be < blockThreshold. ewmaAlpha must be in (0, 1).",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/config/thresholds",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"alertThreshold\": 30.0,\n  \"blockThreshold\": 70.0,\n  \"ewmaAlpha\": 0.01,\n  \"minProfileTxns\": 20\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Feedback Config",
+          "description": "Returns auto-accept timeout, tuning interval, weight floor/ceiling, and max adjustment percentage.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/config/feedback",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Feedback Config",
+          "description": "Update feedback and auto-tuning parameters. weightFloor must be < weightCeiling.",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/config/feedback",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"autoAcceptTimeoutMs\": 3600000,\n  \"tuningIntervalHours\": 6,\n  \"minSamplesForTuning\": 50,\n  \"weightFloor\": 0.5,\n  \"weightCeiling\": 5.0,\n  \"maxAdjustmentPct\": 0.10\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Transaction Types",
+          "description": "Returns the list of supported transaction types (e.g., NEFT, RTGS, IMPS, UPI, IFT).",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/config/transaction-types",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Transaction Types",
+          "description": "Replace the transaction types list. Must contain at least one type. Types are uppercased and deduplicated.",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/config/transaction-types",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"transactionTypes\": [\"NEFT\", \"RTGS\", \"IMPS\", \"UPI\", \"IFT\"]\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Silence Detection Config",
+          "description": "Returns silence detection settings: enabled, checkIntervalMinutes, silenceMultiplier, minExpectedTps, minCompletedHours.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/config/silence",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Silence Detection Config",
+          "description": "Update silence detection parameters. Multiplier and interval must be > 0.",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/config/silence",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"checkIntervalMinutes\": 5,\n  \"silenceMultiplier\": 3.0,\n  \"minExpectedTps\": 1.0,\n  \"minCompletedHours\": 48\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Aerospike Info (read-only)",
+          "description": "Returns Aerospike connection details: host, port, namespace.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/config/aerospike",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
       "name": "Silence Detection",
+      "description": "Monitor clients whose transaction flow has unexpectedly stopped. Enriched with profile data: EWMA TPS, expected gap, silence ratio.",
       "item": [
         {
           "name": "Get Silent Clients",
+          "description": "Returns currently silent clients with enriched profile data: ewmaHourlyTps, expectedGapMinutes, thresholdMinutes, silenceRatio, totalTxnCount, ewmaAmount.",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/silence",
@@ -863,6 +1055,7 @@
         },
         {
           "name": "Trigger Manual Silence Check",
+          "description": "Runs an immediate silence detection scan and returns updated silent client list.",
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/silence/check",

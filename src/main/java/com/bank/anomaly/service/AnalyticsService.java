@@ -28,12 +28,16 @@ public class AnalyticsService {
      * Uses triggeredRuleIds stored on each ReviewQueueItem.
      */
     public List<RulePerformance> getRulePerformanceStats() {
+        return getRulePerformanceStats(null, null);
+    }
+
+    public List<RulePerformance> getRulePerformanceStats(Long fromDate, Long toDate) {
         // Build rule lookup from cached rules
         Map<String, AnomalyRule> ruleMap = ruleRepository.getAllRulesCached().stream()
                 .collect(Collectors.toMap(AnomalyRule::getRuleId, r -> r, (a, b) -> a));
 
         // Get all items with explicit feedback (TP or FP)
-        List<ReviewQueueItem> feedbackItems = reviewQueueRepository.findAllWithFeedback();
+        List<ReviewQueueItem> feedbackItems = reviewQueueRepository.findAllWithFeedback(fromDate, toDate);
 
         // Aggregate per-rule TP/FP counts
         Map<String, int[]> ruleCounts = new HashMap<>(); // ruleId -> [trigger, tp, fp]

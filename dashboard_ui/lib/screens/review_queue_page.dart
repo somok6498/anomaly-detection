@@ -9,6 +9,7 @@ import '../widgets/stat_card.dart';
 import '../services/export_service.dart';
 import '../utils/toast_helper.dart';
 import '../widgets/skeleton_loader.dart';
+import '../widgets/time_range_selector.dart';
 
 class ReviewQueuePage extends StatefulWidget {
   final ValueChanged<int>? onPendingCountChanged;
@@ -37,6 +38,11 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   String? _sortColumn;
   bool _sortAscending = true;
 
+  // Time range filter
+  TimeRangePreset _timePreset = TimeRangePreset.min15;
+  int? _fromDate;
+  int? _toDate;
+
   // Score threshold filter
   String _scoreOp = 'none'; // 'none', '>', '<'
   final _scoreThresholdController = TextEditingController();
@@ -56,6 +62,9 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   @override
   void initState() {
     super.initState();
+    final defaultRange = TimeRange.fromPreset(TimeRangePreset.min15);
+    _fromDate = defaultRange.fromEpochMs;
+    _toDate = defaultRange.toEpochMs;
     _loadQueue();
   }
 
@@ -67,6 +76,13 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   }
 
   Future<void> _loadQueue() async {
+    // Recompute relative time range for non-custom presets
+    if (_timePreset != TimeRangePreset.custom) {
+      final range = TimeRange.fromPreset(_timePreset);
+      _fromDate = range.fromEpochMs;
+      _toDate = range.toEpochMs;
+    }
+
     setState(() {
       _loading = true;
       _error = null;
@@ -79,6 +95,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
           clientId: _clientFilterController.text.trim().isEmpty
               ? null
               : _clientFilterController.text.trim().toUpperCase(),
+          fromDate: _fromDate,
+          toDate: _toDate,
         ),
         _api.getReviewStats(),
         _api.getWeightHistory(limit: 20),
@@ -253,6 +271,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       children: [
         // Filter bar
         _buildFilterBar(),
+        // Time range filter
+        _buildTimeRangeBar(),
         // Score threshold filter
         _buildScoreFilterBar(),
         // Stats row
@@ -407,6 +427,24 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               .toList(),
           onChanged: onChanged,
         ),
+      ),
+    );
+  }
+
+  Widget _buildTimeRangeBar() {
+    return Container(
+      color: AppTheme.cardBg,
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: TimeRangeSelector(
+        initialPreset: _timePreset,
+        onChanged: (range) {
+          setState(() {
+            _timePreset = range.preset;
+            _fromDate = range.fromEpochMs;
+            _toDate = range.toEpochMs;
+          });
+          _loadQueue();
+        },
       ),
     );
   }

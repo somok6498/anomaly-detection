@@ -44,7 +44,7 @@ class AnalyticsServiceTest {
                 ReviewQueueItem.builder().txnId("T3").feedbackStatus(ReviewStatus.TRUE_POSITIVE).triggeredRuleIds(List.of("R-A")).build(),
                 ReviewQueueItem.builder().txnId("T4").feedbackStatus(ReviewStatus.FALSE_POSITIVE).triggeredRuleIds(List.of("R-A")).build()
         );
-        when(reviewQueueRepository.findAllWithFeedback()).thenReturn(feedback);
+        when(reviewQueueRepository.findAllWithFeedback(null, null)).thenReturn(feedback);
 
         List<RulePerformance> results = analyticsService.getRulePerformanceStats();
 
@@ -60,7 +60,7 @@ class AnalyticsServiceTest {
     void getRulePerformanceStats_noFeedback_returnsZeroPrecision() {
         AnomalyRule ruleA = TestDataFactory.createAnomalyRule("R-A", "Rule A", RuleType.AMOUNT_ANOMALY, true);
         when(ruleRepository.getAllRulesCached()).thenReturn(List.of(ruleA));
-        when(reviewQueueRepository.findAllWithFeedback()).thenReturn(Collections.emptyList());
+        when(reviewQueueRepository.findAllWithFeedback(null, null)).thenReturn(Collections.emptyList());
 
         List<RulePerformance> results = analyticsService.getRulePerformanceStats();
 

@@ -11,6 +11,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
 - **Swagger UI** for interactive API exploration
+- **Postman Collection** included (`Anomaly_Detection_API.postman_collection.json`) with all endpoints
 - **Flutter Web** dashboard (pre-built, served as static assets)
 
 ### Evaluation Pipeline
@@ -242,15 +243,37 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/analytics/rules/performance` | Per-rule TP/FP counts and precision from feedback |
+| GET | `/api/v1/analytics/rules/performance?fromDate=&toDate=` | Per-rule TP/FP counts and precision from feedback (optional epoch ms time range) |
 | GET | `/api/v1/analytics/graph/client/{clientId}/network` | Network graph nodes + edges for visualization |
 
 ### Silence Detection
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/v1/silence` | Get currently silent clients |
+| GET | `/api/v1/silence` | Get currently silent clients (enriched: includes EWMA TPS, expected gap, silence duration, last txn time) |
 | POST | `/api/v1/silence/check` | Trigger immediate silence scan |
+
+### Demo Data
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/demo/generate` | Generate demo transactions and profiles on-the-fly (body: `{clientCount, txnsPerClient, anomalyPct}`) |
+
+### Configuration
+
+All configuration endpoints are live-reloadable — changes take effect immediately without restart.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/config/thresholds` | Get alert/block thresholds and EWMA settings |
+| PUT | `/api/v1/config/thresholds` | Update thresholds (alertThreshold, blockThreshold, ewmaAlpha, minProfileTxns) |
+| GET | `/api/v1/config/feedback` | Get feedback loop / auto-tuning settings |
+| PUT | `/api/v1/config/feedback` | Update feedback settings (timeout, tuning interval, weight floor/ceiling) |
+| GET | `/api/v1/config/transaction-types` | Get accepted transaction types |
+| PUT | `/api/v1/config/transaction-types` | Update accepted transaction types |
+| GET | `/api/v1/config/silence` | Get silence detection settings |
+| PUT | `/api/v1/config/silence` | Update silence detection settings (enabled, interval, multiplier, thresholds) |
+| GET | `/api/v1/config/aerospike` | Get Aerospike connection info (read-only) |
 
 ### Actuator / Observability
 
@@ -316,13 +339,15 @@ Every 6 hours (configurable), the tuning job:
 
 ### Flutter Dashboard
 
-The dashboard has three tabs:
+The dashboard has four tabs:
 
 1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Includes CSV/PDF export buttons.
 
-2. **Review Queue** — Two-panel layout with filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with rule breakdown.
+2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with rule breakdown.
 
-3. **Analytics** — Rule performance analytics (precision bar chart + TP/FP breakdown table for all 15 rules based on review queue feedback) and beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). Includes CSV/PDF export for rule performance data.
+3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 15 rules based on review queue feedback. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
+
+4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), and Aerospike connection info (read-only). Changes take effect immediately.
 
 ## Observability
 
@@ -402,8 +427,9 @@ Every `N` minutes (default: 5), the scheduler:
 2. For each client with sufficient history (≥48 hours of data, ≥1 txn/hour baseline):
    - Computes the **expected gap** between transactions from their EWMA hourly TPS
    - If the actual silence exceeds `silenceMultiplier × expectedGap` (default 3x), flags the client
-3. Sends a WhatsApp/SMS alert for newly-detected silent clients
-4. Avoids alert fatigue: no re-alerting until the client resumes transacting
+3. Returns enriched data: EWMA hourly TPS, expected gap (minutes), actual silence duration, last transaction timestamp
+4. Sends a WhatsApp/SMS alert for newly-detected silent clients
+5. Avoids alert fatigue: no re-alerting until the client resumes transacting
 
 ### Configuration
 
@@ -465,6 +491,18 @@ Run with `SPRING_PROFILES_ACTIVE=seed` to generate ~100,000+ transactions across
 **Injected anomalies** (clients 006–010): unusual transaction types, spiked amounts (5–10x normal), TPS bursts (50 txns/hour), structuring patterns (15–25 rapid transfers to same beneficiary), drip structuring (40–60 small txns/day), new-beneficiary fan-out (8–12 new beneficiaries/day), cross-channel splitting (same beneficiary via multiple txn types), 3 AM TPS bursts (off-peak seasonal deviation), and Sunday high-volume surges (weekend seasonal deviation).
 
 Each client has 20–50 unique beneficiaries with power-law distribution.
+
+### On-Demand Demo Data Generation
+
+For quick testing without restarting, use the demo data endpoint:
+
+```bash
+curl -s -X POST http://localhost:8080/api/v1/demo/generate \
+  -H "Content-Type: application/json" \
+  -d '{"clientCount": 5, "txnsPerClient": 200, "anomalyPct": 15}' | python3 -m json.tool
+```
+
+This generates clients with EWMA profiles, transactions with realistic patterns, and injects anomalies at the specified percentage. Data is immediately visible in the dashboard.
 
 ## Configuration
 

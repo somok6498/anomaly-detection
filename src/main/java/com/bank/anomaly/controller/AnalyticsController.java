@@ -24,9 +24,13 @@ public class AnalyticsController {
 
     @GetMapping("/rules/performance")
     @Operation(summary = "Get rule performance stats",
-               description = "Returns per-rule TP/FP counts and precision based on review queue feedback")
-    public ResponseEntity<List<RulePerformance>> getRulePerformance() {
-        return ResponseEntity.ok(analyticsService.getRulePerformanceStats());
+               description = "Returns per-rule TP/FP counts and precision based on review queue feedback, optionally filtered by time range")
+    public ResponseEntity<List<RulePerformance>> getRulePerformance(
+            @Parameter(description = "Start time (epoch ms)")
+            @RequestParam(required = false) Long fromDate,
+            @Parameter(description = "End time (epoch ms)")
+            @RequestParam(required = false) Long toDate) {
+        return ResponseEntity.ok(analyticsService.getRulePerformanceStats(fromDate, toDate));
     }
 
     @GetMapping("/graph/client/{clientId}/network")

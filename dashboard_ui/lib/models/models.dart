@@ -388,6 +388,102 @@ class RuleWeightChange {
   }
 }
 
+// ── Silence Detection models ──
+
+class SilentClient {
+  final String clientId;
+  final int alertedAt;
+  final int silentForMinutes;
+  final int lastTransactionAt;
+  final double ewmaHourlyTps;
+  final double expectedGapMinutes;
+  final double silenceMultiplier;
+  final double thresholdMinutes;
+  final double silenceRatio;
+  final int totalTxnCount;
+  final double ewmaAmount;
+
+  SilentClient({
+    required this.clientId,
+    required this.alertedAt,
+    required this.silentForMinutes,
+    this.lastTransactionAt = 0,
+    this.ewmaHourlyTps = 0,
+    this.expectedGapMinutes = 0,
+    this.silenceMultiplier = 3.0,
+    this.thresholdMinutes = 0,
+    this.silenceRatio = 0,
+    this.totalTxnCount = 0,
+    this.ewmaAmount = 0,
+  });
+
+  factory SilentClient.fromJson(Map<String, dynamic> json) {
+    return SilentClient(
+      clientId: json['clientId'] ?? '',
+      alertedAt: (json['alertedAt'] ?? 0).toInt(),
+      silentForMinutes: (json['silentForMinutes'] ?? 0).toInt(),
+      lastTransactionAt: (json['lastTransactionAt'] ?? 0).toInt(),
+      ewmaHourlyTps: (json['ewmaHourlyTps'] ?? 0).toDouble(),
+      expectedGapMinutes: (json['expectedGapMinutes'] ?? 0).toDouble(),
+      silenceMultiplier: (json['silenceMultiplier'] ?? 3.0).toDouble(),
+      thresholdMinutes: (json['thresholdMinutes'] ?? 0).toDouble(),
+      silenceRatio: (json['silenceRatio'] ?? 0).toDouble(),
+      totalTxnCount: (json['totalTxnCount'] ?? 0).toInt(),
+      ewmaAmount: (json['ewmaAmount'] ?? 0).toDouble(),
+    );
+  }
+}
+
+class SilenceStatus {
+  final int silentClientCount;
+  final List<SilentClient> clients;
+
+  SilenceStatus({required this.silentClientCount, required this.clients});
+
+  factory SilenceStatus.fromJson(Map<String, dynamic> json) {
+    return SilenceStatus(
+      silentClientCount: (json['silentClientCount'] ?? 0).toInt(),
+      clients: (json['clients'] as List<dynamic>? ?? [])
+          .map((c) => SilentClient.fromJson(c as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class SilenceConfig {
+  bool enabled;
+  int checkIntervalMinutes;
+  double silenceMultiplier;
+  double minExpectedTps;
+  int minCompletedHours;
+
+  SilenceConfig({
+    required this.enabled,
+    required this.checkIntervalMinutes,
+    required this.silenceMultiplier,
+    required this.minExpectedTps,
+    required this.minCompletedHours,
+  });
+
+  factory SilenceConfig.fromJson(Map<String, dynamic> json) {
+    return SilenceConfig(
+      enabled: json['enabled'] ?? false,
+      checkIntervalMinutes: (json['checkIntervalMinutes'] ?? 5).toInt(),
+      silenceMultiplier: (json['silenceMultiplier'] ?? 3.0).toDouble(),
+      minExpectedTps: (json['minExpectedTps'] ?? 1.0).toDouble(),
+      minCompletedHours: (json['minCompletedHours'] ?? 48).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'enabled': enabled,
+    'checkIntervalMinutes': checkIntervalMinutes,
+    'silenceMultiplier': silenceMultiplier,
+    'minExpectedTps': minExpectedTps,
+    'minCompletedHours': minCompletedHours,
+  };
+}
+
 // ── Config models ──
 
 class ThresholdConfig {
