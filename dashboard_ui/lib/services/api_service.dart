@@ -344,6 +344,20 @@ class ApiService {
     return SilenceConfig.fromJson(jsonDecode(response.body));
   }
 
+  // ── Chat API ──
+
+  Future<ChatResult> sendChatMessage(String message) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/chat'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'message': message}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Chat request failed: ${response.statusCode}');
+    }
+    return ChatResult.fromJson(jsonDecode(response.body));
+  }
+
   // ── Demo Data API ──
 
   Future<Map<String, dynamic>> generateDemoData() async {

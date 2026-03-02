@@ -86,6 +86,10 @@ risk:
     min-expected-tps: 1.0           # skip clients with < 1 txn/hour baseline
     min-completed-hours: 48         # need 2+ days of hourly data before monitoring
 
+# Ollama LLM (for chat assistant)
+ollama:
+  host: ${OLLAMA_HOST:http://localhost:11434}
+
 # Swagger / OpenAPI
 springdoc:
   swagger-ui:

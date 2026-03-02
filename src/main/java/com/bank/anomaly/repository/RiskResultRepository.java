@@ -25,6 +25,8 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
 public class RiskResultRepository {
@@ -101,6 +103,49 @@ public class RiskResultRepository {
         List<EvaluationResult> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getEvaluatedAt()) : null;
         return new PagedResponse<>(page, hasMore, nextCursor);
+    }
+
+    public List<EvaluationResult> findByTimeRange(long fromMs, long toMs,
+                                                   String riskLevel, String action, int maxResults) {
+        List<EvaluationResult> results = new ArrayList<>();
+        ScanPolicy scanPolicy = new ScanPolicy();
+        scanPolicy.concurrentNodes = true;
+
+        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_RISK_RESULTS,
+                (key, record) -> {
+                    try {
+                        long ts = record.getLong("evaluatedAt");
+                        if (ts < fromMs || ts > toMs) return;
+                        if (riskLevel != null && !riskLevel.equalsIgnoreCase(record.getString("riskLevel"))) return;
+                        if (action != null && !action.equalsIgnoreCase(record.getString("action"))) return;
+                        synchronized (results) {
+                            if (results.size() < maxResults) {
+                                results.add(mapRecord(record));
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                });
+
+        return results;
+    }
+
+    public long countDistinctClientsByTimeRange(long fromMs, long toMs, String riskLevel, String action) {
+        Set<String> clientIds = ConcurrentHashMap.newKeySet();
+        ScanPolicy scanPolicy = new ScanPolicy();
+        scanPolicy.concurrentNodes = true;
+
+        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_RISK_RESULTS,
+                (key, record) -> {
+                    try {
+                        long ts = record.getLong("evaluatedAt");
+                        if (ts < fromMs || ts > toMs) return;
+                        if (riskLevel != null && !riskLevel.equalsIgnoreCase(record.getString("riskLevel"))) return;
+                        if (action != null && !action.equalsIgnoreCase(record.getString("action"))) return;
+                        clientIds.add(record.getString("clientId"));
+                    } catch (Exception ignored) {}
+                });
+
+        return clientIds.size();
     }
 
     private EvaluationResult mapRecord(Record record) {

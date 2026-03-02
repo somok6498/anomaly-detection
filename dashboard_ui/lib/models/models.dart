@@ -570,6 +570,53 @@ class AerospikeInfo {
   }
 }
 
+// ── Chat models ──
+
+class ChatResult {
+  final String summary;
+  final List<String> columns;
+  final List<List<String>> rows;
+  final String? queryType;
+  final bool isTabular;
+  final String? errorMessage;
+
+  ChatResult({
+    required this.summary,
+    required this.columns,
+    required this.rows,
+    this.queryType,
+    required this.isTabular,
+    this.errorMessage,
+  });
+
+  factory ChatResult.fromJson(Map<String, dynamic> json) {
+    return ChatResult(
+      summary: json['summary'] ?? '',
+      columns: (json['columns'] as List<dynamic>? ?? []).cast<String>(),
+      rows: (json['rows'] as List<dynamic>? ?? [])
+          .map((r) => (r as List<dynamic>).map((c) => c.toString()).toList())
+          .toList(),
+      queryType: json['queryType'],
+      isTabular: json['tabular'] ?? false,
+      errorMessage: json['errorMessage'],
+    );
+  }
+}
+
+class ChatMessage {
+  final String role; // 'user' or 'assistant'
+  final String text;
+  final DateTime timestamp;
+  final ChatResult? result;
+
+  ChatMessage({
+    required this.role,
+    required this.text,
+    required this.timestamp,
+    this.result,
+  });
+}
+
 class AnomalyRuleModel {
   final String ruleId;
   final String name;

@@ -27,6 +27,30 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
 
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+    restart: unless-stopped
+
+  ollama-init:
+    image: curlimages/curl:latest
+    container_name: ollama-init
+    depends_on:
+      ollama:
+        condition: service_healthy
+    entrypoint: ["sh", "-c", "curl -s -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"llama3.2:3b\"}'"]
+    restart: "no"
+
   app:
     build: .
     container_name: anomaly-detection-app
@@ -35,6 +59,7 @@ services:
     environment:
       - AEROSPIKE_HOST=aerospike
       - AEROSPIKE_PORT=3000
+      - OLLAMA_HOST=http://ollama:11434
       - MANAGEMENT_OTLP_TRACING_ENDPOINT=http://jaeger:4318/v1/traces
       - TWILIO_ACCOUNT_SID=${TWILIO_ACCOUNT_SID:-}
       - TWILIO_AUTH_TOKEN=${TWILIO_AUTH_TOKEN:-}
@@ -93,3 +118,4 @@ services:
 
 volumes:
   aerospike-data:
+  ollama-data:

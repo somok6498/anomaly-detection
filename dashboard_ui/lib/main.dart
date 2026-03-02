@@ -13,6 +13,7 @@ import 'screens/transaction_view.dart';
 import 'screens/review_queue_page.dart';
 import 'screens/analytics_page.dart';
 import 'screens/settings_page.dart';
+import 'screens/chat_page.dart';
 
 final themeNotifier = ThemeNotifier();
 
@@ -305,6 +306,16 @@ class _DashboardPageState extends State<DashboardPage> {
                         : SettingsPage(key: _settingsKey),
           ),
         ],
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(builder: (_) => const ChatPage()),
+          );
+        },
+        backgroundColor: AppTheme.accent,
+        tooltip: 'Ask AI Assistant',
+        child: const Icon(Icons.smart_toy, color: Colors.white),
       ),
     );
   }

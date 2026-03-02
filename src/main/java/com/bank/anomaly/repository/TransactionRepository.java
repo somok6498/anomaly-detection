@@ -16,6 +16,8 @@ import org.springframework.stereotype.Repository;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
 public class TransactionRepository {
@@ -83,6 +85,46 @@ public class TransactionRepository {
         List<Transaction> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getTimestamp()) : null;
         return new PagedResponse<>(page, hasMore, nextCursor);
+    }
+
+    public List<Transaction> findByTimeRange(long fromMs, long toMs, String txnType, int maxResults) {
+        List<Transaction> results = new ArrayList<>();
+        ScanPolicy scanPolicy = new ScanPolicy();
+        scanPolicy.concurrentNodes = true;
+
+        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_TRANSACTIONS,
+                (key, record) -> {
+                    try {
+                        long ts = record.getLong("timestamp");
+                        if (ts < fromMs || ts > toMs) return;
+                        if (txnType != null && !txnType.equalsIgnoreCase(record.getString("txnType"))) return;
+                        synchronized (results) {
+                            if (results.size() < maxResults) {
+                                results.add(mapRecord(record.getString("txnId"), record));
+                            }
+                        }
+                    } catch (Exception ignored) {}
+                });
+
+        return results;
+    }
+
+    public long countDistinctClientsByTimeRange(long fromMs, long toMs, String txnType) {
+        Set<String> clientIds = ConcurrentHashMap.newKeySet();
+        ScanPolicy scanPolicy = new ScanPolicy();
+        scanPolicy.concurrentNodes = true;
+
+        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_TRANSACTIONS,
+                (key, record) -> {
+                    try {
+                        long ts = record.getLong("timestamp");
+                        if (ts < fromMs || ts > toMs) return;
+                        if (txnType != null && !txnType.equalsIgnoreCase(record.getString("txnType"))) return;
+                        clientIds.add(record.getString("clientId"));
+                    } catch (Exception ignored) {}
+                });
+
+        return clientIds.size();
     }
 
     private Transaction mapRecord(String txnId, Record record) {
