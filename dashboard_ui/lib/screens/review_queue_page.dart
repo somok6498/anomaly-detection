@@ -97,8 +97,9 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               : _clientFilterController.text.trim().toUpperCase(),
           fromDate: _fromDate,
           toDate: _toDate,
+          feedbackStatus: _statusFilter == 'ALL' ? null : _statusFilter,
         ),
-        _api.getReviewStats(),
+        _api.getReviewStats(fromDate: _fromDate, toDate: _toDate),
         _api.getWeightHistory(limit: 20),
       ]);
 

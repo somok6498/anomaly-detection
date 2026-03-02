@@ -40,8 +40,9 @@ public class ReviewQueueService {
 
     public PagedResponse<ReviewQueueItem> getQueueItems(String action, String clientId,
                                                 Long fromDate, Long toDate,
-                                                String ruleId, int limit, Long before) {
-        return reviewQueueRepo.findByFilters(action, clientId, fromDate, toDate, ruleId, limit, before);
+                                                String ruleId, String feedbackStatus,
+                                                int limit, Long before) {
+        return reviewQueueRepo.findByFilters(action, clientId, fromDate, toDate, ruleId, feedbackStatus, limit, before);
     }
 
     public ReviewQueueDetail getQueueItemDetail(String txnId) {
@@ -89,8 +90,8 @@ public class ReviewQueueService {
         return updated;
     }
 
-    public Map<String, Integer> getQueueStats() {
-        int[] counts = reviewQueueRepo.countByStatus();
+    public Map<String, Integer> getQueueStats(Long fromDate, Long toDate) {
+        int[] counts = reviewQueueRepo.countByStatus(fromDate, toDate);
         Map<String, Integer> stats = new LinkedHashMap<>();
         stats.put("pending", counts[0]);
         stats.put("truePositive", counts[1]);

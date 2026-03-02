@@ -36,11 +36,12 @@ public class ReviewQueueController {
             @RequestParam(required = false) Long fromDate,
             @RequestParam(required = false) Long toDate,
             @RequestParam(required = false) String ruleId,
+            @RequestParam(required = false) String feedbackStatus,
             @RequestParam(defaultValue = "100") int limit,
             @Parameter(description = "Cursor: return records with enqueuedAt before this value")
             @RequestParam(required = false) Long before) {
         PagedResponse<ReviewQueueItem> items = reviewQueueService.getQueueItems(
-                action, clientId, fromDate, toDate, ruleId, limit, before);
+                action, clientId, fromDate, toDate, ruleId, feedbackStatus, limit, before);
         return ResponseEntity.ok(items);
     }
 
@@ -110,9 +111,11 @@ public class ReviewQueueController {
 
     @GetMapping("/stats")
     @Operation(summary = "Get review queue statistics",
-               description = "Returns counts by feedback status")
-    public ResponseEntity<Map<String, Integer>> getStats() {
-        return ResponseEntity.ok(reviewQueueService.getQueueStats());
+               description = "Returns counts by feedback status, optionally filtered by time range")
+    public ResponseEntity<Map<String, Integer>> getStats(
+            @RequestParam(required = false) Long fromDate,
+            @RequestParam(required = false) Long toDate) {
+        return ResponseEntity.ok(reviewQueueService.getQueueStats(fromDate, toDate));
     }
 
     @GetMapping("/weight-history")

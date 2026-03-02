@@ -201,10 +201,8 @@ public class DemoDataController {
         int count = 0;
         try {
             PagedResponse<ReviewQueueItem> queue = reviewQueueService.getQueueItems(
-                    null, null, null, null, null, 200, null);
-            List<ReviewQueueItem> pending = queue.data().stream()
-                    .filter(item -> item.getFeedbackStatus() == ReviewStatus.PENDING)
-                    .toList();
+                    null, null, null, null, null, "PENDING", 200, null);
+            List<ReviewQueueItem> pending = queue.data().stream().toList();
 
             int toFeedback = Math.max(1, (int) (pending.size() * 0.6));
             for (int i = 0; i < Math.min(toFeedback, pending.size()); i++) {

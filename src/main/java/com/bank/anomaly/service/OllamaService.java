@@ -21,7 +21,7 @@ import java.util.regex.Pattern;
 public class OllamaService {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaService.class);
-    private static final String MODEL = "llama3.2:3b";
+    private static final String MODEL = "llama3.2:1b";
     private static final int TIMEOUT_SECONDS = 300;
 
     private static final Pattern JSON_BLOCK = Pattern.compile(

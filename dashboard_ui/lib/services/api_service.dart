@@ -88,6 +88,7 @@ class ApiService {
     int? fromDate,
     int? toDate,
     String? ruleId,
+    String? feedbackStatus,
     int limit = 100,
     String? before,
   }) async {
@@ -97,6 +98,7 @@ class ApiService {
     if (fromDate != null) params['fromDate'] = fromDate.toString();
     if (toDate != null) params['toDate'] = toDate.toString();
     if (ruleId != null && ruleId.isNotEmpty) params['ruleId'] = ruleId;
+    if (feedbackStatus != null && feedbackStatus.isNotEmpty) params['feedbackStatus'] = feedbackStatus;
     if (before != null) params['before'] = before;
 
     final uri = Uri.parse('$baseUrl/review/queue')
@@ -158,8 +160,14 @@ class ApiService {
     return (data['updatedCount'] ?? 0) as int;
   }
 
-  Future<ReviewStats> getReviewStats() async {
-    final response = await http.get(Uri.parse('$baseUrl/review/stats'));
+  Future<ReviewStats> getReviewStats({int? fromDate, int? toDate}) async {
+    final params = <String, String>{};
+    if (fromDate != null) params['fromDate'] = fromDate.toString();
+    if (toDate != null) params['toDate'] = toDate.toString();
+
+    final uri = Uri.parse('$baseUrl/review/stats')
+        .replace(queryParameters: params.isNotEmpty ? params : null);
+    final response = await http.get(uri);
     if (response.statusCode != 200) {
       throw Exception('Failed to load review stats: ${response.statusCode}');
     }

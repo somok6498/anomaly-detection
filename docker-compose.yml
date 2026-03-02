@@ -48,7 +48,7 @@ services:
     depends_on:
       ollama:
         condition: service_healthy
-    entrypoint: ["sh", "-c", "curl -s -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"llama3.2:3b\"}'"]
+    entrypoint: ["sh", "-c", "curl -s -X POST http://ollama:11434/api/pull -H 'Content-Type: application/json' -d '{\"name\":\"llama3.2:1b\"}'"]
     restart: "no"
 
   app:

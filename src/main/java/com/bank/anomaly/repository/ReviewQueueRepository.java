@@ -97,7 +97,8 @@ public class ReviewQueueRepository {
 
     public PagedResponse<ReviewQueueItem> findByFilters(String action, String clientId,
                                                 Long fromDate, Long toDate,
-                                                String ruleId, int limit, Long before) {
+                                                String ruleId, String feedbackStatus,
+                                                int limit, Long before) {
         List<ReviewQueueItem> results = new ArrayList<>();
         ScanPolicy scanPolicy = new ScanPolicy();
         scanPolicy.concurrentNodes = true;
@@ -113,6 +114,10 @@ public class ReviewQueueRepository {
                         if (clientId != null && !clientId.isEmpty()) {
                             String recClientId = record.getString("clientId");
                             if (!clientId.equalsIgnoreCase(recClientId)) return;
+                        }
+                        if (feedbackStatus != null && !feedbackStatus.isEmpty()) {
+                            String recStatus = record.getString("feedbackStatus");
+                            if (!feedbackStatus.equalsIgnoreCase(recStatus)) return;
                         }
                         long enqueuedAt = record.getLong("enqueuedAt");
                         if (before != null && enqueuedAt >= before) return;
@@ -205,6 +210,10 @@ public class ReviewQueueRepository {
      * Get counts by feedback status for dashboard stats.
      */
     public int[] countByStatus() {
+        return countByStatus(null, null);
+    }
+
+    public int[] countByStatus(Long fromDate, Long toDate) {
         // [pending, truePositive, falsePositive, autoAccepted]
         int[] counts = new int[4];
         ScanPolicy scanPolicy = new ScanPolicy();
@@ -213,6 +222,11 @@ public class ReviewQueueRepository {
         client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_REVIEW_QUEUE,
                 (key, record) -> {
                     try {
+                        if (fromDate != null || toDate != null) {
+                            long ts = record.getLong("enqueuedAt");
+                            if (fromDate != null && ts < fromDate) return;
+                            if (toDate != null && ts > toDate) return;
+                        }
                         String status = record.getString("feedbackStatus");
                         synchronized (counts) {
                             switch (status) {
