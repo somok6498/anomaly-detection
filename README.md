@@ -210,7 +210,6 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 ```
 
 > **Note:** The `aiExplanation` field is generated on-demand by the Ollama LLM when the evaluation result is first viewed via `GET /api/v1/transactions/results/{txnId}` or the review queue detail endpoint. It is cached in Aerospike after generation. If Ollama is unavailable, the field will be `null`.
-```
 
 ## API Endpoints
 
