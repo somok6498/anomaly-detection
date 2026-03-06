@@ -8,6 +8,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
 - **15 anomaly evaluators** — 14 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
+- **Ollama LLM** (llama3.2:1b) — AI chatbot for natural language queries + on-demand AI explanations for flagged transactions
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
 - **Swagger UI** for interactive API exploration
@@ -56,6 +57,18 @@ POST /api/v1/transactions/evaluate
 
 - **Docker** and **Docker Compose**
 - **Java 17+** (only for local development without Docker)
+- **Ollama** (optional, for AI chatbot + transaction explanations) — install natively for Metal GPU acceleration on macOS:
+  ```bash
+  # Install Ollama (macOS)
+  brew install ollama
+
+  # Start the Ollama server
+  ollama serve
+
+  # Pull the model (in another terminal)
+  ollama pull llama3.2:1b
+  ```
+  The Docker app connects to native Ollama via `host.docker.internal:11434`.
 
 ## Quick Start (Docker — recommended)
 
@@ -191,8 +204,12 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
       "partialScore": 55.0,
       "reason": "Amount 90000.00 exceeds EWMA 40832.15 by 120.5%"
     }
-  ]
+  ],
+  "aiExplanation": "This NEFT transaction of ₹90,000 by CLIENT-001 was flagged because the amount is 2.2x higher than the client's usual average of ₹40,832. The system detected this as a potential anomaly with a risk score of 45.2 out of 100, placing it in the ALERT category for ops review."
 }
+```
+
+> **Note:** The `aiExplanation` field is generated on-demand by the Ollama LLM when the evaluation result is first viewed via `GET /api/v1/transactions/results/{txnId}` or the review queue detail endpoint. It is cached in Aerospike after generation. If Ollama is unavailable, the field will be `null`.
 ```
 
 ## API Endpoints
@@ -252,6 +269,12 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 |--------|----------|-------------|
 | GET | `/api/v1/silence` | Get currently silent clients (enriched: includes EWMA TPS, expected gap, silence duration, last txn time) |
 | POST | `/api/v1/silence/check` | Trigger immediate silence scan |
+
+### AI Chat
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/v1/chat` | Send a natural language query. Body: `{"message": "..."}`. Returns summary, tabular data (columns + rows), and query type. |
 
 ### Demo Data
 
@@ -339,15 +362,35 @@ Every 6 hours (configurable), the tuning job:
 
 ### Flutter Dashboard
 
-The dashboard has four tabs:
+The dashboard has four tabs plus a floating AI assistant:
 
-1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Includes CSV/PDF export buttons.
+1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
 
-2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with rule breakdown.
+2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation between Feedback and Transaction Details sections), rule breakdown, client profile summary, and weight history.
 
 3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 15 rules based on review queue feedback. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
 4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), and Aerospike connection info (read-only). Changes take effect immediately.
+
+5. **AI Assistant** (floating) — Opens as a **slide-in side panel** (35% width, 360–520px clamped) from the bottom-right FAB button. Supports **maximize to fullscreen** and minimize back to side panel. Natural language query interface powered by Ollama (llama3.2:1b) with keyword-based fast parsing as primary and LLM as fallback. Supports queries like:
+   - "How many clients did UPI in last 15 mins?"
+   - "List transactions blocked in last 30 mins"
+   - "Clients with shared beneficiaries in last 24 hours" (mule network detection)
+   - "Silenced clients in the system" (EWMA-based silence detection)
+   - "Show review queue stats"
+   - Tabular results with CSV export
+
+### AI-Powered Transaction Explanations
+
+When an operator views a flagged transaction (in Review Queue detail or Investigation page), the system generates a **human-readable explanation** using the Ollama LLM. The explanation:
+
+- States what happened (transaction type, amount, client)
+- Explains **why** the system flagged it (which rules triggered and what they mean in plain English)
+- Highlights the most concerning factor
+- Uses actual numbers from the evaluation (amounts, scores, deviations)
+- Avoids technical jargon (no "EWMA", "z-score", "isolation forest")
+
+Explanations are **generated on-demand** (first view) and **cached in Aerospike** — subsequent views are instant. If Ollama is unavailable, the card simply doesn't appear (graceful degradation).
 
 ## Observability
 
@@ -575,6 +618,7 @@ Sets 1–4 are core data, 5–8 are atomic counters for real-time aggregation, 9
 | Build | Gradle 8.7 |
 | Database | Aerospike 7.1 (Docker) |
 | ML | Isolation Forest (pure Java) |
+| LLM | Ollama + llama3.2:1b (native macOS, Metal GPU) |
 | Notifications | Twilio SDK 10.1.0 (WhatsApp / SMS) |
 | Tracing | Micrometer + OpenTelemetry → Jaeger |
 | Metrics | Micrometer + Prometheus + Grafana |

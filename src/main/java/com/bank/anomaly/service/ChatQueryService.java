@@ -22,18 +22,21 @@ public class ChatQueryService {
     private final ClientProfileRepository clientProfileRepository;
     private final RuleRepository ruleRepository;
     private final ReviewQueueRepository reviewQueueRepository;
+    private final SilenceDetectionService silenceDetectionService;
 
     public ChatQueryService(
             TransactionRepository transactionRepository,
             RiskResultRepository riskResultRepository,
             ClientProfileRepository clientProfileRepository,
             RuleRepository ruleRepository,
-            ReviewQueueRepository reviewQueueRepository) {
+            ReviewQueueRepository reviewQueueRepository,
+            SilenceDetectionService silenceDetectionService) {
         this.transactionRepository = transactionRepository;
         this.riskResultRepository = riskResultRepository;
         this.clientProfileRepository = clientProfileRepository;
         this.ruleRepository = ruleRepository;
         this.reviewQueueRepository = reviewQueueRepository;
+        this.silenceDetectionService = silenceDetectionService;
     }
 
     public ChatResponse execute(ChatIntent intent) {
@@ -50,7 +53,8 @@ public class ChatQueryService {
                 case "COUNT_RULES"        -> handleCountRules(intent);
                 case "LIST_RULES"         -> handleListRules(intent);
                 case "REVIEW_STATS"       -> handleReviewStats(intent);
-                case "SILENT_CLIENTS"     -> handleSilentClients(intent);
+                case "SILENT_CLIENTS"           -> handleSilentClients(intent);
+                case "SHARED_BENEFICIARIES"    -> handleSharedBeneficiaries(intent);
                 default -> errorResponse("Unknown query type: " + intent.getQueryType());
             };
         } catch (Exception e) {
@@ -266,8 +270,39 @@ public class ChatQueryService {
 
     private ChatResponse handleSilentClients(ChatIntent intent) {
         ChatIntent.ChatFilters f = filters(intent);
-        long[] range = timeRange(f);
 
+        // First try the real silence detection service (checks against EWMA-based expected TPS)
+        silenceDetectionService.checkForSilentClients();
+        Map<String, Long> alerted = silenceDetectionService.getAlertedClients();
+
+        if (!alerted.isEmpty()) {
+            long now = System.currentTimeMillis();
+            List<List<String>> rows = alerted.entrySet().stream()
+                    .map(e -> {
+                        long silentMins = (now - e.getValue()) / 60_000L;
+                        ClientProfile p = clientProfileRepository.findByClientId(e.getKey());
+                        double ewmaTps = p != null ? p.getEwmaHourlyTps() : 0;
+                        return List.of(
+                                e.getKey(),
+                                String.format("%.1f", ewmaTps),
+                                silentMins + " min",
+                                p != null ? Instant.ofEpochMilli(p.getLastUpdated()).toString() : "-"
+                        );
+                    })
+                    .collect(Collectors.toList());
+
+            return ChatResponse.builder()
+                    .summary(String.format("Found %d client%s whose silence exceeds their normal pattern",
+                            alerted.size(), alerted.size() == 1 ? "" : "s"))
+                    .isTabular(true)
+                    .queryType(intent.getQueryType())
+                    .columns(List.of("CLIENT ID", "EXPECTED TPS/HR", "SILENT FOR", "LAST ACTIVE"))
+                    .rows(rows)
+                    .build();
+        }
+
+        // Fallback: find clients with no transactions in the given time range
+        long[] range = timeRange(f);
         List<Transaction> activeTxns = transactionRepository.findByTimeRange(
                 range[0], range[1], null, MAX_SCAN_RESULTS);
         Set<String> activeClients = activeTxns.stream()
@@ -291,7 +326,7 @@ public class ChatQueryService {
 
         String timeDesc = f.getTimeRangeMinutes() != null
                 ? "in the last " + f.getTimeRangeMinutes() + " minutes"
-                : "recently";
+                : "in the last 24 hours";
 
         return ChatResponse.builder()
                 .summary(String.format("Found %d client%s with no transactions %s (out of %d total)",
@@ -300,6 +335,71 @@ public class ChatQueryService {
                 .isTabular(true)
                 .queryType(intent.getQueryType())
                 .columns(List.of("CLIENT ID", "TOTAL TXN COUNT", "LAST ACTIVE"))
+                .rows(rows)
+                .build();
+    }
+
+    private ChatResponse handleSharedBeneficiaries(ChatIntent intent) {
+        ChatIntent.ChatFilters f = filters(intent);
+        long[] range = timeRange(f);
+
+        List<Transaction> txns = transactionRepository.findByTimeRange(
+                range[0], range[1], f.getTxnType(), MAX_SCAN_RESULTS);
+
+        // Group by beneficiary key → set of clients that sent to that beneficiary
+        Map<String, Map<String, Integer>> beneToClients = new LinkedHashMap<>();
+        for (Transaction t : txns) {
+            String bene = t.getBeneficiaryAccount();
+            if (bene == null || bene.isBlank()) continue;
+            String beneKey = (t.getBeneficiaryIfsc() != null ? t.getBeneficiaryIfsc() : "?") + ":" + bene;
+            beneToClients.computeIfAbsent(beneKey, k -> new LinkedHashMap<>())
+                    .merge(t.getClientId(), 1, Integer::sum);
+        }
+
+        // Filter to beneficiaries shared by 2+ clients
+        List<Map.Entry<String, Map<String, Integer>>> shared = beneToClients.entrySet().stream()
+                .filter(e -> e.getValue().size() >= 2)
+                .sorted((a, b) -> Integer.compare(b.getValue().size(), a.getValue().size()))
+                .collect(Collectors.toList());
+
+        if (shared.isEmpty()) {
+            String timeDesc = buildDescriptor(f);
+            return ChatResponse.builder()
+                    .summary("No shared beneficiaries found" + timeDesc +
+                            ". No two clients sent to the same account in this time window.")
+                    .isTabular(false)
+                    .queryType(intent.getQueryType())
+                    .columns(Collections.emptyList())
+                    .rows(Collections.emptyList())
+                    .build();
+        }
+
+        int limit = Math.min(intent.getLimit() != null ? intent.getLimit() : 100, MAX_TABLE_ROWS);
+        List<List<String>> rows = shared.stream()
+                .limit(limit)
+                .map(e -> {
+                    String beneKey = e.getKey();
+                    Map<String, Integer> clients = e.getValue();
+                    int totalTxns = clients.values().stream().mapToInt(Integer::intValue).sum();
+                    String clientList = clients.entrySet().stream()
+                            .map(c -> c.getKey() + "(" + c.getValue() + ")")
+                            .collect(Collectors.joining(", "));
+                    return List.of(
+                            beneKey,
+                            String.valueOf(clients.size()),
+                            String.valueOf(totalTxns),
+                            clientList
+                    );
+                })
+                .collect(Collectors.toList());
+
+        String timeDesc = buildDescriptor(f);
+        return ChatResponse.builder()
+                .summary(String.format("Found %d beneficiar%s shared by multiple clients%s",
+                        shared.size(), shared.size() == 1 ? "y" : "ies", timeDesc))
+                .isTabular(true)
+                .queryType(intent.getQueryType())
+                .columns(List.of("BENEFICIARY (IFSC:ACCT)", "CLIENTS", "TOTAL TXNS", "CLIENT BREAKDOWN"))
                 .rows(rows)
                 .build();
     }

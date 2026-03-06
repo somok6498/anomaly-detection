@@ -1,6 +1,9 @@
 package com.bank.anomaly.service;
 
 import com.bank.anomaly.model.ChatIntent;
+import com.bank.anomaly.model.EvaluationResult;
+import com.bank.anomaly.model.RuleResult;
+import com.bank.anomaly.model.Transaction;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -13,9 +16,11 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.time.Duration;
+import java.util.List;
 import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 @Service
 public class OllamaService {
@@ -144,6 +149,85 @@ public class OllamaService {
             log.warn("Failed to parse extracted JSON: {} | Error: {}", jsonStr, e.getMessage());
             throw new IntentParseException(
                     "I couldn't parse the query structure. Please try a simpler question.");
+        }
+    }
+
+    private static final String EXPLANATION_SYSTEM_PROMPT = """
+            You are a banking fraud analyst AI. Given a transaction and its anomaly evaluation results,
+            write a clear, concise explanation in plain English for a bank operations reviewer.
+
+            Your explanation should:
+            - State what happened in 1-2 sentences (the transaction details)
+            - Explain WHY the system flagged it (which rules triggered and what they mean)
+            - Highlight the most concerning factor
+            - Be 3-5 sentences total, professional tone
+            - Use actual numbers from the data (amounts, scores, deviations)
+            - Do NOT use technical jargon like "EWMA", "z-score", or "isolation forest" — translate to plain language
+
+            Respond with ONLY the explanation text, no JSON, no markdown, no bullet points.
+            """;
+
+    public String generateExplanation(Transaction txn, EvaluationResult eval) {
+        List<RuleResult> triggered = eval.getRuleResults().stream()
+                .filter(RuleResult::isTriggered)
+                .collect(Collectors.toList());
+
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Transaction: ").append(txn.getTxnType())
+              .append(" of ₹").append(String.format("%,.2f", txn.getAmount()))
+              .append(" by client ").append(txn.getClientId())
+              .append(" (ID: ").append(txn.getTxnId()).append(")\n");
+        prompt.append("Risk Score: ").append(String.format("%.1f", eval.getCompositeScore()))
+              .append("/100 | Risk Level: ").append(eval.getRiskLevel())
+              .append(" | Action: ").append(eval.getAction()).append("\n\n");
+        prompt.append("Triggered Rules:\n");
+
+        for (RuleResult r : triggered) {
+            prompt.append("- ").append(r.getRuleName())
+                  .append(" (score: ").append(String.format("%.1f", r.getPartialScore()))
+                  .append(", deviation: ").append(String.format("%.1f%%", r.getDeviationPct()))
+                  .append("): ").append(r.getReason()).append("\n");
+        }
+
+        if (triggered.isEmpty()) {
+            prompt.append("- No rules triggered (transaction passed all checks)\n");
+        }
+
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", MODEL,
+                    "prompt", prompt.toString(),
+                    "system", EXPLANATION_SYSTEM_PROMPT,
+                    "stream", false,
+                    "options", Map.of(
+                            "temperature", 0.3,
+                            "num_predict", 300
+                    )
+            );
+            String bodyJson = objectMapper.writeValueAsString(body);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                log.warn("Ollama returned HTTP {} for explanation generation", response.statusCode());
+                return null;
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            String explanation = root.path("response").asText("").trim();
+            return explanation.isEmpty() ? null : explanation;
+
+        } catch (Exception e) {
+            log.warn("Failed to generate AI explanation: {}", e.getMessage());
+            return null;
         }
     }
 

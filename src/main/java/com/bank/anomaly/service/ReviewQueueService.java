@@ -25,17 +25,20 @@ public class ReviewQueueService {
     private final TransactionRepository transactionRepo;
     private final ClientProfileRepository profileRepo;
     private final MetricsConfig metricsConfig;
+    private final OllamaService ollamaService;
 
     public ReviewQueueService(ReviewQueueRepository reviewQueueRepo,
                                RiskResultRepository riskResultRepo,
                                TransactionRepository transactionRepo,
                                ClientProfileRepository profileRepo,
-                               MetricsConfig metricsConfig) {
+                               MetricsConfig metricsConfig,
+                               OllamaService ollamaService) {
         this.reviewQueueRepo = reviewQueueRepo;
         this.riskResultRepo = riskResultRepo;
         this.transactionRepo = transactionRepo;
         this.profileRepo = profileRepo;
         this.metricsConfig = metricsConfig;
+        this.ollamaService = ollamaService;
     }
 
     public PagedResponse<ReviewQueueItem> getQueueItems(String action, String clientId,
@@ -53,12 +56,30 @@ public class ReviewQueueService {
         Transaction transaction = transactionRepo.findByTxnId(txnId);
         ClientProfile profile = profileRepo.findByClientId(queueItem.getClientId());
 
+        // Generate AI explanation on-demand if not already cached
+        if (evaluation != null && evaluation.getAiExplanation() == null && transaction != null) {
+            enrichWithAiExplanation(evaluation, transaction);
+        }
+
         return ReviewQueueDetail.builder()
                 .queueItem(queueItem)
                 .evaluation(evaluation)
                 .transaction(transaction)
                 .clientProfile(profile)
                 .build();
+    }
+
+    public void enrichWithAiExplanation(EvaluationResult evaluation, Transaction transaction) {
+        try {
+            String explanation = ollamaService.generateExplanation(transaction, evaluation);
+            if (explanation != null) {
+                evaluation.setAiExplanation(explanation);
+                riskResultRepo.updateAiExplanation(evaluation.getTxnId(), explanation);
+                log.debug("AI explanation generated and cached for txn={}", evaluation.getTxnId());
+            }
+        } catch (Exception e) {
+            log.warn("Could not generate AI explanation for txn={}: {}", evaluation.getTxnId(), e.getMessage());
+        }
     }
 
     public ReviewQueueItem submitFeedback(String txnId, ReviewStatus status, String feedbackBy) {

@@ -53,7 +53,7 @@ class DashboardPage extends StatefulWidget {
   State<DashboardPage> createState() => _DashboardPageState();
 }
 
-class _DashboardPageState extends State<DashboardPage> {
+class _DashboardPageState extends State<DashboardPage> with SingleTickerProviderStateMixin {
   final _searchController = TextEditingController();
   final _api = ApiService();
   SearchType _searchType = SearchType.client;
@@ -79,6 +79,12 @@ class _DashboardPageState extends State<DashboardPage> {
   int _activeTab = 0;
   int _pendingCount = 0;
 
+  // Chat panel state
+  bool _chatOpen = false;
+  bool _chatFullscreen = false;
+  late AnimationController _chatSlideController;
+  late Animation<Offset> _chatSlideAnimation;
+
   // Page keys for accessing state
   final _analyticsKey = GlobalKey<AnalyticsPageState>();
   final _settingsKey = GlobalKey<SettingsPageState>();
@@ -101,6 +107,14 @@ class _DashboardPageState extends State<DashboardPage> {
     _activeTab = _tabFromUrl();
     _updateUrl(_activeTab);
     _loadPendingCount();
+    _chatSlideController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _chatSlideAnimation = Tween<Offset>(
+      begin: const Offset(1, 0),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(parent: _chatSlideController, curve: Curves.easeOutCubic));
   }
 
   Future<void> _loadPendingCount() async {
@@ -267,56 +281,117 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _toggleChat() {
+    setState(() {
+      _chatOpen = !_chatOpen;
+      if (_chatOpen) {
+        _chatSlideController.forward();
+      } else {
+        _chatSlideController.reverse();
+        _chatFullscreen = false;
+      }
+    });
+  }
+
+  void _toggleChatFullscreen() {
+    setState(() => _chatFullscreen = !_chatFullscreen);
+  }
+
   @override
   void dispose() {
     _searchController.dispose();
+    _chatSlideController.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenWidth = MediaQuery.of(context).size.width;
+    final panelWidth = _chatFullscreen ? screenWidth : (screenWidth * 0.35).clamp(360.0, 520.0);
+
     return Scaffold(
-      body: Column(
+      body: Stack(
         children: [
-          _buildHeader(),
-          if (_activeTab == 0) _buildSearchBar(),
-          Expanded(
-            child: _activeTab == 0
-                ? SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Center(
-                      child: ConstrainedBox(
-                        constraints: const BoxConstraints(maxWidth: 1400),
-                        child: _buildContent(),
-                      ),
-                    ),
-                  )
-                : _activeTab == 1
-                    ? ReviewQueuePage(
-                        onPendingCountChanged: (count) {
-                          setState(() => _pendingCount = count);
-                        },
+          // Main dashboard content
+          Column(
+            children: [
+              _buildHeader(),
+              if (_activeTab == 0) _buildSearchBar(),
+              Expanded(
+                child: _activeTab == 0
+                    ? SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(maxWidth: 1400),
+                            child: _buildContent(),
+                          ),
+                        ),
                       )
-                    : _activeTab == 2
-                        ? AnalyticsPage(
-                            key: _analyticsKey,
-                            onExportRulesCsv: _exportRulesCsv,
-                            onExportRulesPdf: _exportRulesPdf,
+                    : _activeTab == 1
+                        ? ReviewQueuePage(
+                            onPendingCountChanged: (count) {
+                              setState(() => _pendingCount = count);
+                            },
                           )
-                        : SettingsPage(key: _settingsKey),
+                        : _activeTab == 2
+                            ? AnalyticsPage(
+                                key: _analyticsKey,
+                                onExportRulesCsv: _exportRulesCsv,
+                                onExportRulesPdf: _exportRulesPdf,
+                              )
+                            : SettingsPage(key: _settingsKey),
+              ),
+            ],
           ),
+
+          // Scrim overlay when chat is fullscreen
+          if (_chatOpen && _chatFullscreen)
+            GestureDetector(
+              onTap: _toggleChat,
+              child: Container(color: Colors.black54),
+            ),
+
+          // Chat side panel
+          if (_chatOpen)
+            Positioned(
+              top: 0,
+              bottom: 0,
+              right: 0,
+              width: panelWidth,
+              child: SlideTransition(
+                position: _chatSlideAnimation,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: AppTheme.bg,
+                    border: Border(left: BorderSide(color: AppTheme.cardBorder, width: 1)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 16,
+                        offset: const Offset(-4, 0),
+                      ),
+                    ],
+                  ),
+                  child: ChatPage(
+                    embedded: true,
+                    isFullscreen: _chatFullscreen,
+                    onClose: _toggleChat,
+                    onToggleFullscreen: _toggleChatFullscreen,
+                  ),
+                ),
+              ),
+            ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(builder: (_) => const ChatPage()),
-          );
-        },
-        backgroundColor: AppTheme.accent,
-        tooltip: 'Ask AI Assistant',
-        child: const Icon(Icons.smart_toy, color: Colors.white),
-      ),
+      floatingActionButton: _chatOpen
+          ? null
+          : FloatingActionButton(
+              onPressed: _toggleChat,
+              backgroundColor: AppTheme.accent,
+              tooltip: 'Ask AI Assistant',
+              child: const Icon(Icons.smart_toy, color: Colors.white),
+            ),
     );
   }
 

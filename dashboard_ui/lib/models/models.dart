@@ -116,6 +116,7 @@ class EvaluationResult {
   final String action;
   final int evaluatedAt;
   final List<RuleResult> ruleResults;
+  final String? aiExplanation;
 
   EvaluationResult({
     required this.txnId,
@@ -125,6 +126,7 @@ class EvaluationResult {
     required this.action,
     required this.evaluatedAt,
     required this.ruleResults,
+    this.aiExplanation,
   });
 
   factory EvaluationResult.fromJson(Map<String, dynamic> json) {
@@ -138,6 +140,7 @@ class EvaluationResult {
       ruleResults: (json['ruleResults'] as List<dynamic>? ?? [])
           .map((r) => RuleResult.fromJson(r as Map<String, dynamic>))
           .toList(),
+      aiExplanation: json['aiExplanation'],
     );
   }
 }

@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 15 anomaly rules, configuration management, silence detection, analytics with time filtering, and demo data generation.\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 15 anomaly rules, configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations, and demo data generation.\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -124,7 +124,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/rules",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -138,7 +141,10 @@
             "method": "PUT",
             "url": "{{baseUrl}}/api/v1/rules/RULE-DORMANCY",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -173,10 +179,21 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/transactions/client/CLIENT-001?limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "transactions", "client", "CLIENT-001"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "client",
+                "CLIENT-001"
+              ],
               "query": [
-                { "key": "limit", "value": "10" }
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
               ]
             },
             "header": []
@@ -187,7 +204,8 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/transactions/results/CLIENT-001-TXN-000001",
-            "header": []
+            "header": [],
+            "description": "Returns the anomaly evaluation result for a transaction. If Ollama is running, includes an `aiExplanation` field with a human-readable explanation of why the transaction was flagged (generated on first view, cached for subsequent requests)."
           }
         },
         {
@@ -196,10 +214,22 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/transactions/results/client/CLIENT-001?limit=5",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "transactions", "results", "client", "CLIENT-001"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transactions",
+                "results",
+                "client",
+                "CLIENT-001"
+              ],
               "query": [
-                { "key": "limit", "value": "5" }
+                {
+                  "key": "limit",
+                  "value": "5"
+                }
               ]
             },
             "header": []
@@ -209,7 +239,7 @@
     },
     {
       "name": "Evaluate - Rule Trigger Scenarios",
-      "description": "Each request is crafted to trigger a specific anomaly rule based on seeded client profiles. Run in order for best results — some rules (like Rapid Repeat and New Bene Velocity) require multiple sequential requests.",
+      "description": "Each request is crafted to trigger a specific anomaly rule based on seeded client profiles. Run in order for best results \u2014 some rules (like Rapid Repeat and New Bene Velocity) require multiple sequential requests.",
       "item": [
         {
           "name": "Rule 1: Transaction Type Anomaly",
@@ -218,7 +248,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -233,7 +266,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -248,7 +284,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -263,7 +302,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -278,7 +320,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -293,7 +338,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -308,7 +356,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -323,7 +374,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -338,7 +392,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -353,7 +410,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -368,7 +428,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -383,7 +446,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -398,7 +464,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -413,7 +482,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -428,7 +500,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -443,7 +518,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -453,12 +531,15 @@
         },
         {
           "name": "Rule 14: Seasonal Deviation (send 1 of 25 at 3 AM)",
-          "description": "CLIENT-001 has strong business-hours profile (90% of txns during 09-17 UTC). Sending 25+ transactions at 3 AM triggers SEASONAL_DEVIATION — hourly TPS at 3 AM far exceeds the seasonal baseline for that slot. Use Postman Runner with 25 iterations, or set your system clock to 3 AM UTC.",
+          "description": "CLIENT-001 has strong business-hours profile (90% of txns during 09-17 UTC). Sending 25+ transactions at 3 AM triggers SEASONAL_DEVIATION \u2014 hourly TPS at 3 AM far exceeds the seasonal baseline for that slot. Use Postman Runner with 25 iterations, or set your system clock to 3 AM UTC.",
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -467,13 +548,16 @@
           }
         },
         {
-          "name": "Rule 15: Mule Network — CLIENT-007 to shared beneficiary",
-          "description": "CLIENT-007, CLIENT-008, and CLIENT-009 all send to 7 shared 'mule' beneficiaries. Sending a transaction from CLIENT-007 to one of these shared beneficiaries triggers MULE_NETWORK — fan-in=3, shared bene ratio >20%, network density=1.0.",
+          "name": "Rule 15: Mule Network \u2014 CLIENT-007 to shared beneficiary",
+          "description": "CLIENT-007, CLIENT-008, and CLIENT-009 all send to 7 shared 'mule' beneficiaries. Sending a transaction from CLIENT-007 to one of these shared beneficiaries triggers MULE_NETWORK \u2014 fan-in=3, shared bene ratio >20%, network density=1.0.",
           "request": {
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -485,7 +569,7 @@
     },
     {
       "name": "Evaluate - Normal Transactions (PASS)",
-      "description": "Transactions within normal behavioral patterns — expected to PASS with low or zero risk scores.",
+      "description": "Transactions within normal behavioral patterns \u2014 expected to PASS with low or zero risk scores.",
       "item": [
         {
           "name": "Normal NEFT - CLIENT-001 (~50K)",
@@ -493,7 +577,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -507,7 +594,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -521,7 +611,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -535,7 +628,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/transactions/evaluate",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -554,11 +650,25 @@
             "method": "POST",
             "url": {
               "raw": "{{baseUrl}}/api/v1/models/train/CLIENT-001?numTrees=100&sampleSize=256",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "models", "train", "CLIENT-001"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "models",
+                "train",
+                "CLIENT-001"
+              ],
               "query": [
-                { "key": "numTrees", "value": "100" },
-                { "key": "sampleSize", "value": "256" }
+                {
+                  "key": "numTrees",
+                  "value": "100"
+                },
+                {
+                  "key": "sampleSize",
+                  "value": "256"
+                }
               ]
             },
             "header": []
@@ -570,11 +680,24 @@
             "method": "POST",
             "url": {
               "raw": "{{baseUrl}}/api/v1/models/train?numTrees=100&sampleSize=256",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "models", "train"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "models",
+                "train"
+              ],
               "query": [
-                { "key": "numTrees", "value": "100" },
-                { "key": "sampleSize", "value": "256" }
+                {
+                  "key": "numTrees",
+                  "value": "100"
+                },
+                {
+                  "key": "sampleSize",
+                  "value": "256"
+                }
               ]
             },
             "header": []
@@ -610,10 +733,20 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/queue?limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "review", "queue"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "queue"
+              ],
               "query": [
-                { "key": "limit", "value": "50" }
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             },
             "header": []
@@ -640,12 +773,28 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/queue?fromDate={{fromDate}}&toDate={{toDate}}&limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "review", "queue"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "queue"
+              ],
               "query": [
-                { "key": "fromDate", "value": "{{fromDate}}" },
-                { "key": "toDate", "value": "{{toDate}}" },
-                { "key": "limit", "value": "50" }
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             },
             "header": []
@@ -658,11 +807,24 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/queue?action=ALERT&limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "review", "queue"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "queue"
+              ],
               "query": [
-                { "key": "action", "value": "ALERT" },
-                { "key": "limit", "value": "50" }
+                {
+                  "key": "action",
+                  "value": "ALERT"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             },
             "header": []
@@ -675,11 +837,24 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/queue?action=BLOCK&limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "review", "queue"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "queue"
+              ],
               "query": [
-                { "key": "action", "value": "BLOCK" },
-                { "key": "limit", "value": "50" }
+                {
+                  "key": "action",
+                  "value": "BLOCK"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             },
             "header": []
@@ -692,11 +867,24 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/queue?clientId=CLIENT-001&limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "review", "queue"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "queue"
+              ],
               "query": [
-                { "key": "clientId", "value": "CLIENT-001" },
-                { "key": "limit", "value": "50" }
+                {
+                  "key": "clientId",
+                  "value": "CLIENT-001"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             },
             "header": []
@@ -708,7 +896,8 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMTTYPE-001",
-            "header": []
+            "header": [],
+            "description": "Returns full detail: queue item + evaluation result (with AI explanation) + transaction + client profile. The `aiExplanation` field in the evaluation is generated by the Ollama LLM on first view and cached in Aerospike."
           }
         },
         {
@@ -718,7 +907,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMTTYPE-001/feedback",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -733,7 +925,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMOUNT-001/feedback",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -748,7 +943,10 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/review/queue/bulk-feedback",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -763,10 +961,20 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/weight-history?limit=50",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "review", "weight-history"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "weight-history"
+              ],
               "query": [
-                { "key": "limit", "value": "50" }
+                {
+                  "key": "limit",
+                  "value": "50"
+                }
               ]
             },
             "header": []
@@ -779,11 +987,24 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/weight-history?ruleId=RULE-AMOUNT&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "review", "weight-history"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "weight-history"
+              ],
               "query": [
-                { "key": "ruleId", "value": "RULE-AMOUNT" },
-                { "key": "limit", "value": "20" }
+                {
+                  "key": "ruleId",
+                  "value": "RULE-AMOUNT"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
               ]
             },
             "header": []
@@ -804,53 +1025,87 @@
           }
         },
         {
-          "name": "Beneficiary Fan-In — Mule Beneficiary",
+          "name": "Beneficiary Fan-In \u2014 Mule Beneficiary",
           "description": "Returns fan-in count and sender list for a known mule beneficiary. Expect fanIn=3 with senders CLIENT-007, CLIENT-008, CLIENT-009.",
           "request": {
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/graph/beneficiary/HDFC0007001/7001000001",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "graph", "beneficiary", "HDFC0007001", "7001000001"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "graph",
+                "beneficiary",
+                "HDFC0007001",
+                "7001000001"
+              ]
             },
             "header": []
           }
         },
         {
-          "name": "Beneficiary Fan-In — Normal Beneficiary",
+          "name": "Beneficiary Fan-In \u2014 Normal Beneficiary",
           "description": "Returns fan-in for a normal beneficiary. Expect fanIn=1 (only one sender).",
           "request": {
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/graph/beneficiary/HDFC0001001/1001000001",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "graph", "beneficiary", "HDFC0001001", "1001000001"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "graph",
+                "beneficiary",
+                "HDFC0001001",
+                "1001000001"
+              ]
             },
             "header": []
           }
         },
         {
-          "name": "Client Graph Metrics — Mule Client",
+          "name": "Client Graph Metrics \u2014 Mule Client",
           "description": "Returns shared beneficiary count, ratio, and network density for CLIENT-007 (mule network participant). Expect high shared % and density=1.0.",
           "request": {
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/graph/client/CLIENT-007",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "graph", "client", "CLIENT-007"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "graph",
+                "client",
+                "CLIENT-007"
+              ]
             },
             "header": []
           }
         },
         {
-          "name": "Client Graph Metrics — Normal Client",
+          "name": "Client Graph Metrics \u2014 Normal Client",
           "description": "Returns graph metrics for CLIENT-001 (normal behavior). Expect low/zero shared beneficiaries and low density.",
           "request": {
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/graph/client/CLIENT-001",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "graph", "client", "CLIENT-001"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "graph",
+                "client",
+                "CLIENT-001"
+              ]
             },
             "header": []
           }
@@ -891,38 +1146,72 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/rules/performance?fromDate={{fromDate}}&toDate={{toDate}}",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "rules", "performance"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "rules",
+                "performance"
+              ],
               "query": [
-                { "key": "fromDate", "value": "{{fromDate}}" },
-                { "key": "toDate", "value": "{{toDate}}" }
+                {
+                  "key": "fromDate",
+                  "value": "{{fromDate}}"
+                },
+                {
+                  "key": "toDate",
+                  "value": "{{toDate}}"
+                }
               ]
             },
             "header": []
           }
         },
         {
-          "name": "Client Network — Mule Client",
+          "name": "Client Network \u2014 Mule Client",
           "description": "Returns nodes and edges for beneficiary network visualization centered on CLIENT-007 (mule network participant). Expect shared beneficiaries with fan-in=3 and neighbor clients CLIENT-008/009.",
           "request": {
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/graph/client/CLIENT-007/network",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "graph", "client", "CLIENT-007", "network"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "graph",
+                "client",
+                "CLIENT-007",
+                "network"
+              ]
             },
             "header": []
           }
         },
         {
-          "name": "Client Network — Normal Client",
+          "name": "Client Network \u2014 Normal Client",
           "description": "Returns network graph for CLIENT-001 (normal behavior). Expect all beneficiaries with fan-in=1 and no neighbor clients.",
           "request": {
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/analytics/graph/client/CLIENT-001/network",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "analytics", "graph", "client", "CLIENT-001", "network"]
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "graph",
+                "client",
+                "CLIENT-001",
+                "network"
+              ]
             },
             "header": []
           }
@@ -949,7 +1238,10 @@
             "method": "PUT",
             "url": "{{baseUrl}}/api/v1/config/thresholds",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -973,7 +1265,10 @@
             "method": "PUT",
             "url": "{{baseUrl}}/api/v1/config/feedback",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -997,7 +1292,10 @@
             "method": "PUT",
             "url": "{{baseUrl}}/api/v1/config/transaction-types",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1021,7 +1319,10 @@
             "method": "PUT",
             "url": "{{baseUrl}}/api/v1/config/silence",
             "header": [
-              { "key": "Content-Type", "value": "application/json" }
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
             ],
             "body": {
               "mode": "raw",
@@ -1060,6 +1361,114 @@
             "method": "POST",
             "url": "{{baseUrl}}/api/v1/silence/check",
             "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "AI Chat",
+      "description": "Natural language query interface powered by Ollama LLM with keyword-based fast parsing fallback.",
+      "item": [
+        {
+          "name": "Chat - Count UPI clients (last 15 mins)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"How many clients did UPI in last 15 mins?\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat - List all anomaly rules",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"List all anomaly rules\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat - Review queue stats",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Show review queue stats\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat - Shared beneficiaries (mule detection)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Clients with shared beneficiaries in last 24 hours\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat - Silenced clients",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"Silenced clients in the system\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Chat - Blocked transactions (last 30 mins)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/chat",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"List transactions blocked in last 30 mins\"\n}"
+            }
           }
         }
       ]

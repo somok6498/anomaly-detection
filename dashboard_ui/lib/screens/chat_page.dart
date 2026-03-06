@@ -5,7 +5,18 @@ import '../services/export_service.dart';
 import '../models/models.dart';
 
 class ChatPage extends StatefulWidget {
-  const ChatPage({super.key});
+  final bool embedded;
+  final bool isFullscreen;
+  final VoidCallback? onClose;
+  final VoidCallback? onToggleFullscreen;
+
+  const ChatPage({
+    super.key,
+    this.embedded = false,
+    this.isFullscreen = false,
+    this.onClose,
+    this.onToggleFullscreen,
+  });
 
   @override
   State<ChatPage> createState() => _ChatPageState();
@@ -22,9 +33,9 @@ class _ChatPageState extends State<ChatPage> {
     'How many clients did UPI in last 15 mins?',
     'List all anomaly rules',
     'Show review queue stats',
-    'How many clients are not transacting in last 1 hr?',
+    'Silenced clients in the system',
+    'Clients with shared beneficiaries in last 24 hours',
     'List transactions blocked in last 30 mins',
-    'How many rules are there?',
   ];
 
   @override
@@ -95,34 +106,69 @@ class _ChatPageState extends State<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    final body = Column(
+      children: [
+        _buildPanelHeader(),
+        Expanded(
+          child: _messages.isEmpty ? _buildEmptyState() : _buildMessageList(),
+        ),
+        _buildInputArea(),
+      ],
+    );
+
+    if (widget.embedded) {
+      return Material(color: AppTheme.bg, child: body);
+    }
+
     return Scaffold(
       backgroundColor: AppTheme.bg,
-      appBar: AppBar(
-        backgroundColor: AppTheme.cardBg,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: AppTheme.textPrimary),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Row(
-          children: [
-            Icon(Icons.smart_toy, color: AppTheme.accent, size: 22),
-            const SizedBox(width: 10),
-            Text('AI Assistant',
-                style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.w600)),
-          ],
-        ),
-        elevation: 0,
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(height: 1, color: AppTheme.cardBorder),
-        ),
+      body: body,
+    );
+  }
+
+  Widget _buildPanelHeader() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: AppTheme.cardBg,
+        border: Border(bottom: BorderSide(color: AppTheme.cardBorder)),
       ),
-      body: Column(
+      child: Row(
         children: [
-          Expanded(
-            child: _messages.isEmpty ? _buildEmptyState() : _buildMessageList(),
-          ),
-          _buildInputArea(),
+          Icon(Icons.smart_toy, color: AppTheme.accent, size: 20),
+          const SizedBox(width: 8),
+          Text('AI Assistant',
+              style: TextStyle(color: AppTheme.textPrimary, fontSize: 16, fontWeight: FontWeight.w600)),
+          const Spacer(),
+          if (widget.embedded) ...[
+            IconButton(
+              onPressed: widget.onToggleFullscreen,
+              icon: Icon(
+                widget.isFullscreen ? Icons.close_fullscreen : Icons.open_in_full,
+                color: AppTheme.textSecondary,
+                size: 18,
+              ),
+              tooltip: widget.isFullscreen ? 'Minimize' : 'Maximize',
+              splashRadius: 18,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              onPressed: widget.onClose,
+              icon: Icon(Icons.close, color: AppTheme.textSecondary, size: 18),
+              tooltip: 'Close',
+              splashRadius: 18,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+            ),
+          ] else
+            IconButton(
+              onPressed: () => Navigator.pop(context),
+              icon: Icon(Icons.arrow_back, color: AppTheme.textSecondary, size: 18),
+              tooltip: 'Back',
+              splashRadius: 18,
+            ),
         ],
       ),
     );

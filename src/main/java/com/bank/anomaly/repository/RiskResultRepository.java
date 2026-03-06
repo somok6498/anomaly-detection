@@ -60,10 +60,11 @@ public class RiskResultRepository {
         Bin actionBin = new Bin("action", result.getAction());
         Bin evaluatedAtBin = new Bin("evaluatedAt", result.getEvaluatedAt());
         Bin ruleResultsBin = new Bin("ruleResults", serializeRuleResults(result.getRuleResults()));
+        Bin aiExplanationBin = new Bin("aiExplanation", result.getAiExplanation());
 
         client.put(writePolicy, key,
                 txnIdBin, clientIdBin, scoreBin, riskLevelBin,
-                actionBin, evaluatedAtBin, ruleResultsBin);
+                actionBin, evaluatedAtBin, ruleResultsBin, aiExplanationBin);
     }
 
     public EvaluationResult findByTxnId(String txnId) {
@@ -79,6 +80,7 @@ public class RiskResultRepository {
                 .action(record.getString("action"))
                 .evaluatedAt(record.getLong("evaluatedAt"))
                 .ruleResults(deserializeRuleResults(record.getString("ruleResults")))
+                .aiExplanation(record.getString("aiExplanation"))
                 .build();
     }
 
@@ -157,7 +159,13 @@ public class RiskResultRepository {
                 .action(record.getString("action"))
                 .evaluatedAt(record.getLong("evaluatedAt"))
                 .ruleResults(deserializeRuleResults(record.getString("ruleResults")))
+                .aiExplanation(record.getString("aiExplanation"))
                 .build();
+    }
+
+    public void updateAiExplanation(String txnId, String aiExplanation) {
+        Key key = new Key(namespace, AerospikeConfig.SET_RISK_RESULTS, txnId);
+        client.put(writePolicy, key, new Bin("aiExplanation", aiExplanation));
     }
 
     private String serializeRuleResults(List<RuleResult> results) {

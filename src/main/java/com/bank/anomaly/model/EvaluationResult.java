@@ -35,4 +35,7 @@ public class EvaluationResult {
 
     @Schema(description = "Evaluation timestamp in epoch milliseconds", example = "1739886764000")
     private long evaluatedAt;
+
+    @Schema(description = "LLM-generated human-readable explanation of why this transaction was flagged")
+    private String aiExplanation;
 }

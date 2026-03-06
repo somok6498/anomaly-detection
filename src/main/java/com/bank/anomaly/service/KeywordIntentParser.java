@@ -43,9 +43,17 @@ public class KeywordIntentParser {
             return intent("REVIEW_STATS", txnType, timeMinutes, null, action);
         }
 
+        // Shared beneficiaries / mule detection
+        if (matches(lower, "shared beneficiar", "common beneficiar", "same beneficiar",
+                "shared bene", "common bene", "same bene", "same account",
+                "mule network", "mule detect", "mule activity")) {
+            return intent("SHARED_BENEFICIARIES", txnType, timeMinutes, null, action);
+        }
+
         // Silent clients
         if (matches(lower, "not transact", "not doing txn", "not doing transaction",
-                "silent", "inactive", "not done", "haven't transact", "no txn", "no transaction")) {
+                "silent", "inactive", "not done", "haven't transact", "no txn", "no transaction",
+                "silenced")) {
             return intent("SILENT_CLIENTS", txnType, timeMinutes, null, action);
         }
 

@@ -841,6 +841,9 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
             // Feedback action buttons
             _buildFeedbackActions(qi),
             const SizedBox(height: 16),
+            // AI Analysis
+            if (eval != null && eval.aiExplanation != null) _buildAiExplanationCard(eval.aiExplanation!),
+            if (eval != null && eval.aiExplanation != null) const SizedBox(height: 16),
             // Transaction info
             if (txn != null) _buildTxnCard(txn, qi),
             const SizedBox(height: 16),
@@ -900,6 +903,29 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiExplanationCard(String explanation) {
+    return SectionCard(
+      title: 'AI Analysis',
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.smart_toy, color: AppTheme.accent, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              explanation,
+              style: TextStyle(
+                color: AppTheme.textPrimary,
+                fontSize: 13,
+                height: 1.5,
+              ),
+            ),
+          ),
         ],
       ),
     );

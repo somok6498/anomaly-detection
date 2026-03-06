@@ -116,6 +116,38 @@ class TransactionView extends StatelessWidget {
               ),
             ],
           ),
+          // AI Explanation
+          if (eval.aiExplanation != null) ...[
+            const SizedBox(height: 20),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppTheme.accent.withValues(alpha: 0.08),
+                border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.smart_toy, color: AppTheme.accent, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('AI Analysis',
+                            style: TextStyle(color: AppTheme.accent, fontSize: 12, fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 6),
+                        Text(eval.aiExplanation!,
+                            style: TextStyle(color: AppTheme.textPrimary, fontSize: 13, height: 1.5)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 24),
 
           // Rule results table

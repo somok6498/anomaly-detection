@@ -5,6 +5,7 @@ import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.RiskResultRepository;
+import com.bank.anomaly.service.ReviewQueueService;
 import com.bank.anomaly.service.TransactionEvaluationService;
 import com.bank.anomaly.service.TransactionService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -24,15 +25,18 @@ public class TransactionController {
     private final RiskResultRepository riskResultRepository;
     private final TransactionService transactionService;
     private final RiskThresholdConfig thresholdConfig;
+    private final ReviewQueueService reviewQueueService;
 
     public TransactionController(TransactionEvaluationService evaluationService,
                                  RiskResultRepository riskResultRepository,
                                  TransactionService transactionService,
-                                 RiskThresholdConfig thresholdConfig) {
+                                 RiskThresholdConfig thresholdConfig,
+                                 ReviewQueueService reviewQueueService) {
         this.evaluationService = evaluationService;
         this.riskResultRepository = riskResultRepository;
         this.transactionService = transactionService;
         this.thresholdConfig = thresholdConfig;
+        this.reviewQueueService = reviewQueueService;
     }
 
     @Operation(summary = "Evaluate a transaction for anomalies",
@@ -96,6 +100,13 @@ public class TransactionController {
         EvaluationResult result = riskResultRepository.findByTxnId(txnId);
         if (result == null) {
             return ResponseEntity.notFound().build();
+        }
+        // Generate AI explanation on-demand if not already cached
+        if (result.getAiExplanation() == null) {
+            Transaction txn = transactionService.getTransaction(txnId);
+            if (txn != null) {
+                reviewQueueService.enrichWithAiExplanation(result, txn);
+            }
         }
         return ResponseEntity.ok(result);
     }
