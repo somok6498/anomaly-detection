@@ -56,6 +56,10 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   ReviewQueueDetail? _selectedDetail;
   bool _loadingDetail = false;
 
+  // AI feedback
+  AiFeedback? _aiFeedback;
+  bool _submittingAiFeedback = false;
+
   // Weight history
   List<RuleWeightChange> _weightHistory = [];
 
@@ -89,6 +93,7 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       _selectedTxnId = null;
       _selectedDetail = null;
       _loadingAiExplanation = false;
+      _aiFeedback = null;
     });
 
     try {
@@ -169,6 +174,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       _selectedTxnId = txnId;
       _loadingDetail = true;
       _loadingAiExplanation = false;
+      _aiFeedback = null;
+      _submittingAiFeedback = false;
     });
 
     try {
@@ -183,6 +190,11 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       if (detail.evaluation != null && detail.evaluation!.aiExplanation == null) {
         setState(() => _loadingAiExplanation = true);
         _fetchAiExplanation(txnId);
+      }
+
+      // Load existing AI feedback if explanation exists
+      if (detail.evaluation != null && detail.evaluation!.aiExplanation != null) {
+        _loadAiFeedback(txnId);
       }
     } catch (e) {
       if (!mounted || _selectedTxnId != txnId) return;
@@ -213,6 +225,28 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       }
     } catch (_) {
       if (mounted) setState(() => _loadingAiExplanation = false);
+    }
+  }
+
+  Future<void> _loadAiFeedback(String txnId) async {
+    try {
+      final feedback = await _api.getAiFeedback(txnId);
+      if (!mounted || _selectedTxnId != txnId) return;
+      setState(() => _aiFeedback = feedback);
+    } catch (_) {}
+  }
+
+  Future<void> _submitAiFeedback(String txnId, bool helpful) async {
+    setState(() => _submittingAiFeedback = true);
+    try {
+      final feedback = await _api.submitAiFeedback(txnId, helpful, 'ops');
+      if (!mounted || _selectedTxnId != txnId) return;
+      setState(() {
+        _aiFeedback = feedback;
+        _submittingAiFeedback = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _submittingAiFeedback = false);
     }
   }
 
@@ -965,22 +999,79 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   }
 
   Widget _buildAiExplanationCard(String explanation) {
+    final hasRated = _aiFeedback != null;
+    final isHelpful = _aiFeedback?.helpful ?? false;
+
     return SectionCard(
       title: 'AI Analysis',
-      child: Row(
+      child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.smart_toy, color: AppTheme.accent, size: 20),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Text(
-              explanation,
-              style: TextStyle(
-                color: AppTheme.textPrimary,
-                fontSize: 13,
-                height: 1.5,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.smart_toy, color: AppTheme.accent, size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  explanation,
+                  style: TextStyle(
+                    color: AppTheme.textPrimary,
+                    fontSize: 13,
+                    height: 1.5,
+                  ),
+                ),
               ),
-            ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Divider(color: AppTheme.cardBorder, height: 1),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Text('Was this helpful?',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 12)),
+              const SizedBox(width: 12),
+              _submittingAiFeedback
+                  ? SizedBox(
+                      width: 16, height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent))
+                  : Row(
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            hasRated && isHelpful ? Icons.thumb_up : Icons.thumb_up_outlined,
+                            color: hasRated && isHelpful ? AppTheme.low : AppTheme.textSecondary,
+                            size: 18,
+                          ),
+                          onPressed: hasRated ? null : () => _submitAiFeedback(_selectedTxnId!, true),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Helpful',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            hasRated && !isHelpful ? Icons.thumb_down : Icons.thumb_down_outlined,
+                            color: hasRated && !isHelpful ? AppTheme.critical : AppTheme.textSecondary,
+                            size: 18,
+                          ),
+                          onPressed: hasRated ? null : () => _submitAiFeedback(_selectedTxnId!, false),
+                          visualDensity: VisualDensity.compact,
+                          tooltip: 'Not helpful',
+                        ),
+                      ],
+                    ),
+              if (hasRated) ...[
+                const SizedBox(width: 8),
+                Text(
+                  isHelpful ? 'Rated helpful' : 'Rated not helpful',
+                  style: TextStyle(
+                    color: isHelpful ? AppTheme.low : AppTheme.critical,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ],
           ),
         ],
       ),

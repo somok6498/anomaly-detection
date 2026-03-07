@@ -42,7 +42,7 @@ class DemoDataControllerTest {
                 .build();
 
         when(evaluationService.evaluate(any(Transaction.class))).thenReturn(passResult);
-        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), anyInt(), any()))
+        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(new PagedResponse<>(List.of(), false, null));
 
         mockMvc.perform(post("/api/v1/demo/generate"))
@@ -65,7 +65,7 @@ class DemoDataControllerTest {
                 .build();
 
         when(evaluationService.evaluate(any(Transaction.class))).thenReturn(alertResult);
-        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), anyInt(), any()))
+        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(new PagedResponse<>(List.of(), false, null));
 
         mockMvc.perform(post("/api/v1/demo/generate"))

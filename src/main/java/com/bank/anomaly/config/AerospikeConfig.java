@@ -24,6 +24,7 @@ public class AerospikeConfig {
     public static final String SET_DAILY_BENE_COUNTERS = "daily_new_bene_cntrs";
     public static final String SET_REVIEW_QUEUE = "review_queue";
     public static final String SET_WEIGHT_HISTORY = "rule_weight_history";
+    public static final String SET_AI_FEEDBACK = "ai_feedback";
 
     @Value("${aerospike.host:127.0.0.1}")
     private String host;

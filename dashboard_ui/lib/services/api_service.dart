@@ -80,6 +80,30 @@ class ApiService {
     return EvaluationResult.fromJson(jsonDecode(response.body));
   }
 
+  // ── AI Feedback API ──
+
+  Future<AiFeedback?> getAiFeedback(String txnId) async {
+    final response =
+        await http.get(Uri.parse('$baseUrl/review/queue/$txnId/ai-feedback'));
+    if (response.statusCode == 404) return null;
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load AI feedback: ${response.statusCode}');
+    }
+    return AiFeedback.fromJson(jsonDecode(response.body));
+  }
+
+  Future<AiFeedback> submitAiFeedback(String txnId, bool helpful, String operatorId) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/review/queue/$txnId/ai-feedback'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode({'helpful': helpful, 'operatorId': operatorId}),
+    );
+    if (response.statusCode != 200) {
+      throw Exception('Failed to submit AI feedback: ${response.statusCode}');
+    }
+    return AiFeedback.fromJson(jsonDecode(response.body));
+  }
+
   // ── Review Queue API ──
 
   Future<PagedResponse<ReviewQueueItem>> getReviewQueue({

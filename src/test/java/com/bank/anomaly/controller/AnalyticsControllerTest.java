@@ -2,6 +2,7 @@ package com.bank.anomaly.controller;
 
 import com.bank.anomaly.model.NetworkGraph;
 import com.bank.anomaly.model.RulePerformance;
+import com.bank.anomaly.repository.AiFeedbackRepository;
 import com.bank.anomaly.service.AnalyticsService;
 import com.bank.anomaly.testutil.TestDataFactory;
 import org.junit.jupiter.api.Test;
@@ -10,7 +11,9 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.test.web.servlet.MockMvc;
 
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -26,6 +29,9 @@ class AnalyticsControllerTest {
 
     @MockBean
     private AnalyticsService analyticsService;
+
+    @MockBean
+    private AiFeedbackRepository aiFeedbackRepository;
 
     @Test
     void getRulePerformance_success() throws Exception {
@@ -67,5 +73,22 @@ class AnalyticsControllerTest {
                 .andExpect(jsonPath("$.nodes").isArray())
                 .andExpect(jsonPath("$.edges").isArray())
                 .andExpect(jsonPath("$.nodes[0].id").value("CLIENT-007"));
+    }
+
+    @Test
+    void getAiFeedbackStats_success() throws Exception {
+        Map<String, Object> stats = new LinkedHashMap<>();
+        stats.put("helpful", 15);
+        stats.put("notHelpful", 5);
+        stats.put("total", 20);
+        stats.put("helpfulPct", 75.0);
+        when(aiFeedbackRepository.getStats()).thenReturn(stats);
+
+        mockMvc.perform(get("/api/v1/analytics/ai-feedback/stats"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.helpful").value(15))
+                .andExpect(jsonPath("$.notHelpful").value(5))
+                .andExpect(jsonPath("$.total").value(20))
+                .andExpect(jsonPath("$.helpfulPct").value(75.0));
     }
 }

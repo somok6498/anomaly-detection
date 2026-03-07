@@ -1,3 +1,26 @@
+class AiFeedback {
+  final String txnId;
+  final bool helpful;
+  final String operatorId;
+  final int timestamp;
+
+  AiFeedback({
+    required this.txnId,
+    required this.helpful,
+    required this.operatorId,
+    required this.timestamp,
+  });
+
+  factory AiFeedback.fromJson(Map<String, dynamic> json) {
+    return AiFeedback(
+      txnId: json['txnId'] ?? '',
+      helpful: json['helpful'] ?? false,
+      operatorId: json['operatorId'] ?? '',
+      timestamp: (json['timestamp'] ?? 0).toInt(),
+    );
+  }
+}
+
 class PagedResponse<T> {
   final List<T> data;
   final bool hasMore;

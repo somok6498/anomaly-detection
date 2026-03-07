@@ -5,6 +5,7 @@ import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.RiskResultRepository;
+import com.bank.anomaly.service.ReviewQueueService;
 import com.bank.anomaly.service.TransactionEvaluationService;
 import com.bank.anomaly.service.TransactionService;
 import com.bank.anomaly.testutil.TestDataFactory;
@@ -44,6 +45,9 @@ class TransactionControllerTest {
 
     @MockBean
     private RiskThresholdConfig thresholdConfig;
+
+    @MockBean
+    private ReviewQueueService reviewQueueService;
 
     @BeforeEach
     void setUp() {

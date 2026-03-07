@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 15 anomaly rules, configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations, and demo data generation.\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 16 anomaly rules (including Temporal Rule Correlation), configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations with operator feedback, and demo data generation.\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -715,7 +715,7 @@
     },
     {
       "name": "Review Queue & Feedback",
-      "description": "Ops review queue for ALERT/BLOCK transactions. Provides feedback (True Positive / False Positive), bulk actions, queue stats, and rule weight adjustment history.",
+      "description": "Ops review queue for ALERT/BLOCK transactions. Provides feedback (True Positive / False Positive), bulk actions, AI explanation feedback (helpful/not helpful), queue stats, and rule weight adjustment history.",
       "item": [
         {
           "name": "Get Queue Stats",
@@ -955,6 +955,51 @@
           }
         },
         {
+          "name": "Submit AI Explanation Feedback (Helpful)",
+          "description": "Rate the AI-generated explanation for a flagged transaction as helpful. Replace the txnId in the URL.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMTTYPE-001/ai-feedback",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"helpful\": true,\n  \"operatorId\": \"ops\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit AI Explanation Feedback (Not Helpful)",
+          "description": "Rate the AI-generated explanation as not helpful. Replace the txnId in the URL.",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMOUNT-001/ai-feedback",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"helpful\": false,\n  \"operatorId\": \"ops\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get AI Explanation Feedback",
+          "description": "Retrieve existing feedback for a transaction's AI explanation. Returns 404 if no feedback submitted yet.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/review/queue/TRIGGER-AMTTYPE-001/ai-feedback",
+            "header": []
+          }
+        },
+        {
           "name": "Get Weight History (all rules)",
           "description": "Returns recent rule weight adjustments from the auto-tuning job.",
           "request": {
@@ -1114,8 +1159,17 @@
     },
     {
       "name": "Analytics",
-      "description": "Rule performance analytics and network visualization. Rule performance supports optional fromDate/toDate (epoch ms) for time-filtered stats.",
+      "description": "Rule performance analytics, AI explanation feedback stats, and network visualization. Rule performance supports optional fromDate/toDate (epoch ms) for time-filtered stats.",
       "item": [
+        {
+          "name": "AI Explanation Feedback Stats",
+          "description": "Returns aggregate counts of helpful vs not helpful AI explanation ratings from operators.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/analytics/ai-feedback/stats",
+            "header": []
+          }
+        },
         {
           "name": "Rule Performance Stats (all time)",
           "description": "Returns per-rule TP/FP counts and precision based on review queue feedback. Without time params, includes all feedback data.",

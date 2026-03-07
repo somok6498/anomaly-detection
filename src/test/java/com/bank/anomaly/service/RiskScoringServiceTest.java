@@ -23,6 +23,7 @@ class RiskScoringServiceTest {
         RiskThresholdConfig config = new RiskThresholdConfig();
         config.setAlertThreshold(30.0);
         config.setBlockThreshold(70.0);
+        config.setBreadthMultiplierPct(0.0);
         scoringService = new RiskScoringService(config);
     }
 
@@ -113,5 +114,27 @@ class RiskScoringServiceTest {
         EvaluationResult result = scoringService.computeResult(txn, rules);
 
         assertThat(result.getCompositeScore()).isLessThanOrEqualTo(100.0);
+    }
+
+    @Test
+    void computeResult_breadthMultiplier_escalatesScoreForMultipleRules() {
+        RiskThresholdConfig breadthConfig = new RiskThresholdConfig();
+        breadthConfig.setAlertThreshold(30.0);
+        breadthConfig.setBlockThreshold(70.0);
+        breadthConfig.setBreadthMultiplierPct(0.03);
+        RiskScoringService breadthService = new RiskScoringService(breadthConfig);
+
+        Transaction txn = TestDataFactory.createTransaction("TXN-1", "C-1", "NEFT", 50000);
+        List<RuleResult> rules = List.of(
+                TestDataFactory.createRuleResult("R1", true, 60.0, 2.0),
+                TestDataFactory.createRuleResult("R2", true, 40.0, 1.0)
+        );
+        // baseScore = (60*2 + 40*1) / (2+1) = 53.33
+        // breadthBonus = max(0, 2-1) * 0.03 = 0.03
+        // finalScore = 53.33 * 1.03 = 54.93
+        EvaluationResult result = breadthService.computeResult(txn, rules);
+
+        assertThat(result.getCompositeScore()).isCloseTo(54.93, within(0.1));
+        assertThat(result.getCompositeScore()).isGreaterThan(53.33);
     }
 }

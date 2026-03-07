@@ -1,6 +1,8 @@
 package com.bank.anomaly.controller;
 
 import com.bank.anomaly.model.*;
+import com.bank.anomaly.repository.AiFeedbackRepository;
+import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.repository.RuleWeightHistoryRepository;
 import com.bank.anomaly.service.ReviewQueueService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -20,11 +22,17 @@ public class ReviewQueueController {
 
     private final ReviewQueueService reviewQueueService;
     private final RuleWeightHistoryRepository weightHistoryRepo;
+    private final AiFeedbackRepository aiFeedbackRepository;
+    private final RiskResultRepository riskResultRepository;
 
     public ReviewQueueController(ReviewQueueService reviewQueueService,
-                                  RuleWeightHistoryRepository weightHistoryRepo) {
+                                  RuleWeightHistoryRepository weightHistoryRepo,
+                                  AiFeedbackRepository aiFeedbackRepository,
+                                  RiskResultRepository riskResultRepository) {
         this.reviewQueueService = reviewQueueService;
         this.weightHistoryRepo = weightHistoryRepo;
+        this.aiFeedbackRepository = aiFeedbackRepository;
+        this.riskResultRepository = riskResultRepository;
     }
 
     @GetMapping("/queue")
@@ -116,6 +124,45 @@ public class ReviewQueueController {
             @RequestParam(required = false) Long fromDate,
             @RequestParam(required = false) Long toDate) {
         return ResponseEntity.ok(reviewQueueService.getQueueStats(fromDate, toDate));
+    }
+
+    @PostMapping("/queue/{txnId}/ai-feedback")
+    @Operation(summary = "Submit feedback on AI explanation",
+               description = "Rate the AI-generated explanation as helpful or not helpful")
+    public ResponseEntity<?> submitAiFeedback(@PathVariable String txnId,
+                                               @RequestBody Map<String, Object> body) {
+        Object helpfulObj = body.get("helpful");
+        if (helpfulObj == null) {
+            return ResponseEntity.badRequest().body(Map.of("error", "helpful (boolean) is required"));
+        }
+
+        EvaluationResult eval = riskResultRepository.findByTxnId(txnId);
+        if (eval == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        boolean helpful = Boolean.parseBoolean(helpfulObj.toString());
+        String operatorId = (String) body.getOrDefault("operatorId", "ops");
+
+        AiFeedback feedback = AiFeedback.builder()
+                .txnId(txnId)
+                .helpful(helpful)
+                .operatorId(operatorId)
+                .timestamp(System.currentTimeMillis())
+                .build();
+        aiFeedbackRepository.save(feedback);
+        return ResponseEntity.ok(feedback);
+    }
+
+    @GetMapping("/queue/{txnId}/ai-feedback")
+    @Operation(summary = "Get AI explanation feedback",
+               description = "Returns existing feedback for this transaction's AI explanation")
+    public ResponseEntity<?> getAiFeedback(@PathVariable String txnId) {
+        AiFeedback feedback = aiFeedbackRepository.findByTxnId(txnId);
+        if (feedback == null) {
+            return ResponseEntity.notFound().build();
+        }
+        return ResponseEntity.ok(feedback);
     }
 
     @GetMapping("/weight-history")

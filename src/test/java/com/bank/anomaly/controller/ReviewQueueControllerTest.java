@@ -1,6 +1,8 @@
 package com.bank.anomaly.controller;
 
 import com.bank.anomaly.model.*;
+import com.bank.anomaly.repository.AiFeedbackRepository;
+import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.repository.RuleWeightHistoryRepository;
 import com.bank.anomaly.service.ReviewQueueService;
 import com.bank.anomaly.testutil.TestDataFactory;
@@ -16,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.*;
-import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -35,12 +37,18 @@ class ReviewQueueControllerTest {
     @MockBean
     private RuleWeightHistoryRepository weightHistoryRepo;
 
+    @MockBean
+    private AiFeedbackRepository aiFeedbackRepository;
+
+    @MockBean
+    private RiskResultRepository riskResultRepository;
+
     @Test
     void getQueueItems_success() throws Exception {
         PagedResponse<ReviewQueueItem> pagedResponse = new PagedResponse<>(
                 List.of(TestDataFactory.createReviewQueueItem("TXN-1", "C-1", ReviewStatus.PENDING)),
                 false, null);
-        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), anyInt(), any()))
+        when(reviewQueueService.getQueueItems(any(), any(), any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(pagedResponse);
 
         mockMvc.perform(get("/api/v1/review/queue"))
@@ -53,7 +61,7 @@ class ReviewQueueControllerTest {
     @Test
     void getQueueItems_withFilters() throws Exception {
         PagedResponse<ReviewQueueItem> pagedResponse = new PagedResponse<>(List.of(), false, null);
-        when(reviewQueueService.getQueueItems(eq("ALERT"), eq("C-1"), any(), any(), any(), anyInt(), any()))
+        when(reviewQueueService.getQueueItems(eq("ALERT"), eq("C-1"), any(), any(), any(), any(), anyInt(), any()))
                 .thenReturn(pagedResponse);
 
         mockMvc.perform(get("/api/v1/review/queue?action=ALERT&clientId=C-1"))
@@ -140,7 +148,7 @@ class ReviewQueueControllerTest {
 
     @Test
     void getStats_success() throws Exception {
-        when(reviewQueueService.getQueueStats()).thenReturn(Map.of(
+        when(reviewQueueService.getQueueStats(any(), any())).thenReturn(Map.of(
                 "pending", 10, "truePositive", 5, "falsePositive", 3, "autoAccepted", 2));
 
         mockMvc.perform(get("/api/v1/review/stats"))
@@ -148,6 +156,65 @@ class ReviewQueueControllerTest {
                 .andExpect(jsonPath("$.pending").value(10))
                 .andExpect(jsonPath("$.truePositive").value(5));
     }
+
+    // ── AI Feedback Tests ──
+
+    @Test
+    void submitAiFeedback_success() throws Exception {
+        EvaluationResult eval = TestDataFactory.createEvaluationResult("TXN-1", "C-1", 55.0, "ALERT");
+        when(riskResultRepository.findByTxnId("TXN-1")).thenReturn(eval);
+
+        mockMvc.perform(post("/api/v1/review/queue/TXN-1/ai-feedback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("helpful", true, "operatorId", "ops"))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.txnId").value("TXN-1"))
+                .andExpect(jsonPath("$.helpful").value(true))
+                .andExpect(jsonPath("$.operatorId").value("ops"));
+
+        verify(aiFeedbackRepository).save(any(AiFeedback.class));
+    }
+
+    @Test
+    void submitAiFeedback_missingHelpful_badRequest() throws Exception {
+        mockMvc.perform(post("/api/v1/review/queue/TXN-1/ai-feedback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("operatorId", "ops"))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.error").exists());
+    }
+
+    @Test
+    void submitAiFeedback_txnNotFound() throws Exception {
+        when(riskResultRepository.findByTxnId("MISSING")).thenReturn(null);
+
+        mockMvc.perform(post("/api/v1/review/queue/MISSING/ai-feedback")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of("helpful", true))))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getAiFeedback_found() throws Exception {
+        AiFeedback feedback = AiFeedback.builder()
+                .txnId("TXN-1").helpful(true).operatorId("ops").timestamp(12345L).build();
+        when(aiFeedbackRepository.findByTxnId("TXN-1")).thenReturn(feedback);
+
+        mockMvc.perform(get("/api/v1/review/queue/TXN-1/ai-feedback"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.txnId").value("TXN-1"))
+                .andExpect(jsonPath("$.helpful").value(true));
+    }
+
+    @Test
+    void getAiFeedback_notFound() throws Exception {
+        when(aiFeedbackRepository.findByTxnId("MISSING")).thenReturn(null);
+
+        mockMvc.perform(get("/api/v1/review/queue/MISSING/ai-feedback"))
+                .andExpect(status().isNotFound());
+    }
+
+    // ── Weight History Tests ──
 
     @Test
     void getWeightHistory_success() throws Exception {

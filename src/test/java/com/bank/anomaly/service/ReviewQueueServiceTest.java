@@ -29,12 +29,13 @@ class ReviewQueueServiceTest {
     @Mock private TransactionRepository transactionRepo;
     @Mock private ClientProfileRepository profileRepo;
     @Mock private MetricsConfig metricsConfig;
+    @Mock private OllamaService ollamaService;
 
     private ReviewQueueService service;
 
     @BeforeEach
     void setUp() {
-        service = new ReviewQueueService(reviewQueueRepo, riskResultRepo, transactionRepo, profileRepo, metricsConfig);
+        service = new ReviewQueueService(reviewQueueRepo, riskResultRepo, transactionRepo, profileRepo, metricsConfig, ollamaService);
     }
 
     @Test
@@ -42,10 +43,10 @@ class ReviewQueueServiceTest {
         PagedResponse<ReviewQueueItem> expected = new PagedResponse<>(List.of(
                 TestDataFactory.createReviewQueueItem("T1", "C-1", ReviewStatus.PENDING)),
                 false, null);
-        when(reviewQueueRepo.findByFilters("ALERT", "C-1", null, null, null, 100, null))
+        when(reviewQueueRepo.findByFilters("ALERT", "C-1", null, null, null, null, 100, null))
                 .thenReturn(expected);
 
-        PagedResponse<ReviewQueueItem> result = service.getQueueItems("ALERT", "C-1", null, null, null, 100, null);
+        PagedResponse<ReviewQueueItem> result = service.getQueueItems("ALERT", "C-1", null, null, null, null, 100, null);
         assertThat(result).isEqualTo(expected);
     }
 
@@ -96,9 +97,9 @@ class ReviewQueueServiceTest {
 
     @Test
     void getQueueStats_mapsArrayToMap() {
-        when(reviewQueueRepo.countByStatus()).thenReturn(new int[]{10, 5, 3, 2});
+        when(reviewQueueRepo.countByStatus(isNull(), isNull())).thenReturn(new int[]{10, 5, 3, 2});
 
-        Map<String, Integer> stats = service.getQueueStats();
+        Map<String, Integer> stats = service.getQueueStats(null, null);
 
         assertThat(stats).containsEntry("pending", 10)
                 .containsEntry("truePositive", 5)

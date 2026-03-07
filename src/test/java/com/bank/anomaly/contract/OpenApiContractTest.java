@@ -57,6 +57,7 @@ class OpenApiContractTest {
         assertThat(paths).containsKey("/api/v1/review/queue");
         assertThat(paths).containsKey("/api/v1/review/queue/{txnId}");
         assertThat(paths).containsKey("/api/v1/review/queue/{txnId}/feedback");
+        assertThat(paths).containsKey("/api/v1/review/queue/{txnId}/ai-feedback");
         assertThat(paths).containsKey("/api/v1/review/queue/bulk-feedback");
         assertThat(paths).containsKey("/api/v1/review/stats");
         assertThat(paths).containsKey("/api/v1/review/weight-history");
@@ -71,6 +72,7 @@ class OpenApiContractTest {
 
         // Analytics endpoints
         assertThat(paths).containsKey("/api/v1/analytics/rules/performance");
+        assertThat(paths).containsKey("/api/v1/analytics/ai-feedback/stats");
         assertThat(paths).containsKey("/api/v1/analytics/graph/client/{clientId}/network");
 
         // Graph endpoints

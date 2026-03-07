@@ -6,7 +6,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 
 - **Spring Boot 3.2.5** (Java 17) REST API
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
-- **15 anomaly evaluators** — 14 rule-based + 1 ML (Isolation Forest)
+- **16 anomaly evaluators** — 15 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
 - **Ollama LLM** (llama3.2:1b) — AI chatbot for natural language queries + on-demand AI explanations for flagged transactions
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
@@ -22,7 +22,7 @@ POST /api/v1/transactions/evaluate
   │
   ├─ 1. Load/create client behavioral profile (EWMA stats)
   ├─ 2. Build evaluation context (hourly counters, beneficiary data)
-  ├─ 3. Evaluate against all active anomaly rules (15 evaluators)
+  ├─ 3. Evaluate against all active anomaly rules (16 evaluators)
   ├─ 4. Compute weighted composite risk score (0–100)
   ├─ 5. Determine action: PASS (<30) · ALERT (30–70) · BLOCK (≥70)
   ├─ 6. Update client profile with new transaction data
@@ -49,9 +49,10 @@ POST /api/v1/transactions/evaluate
 | `CROSS_CHANNEL_BENEFICIARY_AMOUNT` | Same beneficiary receives large total across multiple txn types/day | 2.5 |
 | `SEASONAL_DEVIATION` | Time-slot-aware deviation — compares against hour-of-day/day-of-week baselines | 2.0 |
 | `MULE_NETWORK` | Graph-based mule network detection via shared beneficiaries, fan-in convergence, and cluster density | 4.0 |
+| `TEMPORAL_RULE_CORRELATION` | Meta-rule: detects repeated rule triggers for same client within configurable time window | 3.0 |
 | `ISOLATION_FOREST` | ML-based multi-dimensional anomaly detection (8 features) | 2.0 |
 
-**Composite Score** = Σ(triggered partial score × weight) / Σ(triggered weight), capped at 100.
+**Composite Score** = Σ(triggered partial score × weight) / Σ(triggered weight) × breadth multiplier, capped at 100.
 
 ## Prerequisites
 
@@ -260,6 +261,7 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/v1/analytics/rules/performance?fromDate=&toDate=` | Per-rule TP/FP counts and precision from feedback (optional epoch ms time range) |
+| GET | `/api/v1/analytics/ai-feedback/stats` | AI explanation feedback stats `{helpful, notHelpful, total, helpfulPct}` |
 | GET | `/api/v1/analytics/graph/client/{clientId}/network` | Network graph nodes + edges for visualization |
 
 ### Silence Detection
@@ -355,6 +357,8 @@ Every 6 hours (configurable), the tuning job:
 | GET | `/api/v1/review/queue` | List queue items (filters: action, clientId, fromDate, toDate, ruleId, limit) |
 | GET | `/api/v1/review/queue/{txnId}` | Get full detail (queue item + evaluation + transaction + client profile) |
 | POST | `/api/v1/review/queue/{txnId}/feedback` | Submit feedback `{status, feedbackBy}` |
+| POST | `/api/v1/review/queue/{txnId}/ai-feedback` | Rate AI explanation `{helpful, operatorId}` |
+| GET | `/api/v1/review/queue/{txnId}/ai-feedback` | Get existing AI explanation feedback |
 | POST | `/api/v1/review/queue/bulk-feedback` | Bulk feedback `{txnIds[], status, feedbackBy}` |
 | GET | `/api/v1/review/stats` | Queue stats `{pending, truePositive, falsePositive, autoAccepted}` |
 | GET | `/api/v1/review/weight-history` | Rule weight change history (filters: ruleId, limit) |
@@ -365,9 +369,9 @@ The dashboard has four tabs plus a floating AI assistant:
 
 1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
 
-2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation between Feedback and Transaction Details sections), rule breakdown, client profile summary, and weight history.
+2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation with thumbs up/down feedback for rating explanations as helpful or not helpful), rule breakdown, client profile summary, and weight history.
 
-3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 15 rules based on review queue feedback. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
+3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
 4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), and Aerospike connection info (read-only). Changes take effect immediately.
 
@@ -504,10 +508,10 @@ src/main/java/com/bank/anomaly/
 ├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
 ├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue, Graph)
 ├── engine/
-│   ├── evaluators/       # 15 rule evaluators (14 rule-based + 1 Isolation Forest)
+│   ├── evaluators/       # 16 rule evaluators (15 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
-├── repository/           # Aerospike data access (7 repositories)
+├── repository/           # Aerospike data access (8 repositories)
 ├── seeder/               # Demo data seeder & profile builder
 └── service/              # Business logic (evaluation, scoring, profiling, notifications, review queue, auto-tuning)
 
@@ -590,7 +594,7 @@ All rule parameters are configurable via `risk.rule-defaults.*` in `application.
 
 ## Aerospike Data Model
 
-All data is stored in the `banking` namespace across 11 sets:
+All data is stored in the `banking` namespace across 12 sets:
 
 | # | Set | Purpose | Key Format |
 |---|-----|---------|------------|
@@ -605,8 +609,9 @@ All data is stored in the `banking` namespace across 11 sets:
 | 9 | `if_models` | Serialized Isolation Forest models | `clientId` |
 | 10 | `review_queue` | ALERT/BLOCK items for ops review | `txnId` |
 | 11 | `rule_weight_history` | Rule weight change audit trail | `ruleId_timestamp` |
+| 12 | `ai_feedback` | AI explanation helpful/not-helpful ratings | `txnId` |
 
-Sets 1–4 are core data, 5–8 are atomic counters for real-time aggregation, 9 is ML models, and 10–11 support the feedback loop.
+Sets 1–4 are core data, 5–8 are atomic counters for real-time aggregation, 9 is ML models, 10–11 support the feedback loop, and 12 stores AI explanation feedback.
 
 ## Tech Stack
 

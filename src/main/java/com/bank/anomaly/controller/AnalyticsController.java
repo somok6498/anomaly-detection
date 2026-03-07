@@ -2,6 +2,7 @@ package com.bank.anomaly.controller;
 
 import com.bank.anomaly.model.NetworkGraph;
 import com.bank.anomaly.model.RulePerformance;
+import com.bank.anomaly.repository.AiFeedbackRepository;
 import com.bank.anomaly.service.AnalyticsService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -10,6 +11,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/analytics")
@@ -17,9 +19,12 @@ import java.util.List;
 public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
+    private final AiFeedbackRepository aiFeedbackRepository;
 
-    public AnalyticsController(AnalyticsService analyticsService) {
+    public AnalyticsController(AnalyticsService analyticsService,
+                               AiFeedbackRepository aiFeedbackRepository) {
         this.analyticsService = analyticsService;
+        this.aiFeedbackRepository = aiFeedbackRepository;
     }
 
     @GetMapping("/rules/performance")
@@ -31,6 +36,13 @@ public class AnalyticsController {
             @Parameter(description = "End time (epoch ms)")
             @RequestParam(required = false) Long toDate) {
         return ResponseEntity.ok(analyticsService.getRulePerformanceStats(fromDate, toDate));
+    }
+
+    @GetMapping("/ai-feedback/stats")
+    @Operation(summary = "Get AI explanation feedback stats",
+               description = "Returns aggregate counts of helpful vs not helpful AI explanation ratings")
+    public ResponseEntity<Map<String, Object>> getAiFeedbackStats() {
+        return ResponseEntity.ok(aiFeedbackRepository.getStats());
     }
 
     @GetMapping("/graph/client/{clientId}/network")

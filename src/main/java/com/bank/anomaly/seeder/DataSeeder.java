@@ -272,7 +272,23 @@ public class DataSeeder implements CommandLineRunner {
                         "densityThreshold", "0.3"))
                 .build());
 
-        log.info("Seeded 15 default anomaly rules");
+        // Rule 16: Temporal rule correlation — detect repeated rule triggers across recent txns
+        ruleRepository.save(AnomalyRule.builder()
+                .ruleId("RULE-TEMPORAL-CORR")
+                .name("Temporal Rule Correlation")
+                .description("Meta-rule that detects when specific rules are repeatedly triggered for the same client within a time window")
+                .ruleType(RuleType.TEMPORAL_RULE_CORRELATION)
+                .variancePct(0.0)
+                .riskWeight(3.0)
+                .enabled(true)
+                .params(Map.of(
+                        "lookbackHours", "1",
+                        "triggerThreshold", "3",
+                        "monitoredRules", "ALL"
+                ))
+                .build());
+
+        log.info("Seeded 16 default anomaly rules");
     }
 
     /**
