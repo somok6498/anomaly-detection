@@ -4,6 +4,8 @@ import com.bank.anomaly.model.ChatIntent;
 import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.repository.AiFeedbackRepository;
+import com.bank.anomaly.repository.RiskResultRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -18,6 +20,7 @@ import java.net.http.HttpResponse;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -32,13 +35,21 @@ public class OllamaService {
     private static final Pattern JSON_BLOCK = Pattern.compile(
             "\\{[^{}]*\"queryType\"[^{}]*\\}", Pattern.DOTALL);
 
+    private static final int MAX_NEGATIVE_EXAMPLES = 3;
+
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
     private final String ollamaHost;
+    private final AiFeedbackRepository aiFeedbackRepository;
+    private final RiskResultRepository riskResultRepository;
 
     public OllamaService(
-            @Value("${ollama.host:http://localhost:11434}") String ollamaHost) {
+            @Value("${ollama.host:http://localhost:11434}") String ollamaHost,
+            AiFeedbackRepository aiFeedbackRepository,
+            RiskResultRepository riskResultRepository) {
         this.ollamaHost = ollamaHost;
+        this.aiFeedbackRepository = aiFeedbackRepository;
+        this.riskResultRepository = riskResultRepository;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
@@ -152,7 +163,7 @@ public class OllamaService {
         }
     }
 
-    private static final String EXPLANATION_SYSTEM_PROMPT = """
+    private static final String EXPLANATION_SYSTEM_PROMPT_BASE = """
             You are a banking fraud analyst AI. Given a transaction and its anomaly evaluation results,
             write a clear, concise explanation in plain English for a bank operations reviewer.
 
@@ -166,6 +177,46 @@ public class OllamaService {
 
             Respond with ONLY the explanation text, no JSON, no markdown, no bullet points.
             """;
+
+    /**
+     * Builds the system prompt, appending negative examples from operator feedback
+     * so the LLM avoids patterns that reviewers found unhelpful.
+     */
+    private String buildExplanationSystemPrompt() {
+        try {
+            List<String> notHelpfulTxnIds = aiFeedbackRepository.findRecentNotHelpfulTxnIds(MAX_NEGATIVE_EXAMPLES);
+            if (notHelpfulTxnIds.isEmpty()) {
+                return EXPLANATION_SYSTEM_PROMPT_BASE;
+            }
+
+            List<String> badExplanations = notHelpfulTxnIds.stream()
+                    .map(txnId -> {
+                        EvaluationResult evalResult = riskResultRepository.findByTxnId(txnId);
+                        return evalResult != null ? evalResult.getAiExplanation() : null;
+                    })
+                    .filter(Objects::nonNull)
+                    .filter(e -> !e.isBlank())
+                    .toList();
+
+            if (badExplanations.isEmpty()) {
+                return EXPLANATION_SYSTEM_PROMPT_BASE;
+            }
+
+            StringBuilder sb = new StringBuilder(EXPLANATION_SYSTEM_PROMPT_BASE);
+            sb.append("\n\nIMPORTANT: The following explanations were rated NOT HELPFUL by reviewers. ");
+            sb.append("Avoid writing explanations similar to these. Learn from what went wrong:\n\n");
+            for (int i = 0; i < badExplanations.size(); i++) {
+                sb.append("BAD EXAMPLE ").append(i + 1).append(": \"")
+                  .append(badExplanations.get(i)).append("\"\n\n");
+            }
+            sb.append("Write a BETTER explanation that avoids the patterns shown above.\n");
+            return sb.toString();
+
+        } catch (Exception e) {
+            log.debug("Could not load feedback for prompt enrichment: {}", e.getMessage());
+            return EXPLANATION_SYSTEM_PROMPT_BASE;
+        }
+    }
 
     public String generateExplanation(Transaction txn, EvaluationResult eval) {
         List<RuleResult> triggered = eval.getRuleResults().stream()
@@ -193,11 +244,13 @@ public class OllamaService {
             prompt.append("- No rules triggered (transaction passed all checks)\n");
         }
 
+        String systemPrompt = buildExplanationSystemPrompt();
+
         try {
             Map<String, Object> body = Map.of(
                     "model", MODEL,
                     "prompt", prompt.toString(),
-                    "system", EXPLANATION_SYSTEM_PROMPT,
+                    "system", systemPrompt,
                     "stream", false,
                     "options", Map.of(
                             "temperature", 0.3,

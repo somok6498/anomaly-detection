@@ -436,22 +436,24 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               if (filtered.isEmpty) return;
               if (v == 'csv') {
                 final rows = <List<String>>[
-                  ['TXN ID', 'CLIENT', 'ACTION', 'SCORE', 'RISK', 'STATUS', 'ENQUEUED'],
+                  ['TXN ID', 'CLIENT', 'ACTION', 'SCORE', 'RISK', 'STATUS', 'ENQUEUED', 'REVIEWED AT'],
                   ...filtered.map((i) => [
                     i.txnId, i.clientId, i.action, i.compositeScore.toStringAsFixed(1),
                     i.riskLevel, i.feedbackStatus,
                     DateTime.fromMillisecondsSinceEpoch(i.enqueuedAt).toIso8601String(),
+                    i.feedbackAt > 0 ? DateTime.fromMillisecondsSinceEpoch(i.feedbackAt).toIso8601String() : '-',
                   ]),
                 ];
                 ExportService.downloadCsv('review_queue.csv', rows);
               } else if (v == 'pdf') {
                 ExportService.downloadPdf(
                   'Review Queue Report',
-                  ['TXN ID', 'CLIENT', 'ACTION', 'SCORE', 'RISK', 'STATUS', 'ENQUEUED'],
+                  ['TXN ID', 'CLIENT', 'ACTION', 'SCORE', 'RISK', 'STATUS', 'ENQUEUED', 'REVIEWED AT'],
                   filtered.map((i) => [
                     i.txnId, i.clientId, i.action, i.compositeScore.toStringAsFixed(1),
                     i.riskLevel, i.feedbackStatus,
                     DateTime.fromMillisecondsSinceEpoch(i.enqueuedAt).toIso8601String(),
+                    i.feedbackAt > 0 ? DateTime.fromMillisecondsSinceEpoch(i.feedbackAt).toIso8601String() : '-',
                   ]).toList(),
                   'review_queue.pdf',
                 );

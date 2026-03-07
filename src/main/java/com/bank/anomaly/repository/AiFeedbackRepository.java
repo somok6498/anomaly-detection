@@ -12,7 +12,9 @@ import com.bank.anomaly.model.AiFeedback;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -78,5 +80,34 @@ public class AiFeedbackRepository {
         stats.put("total", total);
         stats.put("helpfulPct", total > 0 ? (helpful.get() * 100.0 / total) : 0.0);
         return stats;
+    }
+
+    /**
+     * Returns txnIds of recent "not helpful" feedback, sorted by most recent first.
+     * Used to provide negative examples for AI explanation generation.
+     */
+    public List<String> findRecentNotHelpfulTxnIds(int maxResults) {
+        List<AiFeedback> notHelpful = new ArrayList<>();
+
+        ScanPolicy scanPolicy = new ScanPolicy();
+        scanPolicy.concurrentNodes = true;
+
+        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_AI_FEEDBACK,
+                (key, record) -> {
+                    if (!record.getBoolean("aiFbHelpful")) {
+                        synchronized (notHelpful) {
+                            notHelpful.add(AiFeedback.builder()
+                                    .txnId(key.userKey.toString())
+                                    .timestamp(record.getLong("aiFbTimestamp"))
+                                    .build());
+                        }
+                    }
+                });
+
+        return notHelpful.stream()
+                .sorted((a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()))
+                .limit(maxResults)
+                .map(AiFeedback::getTxnId)
+                .toList();
     }
 }

@@ -223,6 +223,14 @@ class ApiService {
 
   // ── Analytics API ──
 
+  Future<Map<String, dynamic>> getAiFeedbackStats() async {
+    final response = await http.get(Uri.parse('$baseUrl/analytics/ai-feedback/stats'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to load AI feedback stats: ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   Future<List<RulePerformance>> getRulePerformance({int? fromDate, int? toDate}) async {
     final params = <String, String>{};
     if (fromDate != null) params['fromDate'] = fromDate.toString();

@@ -27,15 +27,18 @@ class AnalyticsPageState extends State<AnalyticsPage> {
   bool _loadingNetwork = false;
   bool _loadingSilence = true;
   bool _checkingSilence = false;
+  bool _loadingAiFeedback = true;
   String? _rulesError;
   String? _networkError;
   String? _silenceError;
+  String? _aiFeedbackError;
 
   List<RulePerformance> _ruleStats = [];
   NetworkGraph? _networkGraph;
   GraphStatus? _graphStatus;
   String? _networkClientId;
   SilenceStatus? _silenceStatus;
+  Map<String, dynamic>? _aiFeedbackStats;
 
   // Time range filter
   TimeRangePreset _timePreset = TimeRangePreset.min15;
@@ -53,6 +56,7 @@ class AnalyticsPageState extends State<AnalyticsPage> {
     _toDate = defaultRange.toEpochMs;
     _loadRulePerformance();
     _loadSilenceStatus();
+    _loadAiFeedbackStats();
   }
 
   Future<void> _loadRulePerformance() async {
@@ -143,6 +147,29 @@ class AnalyticsPageState extends State<AnalyticsPage> {
     }
   }
 
+  Future<void> _loadAiFeedbackStats() async {
+    setState(() {
+      _loadingAiFeedback = true;
+      _aiFeedbackError = null;
+    });
+    try {
+      final stats = await _api.getAiFeedbackStats();
+      if (mounted) {
+        setState(() {
+          _aiFeedbackStats = stats;
+          _loadingAiFeedback = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _aiFeedbackError = e.toString().replaceFirst('Exception: ', '');
+          _loadingAiFeedback = false;
+        });
+      }
+    }
+  }
+
   Future<void> _triggerSilenceCheck() async {
     setState(() => _checkingSilence = true);
     try {
@@ -190,6 +217,8 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                 ),
               ),
               _buildRulePerformanceSection(),
+              const SizedBox(height: 8),
+              _buildAiFeedbackSection(),
               const SizedBox(height: 8),
               _buildNetworkSection(),
               const SizedBox(height: 8),
@@ -381,6 +410,133 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                 ]);
               }).toList(),
             ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiFeedbackSection() {
+    if (_loadingAiFeedback) {
+      return const SectionCard(
+        title: 'AI Explanation Feedback',
+        child: Center(
+          child: Padding(
+            padding: EdgeInsets.all(40),
+            child: CircularProgressIndicator(color: AppTheme.accent),
+          ),
+        ),
+      );
+    }
+
+    if (_aiFeedbackError != null) {
+      return SectionCard(
+        title: 'AI Explanation Feedback',
+        child: Text(_aiFeedbackError!, style: const TextStyle(color: AppTheme.critical)),
+      );
+    }
+
+    final stats = _aiFeedbackStats;
+    final helpful = (stats?['helpful'] ?? 0) as int;
+    final notHelpful = (stats?['notHelpful'] ?? 0) as int;
+    final total = (stats?['total'] ?? 0) as int;
+    final helpfulPct = (stats?['helpfulPct'] ?? 0.0) as double;
+
+    if (total == 0) {
+      return SectionCard(
+        title: 'AI Explanation Feedback',
+        trailing: IconButton(
+          onPressed: _loadAiFeedbackStats,
+          icon: Icon(Icons.refresh, color: AppTheme.textSecondary, size: 20),
+          tooltip: 'Refresh',
+        ),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.info_outline, color: AppTheme.textSecondary, size: 20),
+              const SizedBox(width: 8),
+              Text('No AI feedback submitted yet. Rate explanations in the review queue.',
+                  style: TextStyle(fontSize: 14, color: AppTheme.textSecondary)),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final barWidth = 200.0;
+
+    return SectionCard(
+      title: 'AI Explanation Feedback',
+      trailing: IconButton(
+        onPressed: _loadAiFeedbackStats,
+        icon: Icon(Icons.refresh, color: AppTheme.textSecondary, size: 20),
+        tooltip: 'Refresh',
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Stat cards row
+          Wrap(
+            spacing: 14,
+            runSpacing: 8,
+            children: [
+              SizedBox(width: 140, child: StatCard(label: 'Total Ratings', value: total.toString())),
+              SizedBox(width: 140, child: StatCard(label: 'Helpful', value: helpful.toString(), valueColor: AppTheme.pass)),
+              SizedBox(width: 140, child: StatCard(label: 'Not Helpful', value: notHelpful.toString(), valueColor: AppTheme.critical)),
+              SizedBox(width: 140, child: StatCard(
+                label: 'Helpful Rate',
+                value: '${helpfulPct.toStringAsFixed(1)}%',
+                valueColor: helpfulPct >= 70 ? AppTheme.pass : helpfulPct >= 40 ? AppTheme.alert : AppTheme.critical,
+              )),
+            ],
+          ),
+          const SizedBox(height: 20),
+          // Visual bar
+          Text('Feedback Distribution', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: AppTheme.textSecondary)),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: SizedBox(
+                  width: barWidth,
+                  height: 24,
+                  child: Row(
+                    children: [
+                      if (helpful > 0)
+                        Container(
+                          width: barWidth * (helpful / total),
+                          color: AppTheme.pass,
+                          alignment: Alignment.center,
+                          child: helpful / total > 0.15
+                              ? Text('$helpful', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white))
+                              : null,
+                        ),
+                      if (notHelpful > 0)
+                        Container(
+                          width: barWidth * (notHelpful / total),
+                          color: AppTheme.critical,
+                          alignment: Alignment.center,
+                          child: notHelpful / total > 0.15
+                              ? Text('$notHelpful', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: Colors.white))
+                              : null,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              _legendDot(AppTheme.pass, 'Helpful'),
+              const SizedBox(width: 12),
+              _legendDot(AppTheme.critical, 'Not Helpful'),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Feedback is used to improve future AI explanations. Not-helpful ratings train the model to avoid similar patterns.',
+            style: TextStyle(fontSize: 11, color: AppTheme.textSecondary, fontStyle: FontStyle.italic),
           ),
         ],
       ),
