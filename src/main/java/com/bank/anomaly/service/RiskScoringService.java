@@ -28,7 +28,12 @@ public class RiskScoringService {
      * Compute the final evaluation result from individual rule results.
      *
      * Only TRIGGERED rules contribute to the composite score.
-     * Composite score = Σ(triggeredPartialScore × riskWeight) / Σ(triggeredRiskWeight)
+     * Base score = Σ(triggeredPartialScore × riskWeight) / Σ(triggeredRiskWeight)
+     *
+     * Breadth multiplier: when multiple rules trigger, the score is escalated.
+     * breadthBonus = max(0, triggeredCount - 1) × breadthMultiplierPct
+     * finalScore = min(100, baseScore × (1 + breadthBonus))
+     *
      * Non-triggered rules appear in the results for transparency but don't dilute the score.
      */
     @Observed(name = "risk.score.compute", contextualName = "compute-risk-score")
@@ -42,22 +47,31 @@ public class RiskScoringService {
                     .action("PASS")
                     .ruleResults(ruleResults)
                     .evaluatedAt(System.currentTimeMillis())
+                    .triggeredRuleCount(0)
+                    .breadthBonus(0.0)
                     .build();
         }
 
         double weightedScoreSum = 0.0;
         double triggeredWeight = 0.0;
+        int triggeredCount = 0;
 
         for (RuleResult result : ruleResults) {
             if (result.isTriggered()) {
                 weightedScoreSum += result.getPartialScore() * result.getRiskWeight();
                 triggeredWeight += result.getRiskWeight();
+                triggeredCount++;
             }
         }
 
-        double compositeScore = (triggeredWeight > 0)
-                ? Math.min(100.0, weightedScoreSum / triggeredWeight)
+        double baseScore = (triggeredWeight > 0)
+                ? weightedScoreSum / triggeredWeight
                 : 0.0;
+
+        // Apply breadth multiplier: more triggered rules = higher escalation
+        double breadthMultiplier = thresholdConfig.getBreadthMultiplierPct();
+        double breadthBonus = Math.max(0, triggeredCount - 1) * breadthMultiplier;
+        double compositeScore = Math.min(100.0, baseScore * (1 + breadthBonus));
 
         RiskLevel riskLevel = RiskLevel.fromScore(compositeScore);
         String action = determineAction(compositeScore);
@@ -70,6 +84,8 @@ public class RiskScoringService {
                 .action(action)
                 .ruleResults(ruleResults)
                 .evaluatedAt(System.currentTimeMillis())
+                .triggeredRuleCount(triggeredCount)
+                .breadthBonus(Math.round(breadthBonus * 10000.0) / 10000.0) // round to 4 decimal
                 .build();
     }
 

@@ -36,6 +36,12 @@ public class EvaluationResult {
     @Schema(description = "Evaluation timestamp in epoch milliseconds", example = "1739886764000")
     private long evaluatedAt;
 
+    @Schema(description = "Number of rules that triggered for this transaction", example = "3")
+    private int triggeredRuleCount;
+
+    @Schema(description = "Breadth bonus applied to the base score (e.g., 0.06 means 6% boost from multiple triggered rules)", example = "0.06")
+    private double breadthBonus;
+
     @Schema(description = "LLM-generated human-readable explanation of why this transaction was flagged")
     private String aiExplanation;
 }

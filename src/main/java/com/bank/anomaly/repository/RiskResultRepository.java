@@ -60,11 +60,14 @@ public class RiskResultRepository {
         Bin actionBin = new Bin("action", result.getAction());
         Bin evaluatedAtBin = new Bin("evaluatedAt", result.getEvaluatedAt());
         Bin ruleResultsBin = new Bin("ruleResults", serializeRuleResults(result.getRuleResults()));
+        Bin triggeredCountBin = new Bin("trigRuleCount", result.getTriggeredRuleCount());
+        Bin breadthBonusBin = new Bin("breadthBonus", result.getBreadthBonus());
         Bin aiExplanationBin = new Bin("aiExplanation", result.getAiExplanation());
 
         client.put(writePolicy, key,
                 txnIdBin, clientIdBin, scoreBin, riskLevelBin,
-                actionBin, evaluatedAtBin, ruleResultsBin, aiExplanationBin);
+                actionBin, evaluatedAtBin, ruleResultsBin,
+                triggeredCountBin, breadthBonusBin, aiExplanationBin);
     }
 
     public EvaluationResult findByTxnId(String txnId) {
@@ -80,6 +83,8 @@ public class RiskResultRepository {
                 .action(record.getString("action"))
                 .evaluatedAt(record.getLong("evaluatedAt"))
                 .ruleResults(deserializeRuleResults(record.getString("ruleResults")))
+                .triggeredRuleCount(safeInt(record, "trigRuleCount"))
+                .breadthBonus(safeDouble(record, "breadthBonus"))
                 .aiExplanation(record.getString("aiExplanation"))
                 .build();
     }
@@ -159,8 +164,18 @@ public class RiskResultRepository {
                 .action(record.getString("action"))
                 .evaluatedAt(record.getLong("evaluatedAt"))
                 .ruleResults(deserializeRuleResults(record.getString("ruleResults")))
+                .triggeredRuleCount(safeInt(record, "trigRuleCount"))
+                .breadthBonus(safeDouble(record, "breadthBonus"))
                 .aiExplanation(record.getString("aiExplanation"))
                 .build();
+    }
+
+    private int safeInt(Record record, String bin) {
+        try { return record.getInt(bin); } catch (Exception e) { return 0; }
+    }
+
+    private double safeDouble(Record record, String bin) {
+        try { return record.getDouble(bin); } catch (Exception e) { return 0.0; }
     }
 
     public void updateAiExplanation(String txnId, String aiExplanation) {

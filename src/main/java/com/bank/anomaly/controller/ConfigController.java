@@ -37,7 +37,8 @@ public class ConfigController {
                 "alertThreshold", thresholdConfig.getAlertThreshold(),
                 "blockThreshold", thresholdConfig.getBlockThreshold(),
                 "ewmaAlpha", thresholdConfig.getEwmaAlpha(),
-                "minProfileTxns", thresholdConfig.getMinProfileTxns()
+                "minProfileTxns", thresholdConfig.getMinProfileTxns(),
+                "breadthMultiplierPct", thresholdConfig.getBreadthMultiplierPct()
         ));
     }
 
@@ -49,17 +50,20 @@ public class ConfigController {
         double block = toDouble(body, "blockThreshold", thresholdConfig.getBlockThreshold());
         double ewma = toDouble(body, "ewmaAlpha", thresholdConfig.getEwmaAlpha());
         long minTxns = toLong(body, "minProfileTxns", thresholdConfig.getMinProfileTxns());
+        double breadth = toDouble(body, "breadthMultiplierPct", thresholdConfig.getBreadthMultiplierPct());
 
         if (alert < 0) return badRequest("alertThreshold must be >= 0", "alertThreshold");
         if (block < 0) return badRequest("blockThreshold must be >= 0", "blockThreshold");
         if (alert >= block) return badRequest("alertThreshold must be less than blockThreshold", "alertThreshold");
         if (ewma <= 0 || ewma > 1) return badRequest("ewmaAlpha must be in (0, 1]", "ewmaAlpha");
         if (minTxns < 0) return badRequest("minProfileTxns must be >= 0", "minProfileTxns");
+        if (breadth < 0 || breadth > 1) return badRequest("breadthMultiplierPct must be in [0, 1]", "breadthMultiplierPct");
 
         thresholdConfig.setAlertThreshold(alert);
         thresholdConfig.setBlockThreshold(block);
         thresholdConfig.setEwmaAlpha(ewma);
         thresholdConfig.setMinProfileTxns(minTxns);
+        thresholdConfig.setBreadthMultiplierPct(breadth);
 
         return getThresholds();
     }

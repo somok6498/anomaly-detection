@@ -116,6 +116,8 @@ class EvaluationResult {
   final String action;
   final int evaluatedAt;
   final List<RuleResult> ruleResults;
+  final int triggeredRuleCount;
+  final double breadthBonus;
   final String? aiExplanation;
 
   EvaluationResult({
@@ -126,6 +128,8 @@ class EvaluationResult {
     required this.action,
     required this.evaluatedAt,
     required this.ruleResults,
+    this.triggeredRuleCount = 0,
+    this.breadthBonus = 0.0,
     this.aiExplanation,
   });
 
@@ -140,6 +144,8 @@ class EvaluationResult {
       ruleResults: (json['ruleResults'] as List<dynamic>? ?? [])
           .map((r) => RuleResult.fromJson(r as Map<String, dynamic>))
           .toList(),
+      triggeredRuleCount: (json['triggeredRuleCount'] ?? 0).toInt(),
+      breadthBonus: (json['breadthBonus'] ?? 0).toDouble(),
       aiExplanation: json['aiExplanation'],
     );
   }
@@ -494,12 +500,14 @@ class ThresholdConfig {
   double blockThreshold;
   double ewmaAlpha;
   int minProfileTxns;
+  double breadthMultiplierPct;
 
   ThresholdConfig({
     required this.alertThreshold,
     required this.blockThreshold,
     required this.ewmaAlpha,
     required this.minProfileTxns,
+    required this.breadthMultiplierPct,
   });
 
   factory ThresholdConfig.fromJson(Map<String, dynamic> json) {
@@ -508,6 +516,7 @@ class ThresholdConfig {
       blockThreshold: (json['blockThreshold'] ?? 70.0).toDouble(),
       ewmaAlpha: (json['ewmaAlpha'] ?? 0.01).toDouble(),
       minProfileTxns: (json['minProfileTxns'] ?? 20).toInt(),
+      breadthMultiplierPct: (json['breadthMultiplierPct'] ?? 0.03).toDouble(),
     );
   }
 
@@ -516,6 +525,7 @@ class ThresholdConfig {
     'blockThreshold': blockThreshold,
     'ewmaAlpha': ewmaAlpha,
     'minProfileTxns': minProfileTxns,
+    'breadthMultiplierPct': breadthMultiplierPct,
   };
 }
 

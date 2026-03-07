@@ -56,10 +56,8 @@ public class ReviewQueueService {
         Transaction transaction = transactionRepo.findByTxnId(txnId);
         ClientProfile profile = profileRepo.findByClientId(queueItem.getClientId());
 
-        // Generate AI explanation on-demand if not already cached
-        if (evaluation != null && evaluation.getAiExplanation() == null && transaction != null) {
-            enrichWithAiExplanation(evaluation, transaction);
-        }
+        // AI explanation is NOT generated here to avoid blocking the detail response.
+        // The frontend fetches it asynchronously via GET /api/v1/transactions/results/{txnId}.
 
         return ReviewQueueDetail.builder()
                 .queueItem(queueItem)

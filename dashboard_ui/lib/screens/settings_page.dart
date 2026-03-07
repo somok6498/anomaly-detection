@@ -32,6 +32,7 @@ class SettingsPageState extends State<SettingsPage> {
   final _blockCtrl = TextEditingController();
   final _ewmaCtrl = TextEditingController();
   final _minTxnsCtrl = TextEditingController();
+  final _breadthCtrl = TextEditingController();
 
   // Feedback controllers
   final _timeoutCtrl = TextEditingController();
@@ -62,7 +63,8 @@ class SettingsPageState extends State<SettingsPage> {
       _alertCtrl.text != _thresholds!.alertThreshold.toString() ||
       _blockCtrl.text != _thresholds!.blockThreshold.toString() ||
       _ewmaCtrl.text != _thresholds!.ewmaAlpha.toString() ||
-      _minTxnsCtrl.text != _thresholds!.minProfileTxns.toString()
+      _minTxnsCtrl.text != _thresholds!.minProfileTxns.toString() ||
+      _breadthCtrl.text != _thresholds!.breadthMultiplierPct.toString()
     )) return true;
     if (_feedback != null && (
       _timeoutCtrl.text != _feedback!.autoAcceptTimeoutMs.toString() ||
@@ -99,6 +101,7 @@ class SettingsPageState extends State<SettingsPage> {
     _blockCtrl.dispose();
     _ewmaCtrl.dispose();
     _minTxnsCtrl.dispose();
+    _breadthCtrl.dispose();
     _timeoutCtrl.dispose();
     _tuningHrsCtrl.dispose();
     _minSamplesCtrl.dispose();
@@ -138,6 +141,7 @@ class SettingsPageState extends State<SettingsPage> {
       _blockCtrl.text = _thresholds!.blockThreshold.toString();
       _ewmaCtrl.text = _thresholds!.ewmaAlpha.toString();
       _minTxnsCtrl.text = _thresholds!.minProfileTxns.toString();
+      _breadthCtrl.text = _thresholds!.breadthMultiplierPct.toString();
 
       // Init feedback controllers
       _timeoutCtrl.text = _feedback!.autoAcceptTimeoutMs.toString();
@@ -198,7 +202,8 @@ class SettingsPageState extends State<SettingsPage> {
     final block = double.tryParse(_blockCtrl.text);
     final ewma = double.tryParse(_ewmaCtrl.text);
     final minTxns = int.tryParse(_minTxnsCtrl.text);
-    if (alert == null || block == null || ewma == null || minTxns == null) {
+    final breadth = double.tryParse(_breadthCtrl.text);
+    if (alert == null || block == null || ewma == null || minTxns == null || breadth == null) {
       ToastHelper.showError(context, 'Invalid number format');
       return;
     }
@@ -206,6 +211,7 @@ class SettingsPageState extends State<SettingsPage> {
       final updated = await _api.updateThresholds(ThresholdConfig(
         alertThreshold: alert, blockThreshold: block,
         ewmaAlpha: ewma, minProfileTxns: minTxns,
+        breadthMultiplierPct: breadth,
       ));
       _thresholds = updated;
       if (mounted) ToastHelper.showSuccess(context, 'Thresholds saved');
@@ -560,6 +566,7 @@ class SettingsPageState extends State<SettingsPage> {
           _buildField('Block Threshold', _blockCtrl, 120),
           _buildField('EWMA Alpha', _ewmaCtrl, 100),
           _buildField('Min Profile Txns', _minTxnsCtrl, 120),
+          _buildField('Breadth Multiplier', _breadthCtrl, 140),
         ],
       ),
     );

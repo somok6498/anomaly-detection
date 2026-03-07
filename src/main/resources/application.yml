@@ -1,7 +1,6 @@
 spring:
   application:
     name: anomaly-detection
-
 server:
   port: 8080
 
@@ -22,6 +21,10 @@ risk:
   ewma-alpha: 0.01
   # Minimum transactions before rules apply to a client (grace period for new clients)
   min-profile-txns: 20
+  # Breadth multiplier: escalates score when multiple rules trigger simultaneously.
+  # Each additional triggered rule beyond the first adds this % boost to the composite score.
+  # 0.03 = 3% per extra rule. Set to 0 to disable.
+  breadth-multiplier-pct: 0.03
   # How often (seconds) to reload rules from Aerospike into memory cache
   rule-cache-refresh-seconds: 60
 

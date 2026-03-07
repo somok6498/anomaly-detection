@@ -25,6 +25,10 @@ public class RiskThresholdConfig {
     // Below this threshold, all transactions pass (new client grace period).
     private long minProfileTxns = 20;
 
+    // Breadth multiplier: each additional triggered rule beyond the first boosts score by this %.
+    // 0.03 = 3% per extra rule. Set to 0 to disable.
+    private double breadthMultiplierPct = 0.03;
+
     // How often (in seconds) to refresh the in-memory rule cache from Aerospike.
     private int ruleCacheRefreshSeconds = 60;
 

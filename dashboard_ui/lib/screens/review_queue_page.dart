@@ -86,6 +86,9 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
     setState(() {
       _loading = true;
       _error = null;
+      _selectedTxnId = null;
+      _selectedDetail = null;
+      _loadingAiExplanation = false;
     });
 
     try {
@@ -158,26 +161,58 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
     return items;
   }
 
+  // Track whether AI explanation is still loading
+  bool _loadingAiExplanation = false;
+
   Future<void> _selectItem(String txnId) async {
     setState(() {
       _selectedTxnId = txnId;
       _loadingDetail = true;
+      _loadingAiExplanation = false;
     });
 
     try {
       final detail = await _api.getReviewDetail(txnId);
+      if (!mounted || _selectedTxnId != txnId) return;
       setState(() {
         _selectedDetail = detail;
         _loadingDetail = false;
       });
+
+      // Fetch AI explanation asynchronously — doesn't block the detail panel
+      if (detail.evaluation != null && detail.evaluation!.aiExplanation == null) {
+        setState(() => _loadingAiExplanation = true);
+        _fetchAiExplanation(txnId);
+      }
     } catch (e) {
+      if (!mounted || _selectedTxnId != txnId) return;
       setState(() {
         _loadingDetail = false;
         _selectedDetail = null;
       });
-      if (mounted) {
-        ToastHelper.showError(context, 'Failed to load details: ${e.toString().replaceFirst("Exception: ", "")}');
+      ToastHelper.showError(context, 'Failed to load details: ${e.toString().replaceFirst("Exception: ", "")}');
+    }
+  }
+
+  Future<void> _fetchAiExplanation(String txnId) async {
+    try {
+      final evalResult = await _api.getEvalResult(txnId);
+      if (!mounted || _selectedTxnId != txnId) return;
+      if (evalResult != null && evalResult.aiExplanation != null && _selectedDetail != null) {
+        setState(() {
+          _selectedDetail = ReviewQueueDetail(
+            queueItem: _selectedDetail!.queueItem,
+            evaluation: evalResult,
+            transaction: _selectedDetail!.transaction,
+            clientProfile: _selectedDetail!.clientProfile,
+          );
+          _loadingAiExplanation = false;
+        });
+      } else {
+        setState(() => _loadingAiExplanation = false);
       }
+    } catch (_) {
+      if (mounted) setState(() => _loadingAiExplanation = false);
     }
   }
 
@@ -841,9 +876,14 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
             // Feedback action buttons
             _buildFeedbackActions(qi),
             const SizedBox(height: 16),
-            // AI Analysis
-            if (eval != null && eval.aiExplanation != null) _buildAiExplanationCard(eval.aiExplanation!),
-            if (eval != null && eval.aiExplanation != null) const SizedBox(height: 16),
+            // AI Analysis (loaded asynchronously)
+            if (eval != null && eval.aiExplanation != null) ...[
+              _buildAiExplanationCard(eval.aiExplanation!),
+              const SizedBox(height: 16),
+            ] else if (_loadingAiExplanation) ...[
+              _buildAiExplanationLoading(),
+              const SizedBox(height: 16),
+            ],
             // Transaction info
             if (txn != null) _buildTxnCard(txn, qi),
             const SizedBox(height: 16),
@@ -903,6 +943,22 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
               ),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAiExplanationLoading() {
+    return SectionCard(
+      title: 'AI Analysis',
+      child: Row(
+        children: [
+          SizedBox(
+            width: 16, height: 16,
+            child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.accent),
+          ),
+          const SizedBox(width: 12),
+          Text('Generating AI analysis...', style: TextStyle(color: AppTheme.textSecondary, fontSize: 13)),
         ],
       ),
     );

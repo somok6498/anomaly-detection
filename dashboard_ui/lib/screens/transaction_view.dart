@@ -112,6 +112,14 @@ class TransactionView extends StatelessWidget {
                       RiskBadge(level: eval.riskLevel),
                     ],
                   ),
+                  if (eval.triggeredRuleCount > 0) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      '${eval.triggeredRuleCount} rule${eval.triggeredRuleCount == 1 ? '' : 's'} triggered'
+                      '${eval.breadthBonus > 0 ? '  ·  +${(eval.breadthBonus * 100).toStringAsFixed(1)}% breadth boost' : ''}',
+                      style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+                    ),
+                  ],
                 ],
               ),
             ],
