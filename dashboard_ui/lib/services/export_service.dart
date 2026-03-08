@@ -40,46 +40,45 @@ class ExportService {
     String filename,
   ) async {
     final pdf = pw.Document();
+    const cellHeight = 20.0;
 
-    // Split rows into pages of 30 rows each
-    const rowsPerPage = 30;
-    final totalPages = (rows.length / rowsPerPage).ceil().clamp(1, 100);
-
-    for (int page = 0; page < totalPages; page++) {
-      final start = page * rowsPerPage;
-      final end = (start + rowsPerPage).clamp(0, rows.length);
-      final pageRows = rows.sublist(start, end);
-
-      pdf.addPage(
-        pw.Page(
-          pageFormat: PdfPageFormat.a4.landscape,
-          margin: const pw.EdgeInsets.all(24),
-          build: (context) {
+    pdf.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4.landscape,
+        margin: const pw.EdgeInsets.all(24),
+        header: (context) {
+          if (context.pageNumber == 1) {
             return pw.Column(
               crossAxisAlignment: pw.CrossAxisAlignment.start,
               children: [
-                if (page == 0) ...[
-                  pw.Text(title, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
-                  pw.SizedBox(height: 4),
-                  pw.Text('Generated: ${DateTime.now().toIso8601String()}',
-                      style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
-                  pw.SizedBox(height: 16),
-                ],
-                pw.TableHelper.fromTextArray(
-                  headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
-                  cellStyle: const pw.TextStyle(fontSize: 7),
-                  headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
-                  cellHeight: 20,
-                  cellAlignments: {for (int i = 0; i < headers.length; i++) i: pw.Alignment.centerLeft},
-                  headers: headers,
-                  data: pageRows,
-                ),
+                pw.Text(title, style: pw.TextStyle(fontSize: 18, fontWeight: pw.FontWeight.bold)),
+                pw.SizedBox(height: 4),
+                pw.Text('Generated: ${DateTime.now().toIso8601String()}',
+                    style: const pw.TextStyle(fontSize: 10, color: PdfColors.grey600)),
+                pw.SizedBox(height: 16),
               ],
             );
-          },
+          }
+          return pw.SizedBox();
+        },
+        footer: (context) => pw.Align(
+          alignment: pw.Alignment.centerRight,
+          child: pw.Text('Page ${context.pageNumber} of ${context.pagesCount}',
+              style: const pw.TextStyle(fontSize: 8, color: PdfColors.grey600)),
         ),
-      );
-    }
+        build: (context) => [
+          pw.TableHelper.fromTextArray(
+            headerStyle: pw.TextStyle(fontSize: 8, fontWeight: pw.FontWeight.bold),
+            cellStyle: const pw.TextStyle(fontSize: 7),
+            headerDecoration: const pw.BoxDecoration(color: PdfColors.grey200),
+            cellHeight: cellHeight,
+            cellAlignments: {for (int i = 0; i < headers.length; i++) i: pw.Alignment.centerLeft},
+            headers: headers,
+            data: rows,
+          ),
+        ],
+      ),
+    );
 
     final Uint8List bytes = await pdf.save();
     final blob = html.Blob([bytes.buffer], 'application/pdf');
