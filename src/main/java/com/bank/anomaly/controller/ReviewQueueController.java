@@ -188,7 +188,7 @@ public class ReviewQueueController {
                description = "Uses LLM to rank pending review queue items by urgency with reasoning for each prioritization decision")
     public ResponseEntity<?> getAlertTriage() {
         PagedResponse<ReviewQueueItem> pending = reviewQueueService.getQueueItems(
-                null, null, null, null, null, "PENDING", 15, null);
+                null, null, null, null, null, "PENDING", 10, null);
 
         if (pending == null || pending.data().isEmpty()) {
             return ResponseEntity.ok(Map.of("triage", List.of(), "message", "No pending items to triage"));

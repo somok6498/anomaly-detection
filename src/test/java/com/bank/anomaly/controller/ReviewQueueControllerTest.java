@@ -257,7 +257,7 @@ class ReviewQueueControllerTest {
                         TestDataFactory.createReviewQueueItem("TXN-1", "C-1", ReviewStatus.PENDING),
                         TestDataFactory.createReviewQueueItem("TXN-2", "C-2", ReviewStatus.PENDING)),
                 false, null);
-        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(15), isNull()))
+        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(10), isNull()))
                 .thenReturn(pending);
 
         EvaluationResult eval1 = TestDataFactory.createEvaluationResult("TXN-1", "C-1", 75.0, "ALERT");
@@ -277,7 +277,7 @@ class ReviewQueueControllerTest {
     @Test
     void getAlertTriage_noPendingItems() throws Exception {
         PagedResponse<ReviewQueueItem> empty = new PagedResponse<>(List.of(), false, null);
-        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(15), isNull()))
+        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(10), isNull()))
                 .thenReturn(empty);
 
         mockMvc.perform(get("/api/v1/review/queue/triage"))
@@ -290,7 +290,7 @@ class ReviewQueueControllerTest {
         PagedResponse<ReviewQueueItem> pending = new PagedResponse<>(
                 List.of(TestDataFactory.createReviewQueueItem("TXN-1", "C-1", ReviewStatus.PENDING)),
                 false, null);
-        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(15), isNull()))
+        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(10), isNull()))
                 .thenReturn(pending);
         when(riskResultRepository.findByTxnId("TXN-1"))
                 .thenReturn(TestDataFactory.createEvaluationResult("TXN-1", "C-1", 55.0, "ALERT"));

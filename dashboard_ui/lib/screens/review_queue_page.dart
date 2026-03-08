@@ -763,7 +763,9 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
         separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF2A2A3E)),
         itemBuilder: (context, index) {
           final item = _triageResults![index];
-          final urgency = (item['urgency'] ?? 'MEDIUM') as String;
+          var urgencyRaw = (item['urgency'] ?? 'MEDIUM') as String;
+          // Normalize: LLM sometimes outputs "CRITICAL|HIGH|MEDIUM|LOW" — pick first
+          final urgency = urgencyRaw.contains('|') ? urgencyRaw.split('|').first : urgencyRaw;
           final txnId = item['txnId'] as String? ?? '';
           final reasoning = item['reasoning'] as String? ?? '';
           final rank = item['rank'] ?? (index + 1);

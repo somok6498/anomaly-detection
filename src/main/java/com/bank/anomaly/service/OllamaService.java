@@ -392,45 +392,37 @@ public class OllamaService {
     }
 
     private static final String TRIAGE_SYSTEM_PROMPT = """
-            You are a banking fraud analyst AI. Given a list of pending review queue alerts,
-            rank them by urgency (most urgent first) and provide a brief reason for each ranking.
+            You are a banking fraud analyst. Rank these alerts by urgency. Higher scores, BLOCK actions, \
+            multiple rules, and patterns like dormancy reactivation or mule networks are more urgent.
 
-            Consider these factors when prioritizing:
-            - Higher composite risk scores indicate more severe anomalies
-            - BLOCK actions are more urgent than ALERT actions
-            - Multiple triggered rules suggest a more complex/dangerous pattern
-            - Mule network, dormancy reactivation, and rapid repeat patterns are high priority
-            - Large transaction amounts combined with other anomalies are especially concerning
-            - Temporal rule correlations (same client flagged repeatedly) suggest ongoing fraud
+            IMPORTANT: Use the EXACT txnId values from the input (e.g. DEMO-XCHAN-4). \
+            For urgency, pick exactly ONE of: CRITICAL, HIGH, MEDIUM, LOW.
 
-            Respond with ONLY a JSON array, no markdown, no explanation outside JSON.
-            Each item: {"txnId":"...","rank":1,"urgency":"CRITICAL|HIGH|MEDIUM|LOW","reasoning":"one sentence why"}
-            Order by rank ascending (most urgent first). Maximum 10 items.
+            Reply with ONLY a JSON array. Example:
+            [{"txnId":"DEMO-ABC-1","rank":1,"urgency":"CRITICAL","reasoning":"high score with mule pattern"}]
             """;
 
     public String generateAlertTriage(List<ReviewQueueItem> pendingItems, Map<String, EvaluationResult> evalMap) {
         if (pendingItems.isEmpty()) return null;
 
         StringBuilder prompt = new StringBuilder();
-        prompt.append("Pending review queue alerts (").append(pendingItems.size()).append(" items):\n\n");
+        prompt.append("Rank these ").append(Math.min(pendingItems.size(), 10)).append(" alerts by urgency:\n\n");
 
-        for (int i = 0; i < Math.min(pendingItems.size(), 15); i++) {
+        for (int i = 0; i < Math.min(pendingItems.size(), 10); i++) {
             ReviewQueueItem item = pendingItems.get(i);
-            prompt.append(i + 1).append(". TxnId: ").append(item.getTxnId())
-                  .append(" | Client: ").append(item.getClientId())
-                  .append(" | Action: ").append(item.getAction())
-                  .append(" | Score: ").append(String.format("%.1f", item.getCompositeScore()))
-                  .append(" | Risk: ").append(item.getRiskLevel())
-                  .append(" | Rules: ").append(String.join(", ", item.getTriggeredRuleIds()));
+            prompt.append("- ").append(item.getTxnId())
+                  .append(" ").append(item.getAction())
+                  .append(" score=").append(String.format("%.0f", item.getCompositeScore()))
+                  .append(" rules=").append(String.join(",", item.getTriggeredRuleIds()));
 
             EvaluationResult eval = evalMap.get(item.getTxnId());
             if (eval != null && eval.getRuleResults() != null) {
-                List<String> reasons = eval.getRuleResults().stream()
+                List<String> triggered = eval.getRuleResults().stream()
                         .filter(RuleResult::isTriggered)
-                        .map(r -> r.getRuleName() + " (" + String.format("%.0f", r.getPartialScore()) + ")")
+                        .map(RuleResult::getRuleName)
                         .toList();
-                if (!reasons.isEmpty()) {
-                    prompt.append(" | Details: ").append(String.join(", ", reasons));
+                if (!triggered.isEmpty()) {
+                    prompt.append(" (").append(String.join(", ", triggered)).append(")");
                 }
             }
             prompt.append("\n");
@@ -444,7 +436,7 @@ public class OllamaService {
                     "stream", false,
                     "options", Map.of(
                             "temperature", 0.2,
-                            "num_predict", 800
+                            "num_predict", 500
                     )
             );
             String bodyJson = objectMapper.writeValueAsString(body);
@@ -466,7 +458,39 @@ public class OllamaService {
 
             JsonNode root = objectMapper.readTree(response.body());
             String triage = root.path("response").asText("").trim();
-            return triage.isEmpty() ? null : triage;
+            if (triage.isEmpty()) return null;
+
+            // Clean up LLM output: strip markdown fences
+            triage = triage.replaceAll("(?s)```json\\s*", "").replaceAll("(?s)```\\s*", "").trim();
+
+            // Try to parse individual JSON objects from the response
+            java.util.List<JsonNode> items = new java.util.ArrayList<>();
+            // Find all complete JSON objects using brace matching
+            int depth = 0;
+            int objStart = -1;
+            for (int ci = 0; ci < triage.length(); ci++) {
+                char ch = triage.charAt(ci);
+                if (ch == '{') {
+                    if (depth == 0) objStart = ci;
+                    depth++;
+                } else if (ch == '}') {
+                    depth--;
+                    if (depth == 0 && objStart >= 0) {
+                        String objStr = triage.substring(objStart, ci + 1);
+                        try {
+                            items.add(objectMapper.readTree(objStr));
+                        } catch (Exception ignored) {}
+                        objStart = -1;
+                    }
+                }
+            }
+
+            if (items.isEmpty()) return null;
+
+            // Build a clean JSON array
+            com.fasterxml.jackson.databind.node.ArrayNode arr = objectMapper.createArrayNode();
+            items.forEach(arr::add);
+            return objectMapper.writeValueAsString(arr);
 
         } catch (Exception e) {
             log.warn("Failed to generate alert triage: {}", e.getMessage());
