@@ -3,7 +3,10 @@ package com.bank.anomaly.controller;
 import com.bank.anomaly.model.NetworkGraph;
 import com.bank.anomaly.model.RulePerformance;
 import com.bank.anomaly.repository.AiFeedbackRepository;
+import com.bank.anomaly.repository.ClientProfileRepository;
+import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.service.AnalyticsService;
+import com.bank.anomaly.service.OllamaService;
 import com.bank.anomaly.testutil.TestDataFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -32,6 +35,15 @@ class AnalyticsControllerTest {
 
     @MockBean
     private AiFeedbackRepository aiFeedbackRepository;
+
+    @MockBean
+    private ClientProfileRepository clientProfileRepository;
+
+    @MockBean
+    private RiskResultRepository riskResultRepository;
+
+    @MockBean
+    private OllamaService ollamaService;
 
     @Test
     void getRulePerformance_success() throws Exception {

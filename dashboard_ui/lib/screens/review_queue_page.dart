@@ -60,6 +60,10 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   AiFeedback? _aiFeedback;
   bool _submittingAiFeedback = false;
 
+  // Client narrative
+  String? _clientNarrative;
+  bool _loadingNarrative = false;
+
   // Weight history
   List<RuleWeightChange> _weightHistory = [];
 
@@ -94,6 +98,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       _selectedDetail = null;
       _loadingAiExplanation = false;
       _aiFeedback = null;
+      _clientNarrative = null;
+      _loadingNarrative = false;
     });
 
     try {
@@ -175,6 +181,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       _loadingDetail = true;
       _loadingAiExplanation = false;
       _aiFeedback = null;
+      _clientNarrative = null;
+      _loadingNarrative = false;
       _submittingAiFeedback = false;
     });
 
@@ -247,6 +255,29 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       });
     } catch (_) {
       if (mounted) setState(() => _submittingAiFeedback = false);
+    }
+  }
+
+  Future<void> _loadClientNarrative(String clientId) async {
+    setState(() {
+      _loadingNarrative = true;
+      _clientNarrative = null;
+    });
+    try {
+      final narrative = await _api.getClientNarrative(clientId);
+      if (mounted) {
+        setState(() {
+          _clientNarrative = narrative;
+          _loadingNarrative = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _clientNarrative = 'Failed to generate narrative: ${e.toString().replaceFirst('Exception: ', '')}';
+          _loadingNarrative = false;
+        });
+      }
     }
   }
 
@@ -1186,13 +1217,57 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   Widget _buildProfileSummary(ClientProfile profile) {
     return SectionCard(
       title: 'Client Profile — ${profile.clientId}',
-      child: Row(
+      trailing: _loadingNarrative
+          ? SizedBox(width: 16, height: 16, child: CircularProgressIndicator(color: AppTheme.accent, strokeWidth: 2))
+          : TextButton.icon(
+              onPressed: () => _loadClientNarrative(profile.clientId),
+              icon: Icon(Icons.auto_awesome, size: 14, color: AppTheme.accent),
+              label: Text(
+                _clientNarrative != null ? 'Regenerate' : 'AI Narrative',
+                style: TextStyle(fontSize: 11, color: AppTheme.accent),
+              ),
+            ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(child: StatCard(label: 'Total Txns', value: _formatNum(profile.totalTxnCount))),
-          Expanded(child: StatCard(label: 'EWMA Amount', value: _formatAmount(profile.ewmaAmount))),
-          Expanded(child: StatCard(label: 'Std Dev', value: _formatAmount(profile.amountStdDev))),
-          Expanded(child: StatCard(label: 'EWMA TPS/hr', value: profile.ewmaHourlyTps.toStringAsFixed(2))),
-          Expanded(child: StatCard(label: 'Last Active', value: _formatTimeFull(profile.lastUpdated))),
+          Row(
+            children: [
+              Expanded(child: StatCard(label: 'Total Txns', value: _formatNum(profile.totalTxnCount))),
+              Expanded(child: StatCard(label: 'EWMA Amount', value: _formatAmount(profile.ewmaAmount))),
+              Expanded(child: StatCard(label: 'Std Dev', value: _formatAmount(profile.amountStdDev))),
+              Expanded(child: StatCard(label: 'EWMA TPS/hr', value: profile.ewmaHourlyTps.toStringAsFixed(2))),
+              Expanded(child: StatCard(label: 'Last Active', value: _formatTimeFull(profile.lastUpdated))),
+            ],
+          ),
+          if (_clientNarrative != null) ...[
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.cardBg,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: AppTheme.accent.withValues(alpha: 0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Icon(Icons.auto_awesome, size: 14, color: AppTheme.accent),
+                      const SizedBox(width: 6),
+                      Text('AI Risk Narrative', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppTheme.accent)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    _clientNarrative!,
+                    style: TextStyle(fontSize: 12, color: AppTheme.textPrimary, height: 1.5),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

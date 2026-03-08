@@ -1,9 +1,15 @@
 package com.bank.anomaly.controller;
 
+import com.bank.anomaly.model.ClientProfile;
+import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.NetworkGraph;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.RulePerformance;
 import com.bank.anomaly.repository.AiFeedbackRepository;
+import com.bank.anomaly.repository.ClientProfileRepository;
+import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.service.AnalyticsService;
+import com.bank.anomaly.service.OllamaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -20,11 +26,20 @@ public class AnalyticsController {
 
     private final AnalyticsService analyticsService;
     private final AiFeedbackRepository aiFeedbackRepository;
+    private final ClientProfileRepository clientProfileRepository;
+    private final RiskResultRepository riskResultRepository;
+    private final OllamaService ollamaService;
 
     public AnalyticsController(AnalyticsService analyticsService,
-                               AiFeedbackRepository aiFeedbackRepository) {
+                               AiFeedbackRepository aiFeedbackRepository,
+                               ClientProfileRepository clientProfileRepository,
+                               RiskResultRepository riskResultRepository,
+                               OllamaService ollamaService) {
         this.analyticsService = analyticsService;
         this.aiFeedbackRepository = aiFeedbackRepository;
+        this.clientProfileRepository = clientProfileRepository;
+        this.riskResultRepository = riskResultRepository;
+        this.ollamaService = ollamaService;
     }
 
     @GetMapping("/rules/performance")
@@ -52,5 +67,27 @@ public class AnalyticsController {
             @Parameter(description = "Client ID", example = "CLIENT-007")
             @PathVariable String clientId) {
         return ResponseEntity.ok(analyticsService.getClientNetwork(clientId));
+    }
+
+    @GetMapping("/client/{clientId}/narrative")
+    @Operation(summary = "Generate AI risk narrative for a client",
+               description = "Uses LLM to generate a plain-English behavioral summary and risk assessment for a client based on their profile and recent transactions")
+    public ResponseEntity<Map<String, String>> getClientNarrative(
+            @Parameter(description = "Client ID", example = "CLIENT-001")
+            @PathVariable String clientId) {
+        ClientProfile profile = clientProfileRepository.findByClientId(clientId);
+        if (profile == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        // Get recent evaluations for this client (up to 20)
+        PagedResponse<EvaluationResult> evals = riskResultRepository.findByClientId(clientId, 20, null);
+        List<EvaluationResult> recentEvals = evals != null ? evals.data() : List.of();
+
+        String narrative = ollamaService.generateClientNarrative(profile, recentEvals);
+        if (narrative == null) {
+            return ResponseEntity.ok(Map.of("narrative", "Unable to generate narrative. The AI service may be unavailable."));
+        }
+        return ResponseEntity.ok(Map.of("narrative", narrative, "clientId", clientId));
     }
 }

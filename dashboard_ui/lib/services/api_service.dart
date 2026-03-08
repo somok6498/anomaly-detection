@@ -231,6 +231,18 @@ class ApiService {
     return jsonDecode(response.body) as Map<String, dynamic>;
   }
 
+  Future<String> getClientNarrative(String clientId) async {
+    final response = await http.get(Uri.parse('$baseUrl/analytics/client/$clientId/narrative'));
+    if (response.statusCode == 404) {
+      throw Exception('Client not found');
+    }
+    if (response.statusCode != 200) {
+      throw Exception('Failed to generate narrative: ${response.statusCode}');
+    }
+    final data = jsonDecode(response.body) as Map<String, dynamic>;
+    return data['narrative'] as String;
+  }
+
   Future<List<RulePerformance>> getRulePerformance({int? fromDate, int? toDate}) async {
     final params = <String, String>{};
     if (fromDate != null) params['fromDate'] = fromDate.toString();

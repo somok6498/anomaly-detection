@@ -1,6 +1,7 @@
 package com.bank.anomaly.service;
 
 import com.bank.anomaly.model.ChatIntent;
+import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.Transaction;
@@ -280,6 +281,111 @@ public class OllamaService {
 
         } catch (Exception e) {
             log.warn("Failed to generate AI explanation: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private static final String CLIENT_NARRATIVE_SYSTEM_PROMPT = """
+            You are a banking fraud analyst AI. Given a client's behavioral profile and recent transaction history,
+            write a clear risk narrative for a bank operations reviewer.
+
+            Your narrative should:
+            - Summarize the client's normal transaction behavior (typical amounts, frequency, channels)
+            - Highlight any concerning patterns or anomalies
+            - Note the ratio of flagged vs. clean transactions
+            - Mention beneficiary concentration if relevant
+            - Assess overall risk posture in 1 sentence
+            - Be 4-7 sentences total, professional tone
+            - Use actual numbers from the data
+            - Do NOT use technical jargon like "EWMA" or "z-score" — translate to plain language (e.g., "typical amount", "usual rate")
+
+            Respond with ONLY the narrative text, no JSON, no markdown, no bullet points.
+            """;
+
+    public String generateClientNarrative(ClientProfile profile, List<EvaluationResult> recentEvals) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Client: ").append(profile.getClientId()).append("\n");
+        prompt.append("Total Transactions: ").append(profile.getTotalTxnCount()).append("\n");
+        prompt.append("Typical Amount: ₹").append(String.format("%,.2f", profile.getEwmaAmount())).append("\n");
+        prompt.append("Amount Variability (Std Dev): ₹").append(String.format("%,.2f", profile.getAmountStdDev())).append("\n");
+        prompt.append("Typical Rate: ").append(String.format("%.1f", profile.getEwmaHourlyTps())).append(" txns/hour\n");
+        prompt.append("Distinct Beneficiaries: ").append(profile.getDistinctBeneficiaryCount()).append("\n");
+
+        // Transaction type breakdown
+        if (profile.getTxnTypeCounts() != null && !profile.getTxnTypeCounts().isEmpty()) {
+            prompt.append("Channel Breakdown: ");
+            profile.getTxnTypeCounts().forEach((type, count) ->
+                    prompt.append(type).append("=").append(count).append(" "));
+            prompt.append("\n");
+        }
+
+        // Recent evaluations summary
+        if (recentEvals != null && !recentEvals.isEmpty()) {
+            long alerts = recentEvals.stream().filter(e -> "ALERT".equals(e.getAction())).count();
+            long blocks = recentEvals.stream().filter(e -> "BLOCK".equals(e.getAction())).count();
+            long passes = recentEvals.stream().filter(e -> "PASS".equals(e.getAction())).count();
+            double avgScore = recentEvals.stream().mapToDouble(EvaluationResult::getCompositeScore).average().orElse(0);
+            double maxScore = recentEvals.stream().mapToDouble(EvaluationResult::getCompositeScore).max().orElse(0);
+
+            prompt.append("\nRecent Transaction History (last ").append(recentEvals.size()).append(" evaluations):\n");
+            prompt.append("- PASS: ").append(passes).append(", ALERT: ").append(alerts).append(", BLOCK: ").append(blocks).append("\n");
+            prompt.append("- Average Risk Score: ").append(String.format("%.1f", avgScore)).append("/100\n");
+            prompt.append("- Highest Risk Score: ").append(String.format("%.1f", maxScore)).append("/100\n");
+
+            // Top triggered rules across recent evals
+            Map<String, Long> ruleCounts = recentEvals.stream()
+                    .filter(e -> e.getRuleResults() != null)
+                    .flatMap(e -> e.getRuleResults().stream())
+                    .filter(RuleResult::isTriggered)
+                    .collect(Collectors.groupingBy(RuleResult::getRuleName, Collectors.counting()));
+
+            if (!ruleCounts.isEmpty()) {
+                prompt.append("- Most Frequently Triggered Rules: ");
+                ruleCounts.entrySet().stream()
+                        .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                        .limit(5)
+                        .forEach(entry -> prompt.append(entry.getKey()).append(" (").append(entry.getValue()).append("x), "));
+                prompt.setLength(prompt.length() - 2); // remove trailing ", "
+                prompt.append("\n");
+            }
+        } else {
+            prompt.append("\nNo recent transaction evaluations available.\n");
+        }
+
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", MODEL,
+                    "prompt", prompt.toString(),
+                    "system", CLIENT_NARRATIVE_SYSTEM_PROMPT,
+                    "stream", false,
+                    "options", Map.of(
+                            "temperature", 0.3,
+                            "num_predict", 400
+                    )
+            );
+            String bodyJson = objectMapper.writeValueAsString(body);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                log.warn("Ollama returned HTTP {} for client narrative generation", response.statusCode());
+                return null;
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            String narrative = root.path("response").asText("").trim();
+            return narrative.isEmpty() ? null : narrative;
+
+        } catch (Exception e) {
+            log.warn("Failed to generate client narrative: {}", e.getMessage());
             return null;
         }
     }
