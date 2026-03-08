@@ -1,5 +1,6 @@
 package com.bank.anomaly.service;
 
+import com.bank.anomaly.config.OllamaConfig;
 import com.bank.anomaly.model.ChatIntent;
 import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.EvaluationResult;
@@ -12,7 +13,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.net.URI;
@@ -31,8 +31,6 @@ import java.util.stream.Collectors;
 public class OllamaService {
 
     private static final Logger log = LoggerFactory.getLogger(OllamaService.class);
-    private static final String MODEL = "llama3.2:1b";
-    private static final int TIMEOUT_SECONDS = 300;
 
     private static final Pattern JSON_BLOCK = Pattern.compile(
             "\\{[^{}]*\"queryType\"[^{}]*\\}", Pattern.DOTALL);
@@ -41,15 +39,15 @@ public class OllamaService {
 
     private final HttpClient httpClient;
     private final ObjectMapper objectMapper;
-    private final String ollamaHost;
+    private final OllamaConfig ollamaConfig;
     private final AiFeedbackRepository aiFeedbackRepository;
     private final RiskResultRepository riskResultRepository;
 
     public OllamaService(
-            @Value("${ollama.host:http://localhost:11434}") String ollamaHost,
+            OllamaConfig ollamaConfig,
             AiFeedbackRepository aiFeedbackRepository,
             RiskResultRepository riskResultRepository) {
-        this.ollamaHost = ollamaHost;
+        this.ollamaConfig = ollamaConfig;
         this.aiFeedbackRepository = aiFeedbackRepository;
         this.riskResultRepository = riskResultRepository;
         this.httpClient = HttpClient.newBuilder()
@@ -102,7 +100,7 @@ public class OllamaService {
     private String callOllama(String userMessage) {
         try {
             Map<String, Object> body = Map.of(
-                    "model", MODEL,
+                    "model", ollamaConfig.getModel(),
                     "prompt", userMessage,
                     "system", SYSTEM_PROMPT,
                     "stream", false,
@@ -114,9 +112,9 @@ public class OllamaService {
             String bodyJson = objectMapper.writeValueAsString(body);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .uri(URI.create(ollamaConfig.getHost() + "/api/generate"))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .timeout(Duration.ofSeconds(ollamaConfig.getTimeoutSeconds()))
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
                     .build();
 
@@ -250,7 +248,7 @@ public class OllamaService {
 
         try {
             Map<String, Object> body = Map.of(
-                    "model", MODEL,
+                    "model", ollamaConfig.getModel(),
                     "prompt", prompt.toString(),
                     "system", systemPrompt,
                     "stream", false,
@@ -262,9 +260,9 @@ public class OllamaService {
             String bodyJson = objectMapper.writeValueAsString(body);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .uri(URI.create(ollamaConfig.getHost() + "/api/generate"))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .timeout(Duration.ofSeconds(ollamaConfig.getTimeoutSeconds()))
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
                     .build();
 
@@ -355,7 +353,7 @@ public class OllamaService {
 
         try {
             Map<String, Object> body = Map.of(
-                    "model", MODEL,
+                    "model", ollamaConfig.getModel(),
                     "prompt", prompt.toString(),
                     "system", CLIENT_NARRATIVE_SYSTEM_PROMPT,
                     "stream", false,
@@ -367,9 +365,9 @@ public class OllamaService {
             String bodyJson = objectMapper.writeValueAsString(body);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .uri(URI.create(ollamaConfig.getHost() + "/api/generate"))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .timeout(Duration.ofSeconds(ollamaConfig.getTimeoutSeconds()))
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
                     .build();
 
@@ -430,7 +428,7 @@ public class OllamaService {
 
         try {
             Map<String, Object> body = Map.of(
-                    "model", MODEL,
+                    "model", ollamaConfig.getModel(),
                     "prompt", prompt.toString(),
                     "system", TRIAGE_SYSTEM_PROMPT,
                     "stream", false,
@@ -442,9 +440,9 @@ public class OllamaService {
             String bodyJson = objectMapper.writeValueAsString(body);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .uri(URI.create(ollamaConfig.getHost() + "/api/generate"))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .timeout(Duration.ofSeconds(ollamaConfig.getTimeoutSeconds()))
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
                     .build();
 
@@ -544,7 +542,7 @@ public class OllamaService {
 
         try {
             Map<String, Object> body = Map.of(
-                    "model", MODEL,
+                    "model", ollamaConfig.getModel(),
                     "prompt", prompt.toString(),
                     "system", PATTERN_LABEL_SYSTEM_PROMPT,
                     "stream", false,
@@ -556,9 +554,9 @@ public class OllamaService {
             String bodyJson = objectMapper.writeValueAsString(body);
 
             HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .uri(URI.create(ollamaConfig.getHost() + "/api/generate"))
                     .header("Content-Type", "application/json")
-                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .timeout(Duration.ofSeconds(ollamaConfig.getTimeoutSeconds()))
                     .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
                     .build();
 

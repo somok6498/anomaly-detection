@@ -50,6 +50,20 @@ class SettingsPageState extends State<SettingsPage> {
   final _silenceMinTpsCtrl = TextEditingController();
   final _silenceMinHoursCtrl = TextEditingController();
 
+  // Twilio notification
+  TwilioConfigModel? _twilio;
+  bool _twilioEnabled = false;
+  final _twilioSidCtrl = TextEditingController();
+  final _twilioFromCtrl = TextEditingController();
+  final _twilioToCtrl = TextEditingController();
+  String _twilioChannel = 'sms';
+
+  // Ollama / LLM
+  OllamaConfigModel? _ollama;
+  final _ollamaHostCtrl = TextEditingController();
+  final _ollamaModelCtrl = TextEditingController();
+  final _ollamaTimeoutCtrl = TextEditingController();
+
   // Txn type add
   final _newTypeCtrl = TextEditingController();
 
@@ -113,6 +127,12 @@ class SettingsPageState extends State<SettingsPage> {
     _silenceMultiplierCtrl.dispose();
     _silenceMinTpsCtrl.dispose();
     _silenceMinHoursCtrl.dispose();
+    _twilioSidCtrl.dispose();
+    _twilioFromCtrl.dispose();
+    _twilioToCtrl.dispose();
+    _ollamaHostCtrl.dispose();
+    _ollamaModelCtrl.dispose();
+    _ollamaTimeoutCtrl.dispose();
     for (final c in _varianceControllers.values) { c.dispose(); }
     for (final c in _weightControllers.values) { c.dispose(); }
     super.dispose();
@@ -128,6 +148,8 @@ class SettingsPageState extends State<SettingsPage> {
         _api.getTransactionTypes(),
         _api.getAerospikeInfo(),
         _api.getSilenceConfig(),
+        _api.getTwilioConfig(),
+        _api.getOllamaConfig(),
       ]);
       _rules = results[0] as List<AnomalyRuleModel>;
       _thresholds = results[1] as ThresholdConfig;
@@ -135,6 +157,8 @@ class SettingsPageState extends State<SettingsPage> {
       _txnTypes = results[3] as List<String>;
       _aerospike = results[4] as AerospikeInfo;
       _silenceConfig = results[5] as SilenceConfig;
+      _twilio = results[6] as TwilioConfigModel;
+      _ollama = results[7] as OllamaConfigModel;
 
       // Init threshold controllers
       _alertCtrl.text = _thresholds!.alertThreshold.toString();
@@ -157,6 +181,18 @@ class SettingsPageState extends State<SettingsPage> {
       _silenceMultiplierCtrl.text = _silenceConfig!.silenceMultiplier.toString();
       _silenceMinTpsCtrl.text = _silenceConfig!.minExpectedTps.toString();
       _silenceMinHoursCtrl.text = _silenceConfig!.minCompletedHours.toString();
+
+      // Init Twilio controllers
+      _twilioEnabled = _twilio!.enabled;
+      _twilioSidCtrl.text = _twilio!.accountSid;
+      _twilioFromCtrl.text = _twilio!.fromNumber;
+      _twilioToCtrl.text = _twilio!.toNumber;
+      _twilioChannel = _twilio!.channel;
+
+      // Init Ollama controllers
+      _ollamaHostCtrl.text = _ollama!.host;
+      _ollamaModelCtrl.text = _ollama!.model;
+      _ollamaTimeoutCtrl.text = _ollama!.timeoutSeconds.toString();
 
       // Init rule controllers
       _varianceControllers.clear();
@@ -258,6 +294,42 @@ class SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  Future<void> _saveTwilioConfig() async {
+    try {
+      final updated = await _api.updateTwilioConfig(TwilioConfigModel(
+        accountSid: _twilioSidCtrl.text,
+        authToken: _twilio!.authToken, // send back masked value — backend ignores it
+        fromNumber: _twilioFromCtrl.text,
+        toNumber: _twilioToCtrl.text,
+        enabled: _twilioEnabled,
+        channel: _twilioChannel,
+      ));
+      _twilio = updated;
+      if (mounted) ToastHelper.showSuccess(context, 'Twilio config saved');
+    } catch (e) {
+      if (mounted) ToastHelper.showError(context, '$e');
+    }
+  }
+
+  Future<void> _saveOllamaConfig() async {
+    final timeout = int.tryParse(_ollamaTimeoutCtrl.text);
+    if (timeout == null) {
+      ToastHelper.showError(context, 'Invalid timeout value');
+      return;
+    }
+    try {
+      final updated = await _api.updateOllamaConfig(OllamaConfigModel(
+        host: _ollamaHostCtrl.text.trim(),
+        model: _ollamaModelCtrl.text.trim(),
+        timeoutSeconds: timeout,
+      ));
+      _ollama = updated;
+      if (mounted) ToastHelper.showSuccess(context, 'Ollama config saved');
+    } catch (e) {
+      if (mounted) ToastHelper.showError(context, '$e');
+    }
+  }
+
   Future<void> _saveSilenceConfig() async {
     final interval = int.tryParse(_silenceIntervalCtrl.text);
     final multiplier = double.tryParse(_silenceMultiplierCtrl.text);
@@ -303,6 +375,8 @@ class SettingsPageState extends State<SettingsPage> {
               _buildFeedbackSection(),
               _buildTxnTypesSection(),
               _buildSilenceConfigSection(),
+              _buildTwilioSection(),
+              _buildOllamaSection(),
               _buildAerospikeSection(),
             ],
           ),
@@ -325,8 +399,8 @@ class SettingsPageState extends State<SettingsPage> {
           const Icon(Icons.info_outline, color: AppTheme.alert),
           const SizedBox(width: 12),
           Expanded(child: Text(
-            'Threshold, feedback, silence detection, and transaction type changes apply immediately but reset '
-            'to application.yml defaults on restart. Rule changes are persisted to Aerospike.',
+            'Threshold, feedback, silence detection, Twilio, Ollama, and transaction type changes apply immediately '
+            'but reset to application.yml defaults on restart. Rule changes are persisted to Aerospike.',
             style: TextStyle(color: AppTheme.alert, fontSize: 13),
           )),
         ],
@@ -702,6 +776,78 @@ class SettingsPageState extends State<SettingsPage> {
               _buildField('Min Completed Hours', _silenceMinHoursCtrl, 150),
             ],
           ),
+        ],
+      ),
+    );
+  }
+
+  // ── Twilio Notification ──
+
+  Widget _buildTwilioSection() {
+    if (_twilio == null) return const SizedBox();
+    return SectionCard(
+      title: 'Twilio Notifications',
+      trailing: _buildSaveBtn(_saveTwilioConfig),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text('Enabled', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              Switch(
+                value: _twilioEnabled,
+                activeTrackColor: AppTheme.accent,
+                onChanged: (v) => setState(() => _twilioEnabled = v),
+              ),
+              const SizedBox(width: 24),
+              Text('Channel', style: TextStyle(color: AppTheme.textSecondary, fontSize: 11, fontWeight: FontWeight.w600)),
+              const SizedBox(width: 8),
+              SegmentedButton<String>(
+                segments: const [
+                  ButtonSegment(value: 'sms', label: Text('SMS', style: TextStyle(fontSize: 11))),
+                  ButtonSegment(value: 'whatsapp', label: Text('WhatsApp', style: TextStyle(fontSize: 11))),
+                ],
+                selected: {_twilioChannel},
+                onSelectionChanged: (v) => setState(() => _twilioChannel = v.first),
+                style: ButtonStyle(
+                  visualDensity: VisualDensity.compact,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 24,
+            runSpacing: 16,
+            children: [
+              _buildField('Account SID', _twilioSidCtrl, 220),
+              _buildField('From Number', _twilioFromCtrl, 160),
+              _buildField('To Number', _twilioToCtrl, 160),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text('Auth Token: ${_twilio!.authToken.isNotEmpty ? _twilio!.authToken : "(not set)"}',
+              style: TextStyle(color: AppTheme.textSecondary, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+
+  // ── Ollama / LLM ──
+
+  Widget _buildOllamaSection() {
+    if (_ollama == null) return const SizedBox();
+    return SectionCard(
+      title: 'Ollama / LLM',
+      trailing: _buildSaveBtn(_saveOllamaConfig),
+      child: Wrap(
+        spacing: 24,
+        runSpacing: 16,
+        children: [
+          _buildField('Host URL', _ollamaHostCtrl, 260),
+          _buildField('Model', _ollamaModelCtrl, 160),
+          _buildField('Timeout (seconds)', _ollamaTimeoutCtrl, 130),
         ],
       ),
     );

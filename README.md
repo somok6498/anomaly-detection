@@ -298,6 +298,10 @@ All configuration endpoints are live-reloadable — changes take effect immediat
 | PUT | `/api/v1/config/transaction-types` | Update accepted transaction types |
 | GET | `/api/v1/config/silence` | Get silence detection settings |
 | PUT | `/api/v1/config/silence` | Update silence detection settings (enabled, interval, multiplier, thresholds) |
+| GET | `/api/v1/config/twilio` | Get Twilio notification settings (auth token masked) |
+| PUT | `/api/v1/config/twilio` | Update Twilio settings (enabled, channel, from/to numbers) |
+| GET | `/api/v1/config/ollama` | Get Ollama LLM settings (host, model, timeout) |
+| PUT | `/api/v1/config/ollama` | Update Ollama LLM settings |
 | GET | `/api/v1/config/aerospike` | Get Aerospike connection info (read-only) |
 
 ### Actuator / Observability
@@ -375,7 +379,7 @@ The dashboard has four tabs plus a floating AI assistant:
 
 3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. Each rule has an **(i) info tooltip** showing its description on hover. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
-4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), and Aerospike connection info (read-only). Each rule has an **(i) info tooltip** showing its description on hover. Changes take effect immediately.
+4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), Twilio notification settings (enabled toggle, SMS/WhatsApp channel selector, account SID, from/to numbers, masked auth token), Ollama/LLM settings (host URL, model name, timeout), and Aerospike connection info (read-only). Each rule has an **(i) info tooltip** showing its description on hover. Changes take effect immediately.
 
 5. **AI Assistant** (floating) — Opens as a **slide-in side panel** (35% width, 360–520px clamped) from the bottom-right FAB button. Supports **maximize to fullscreen** and minimize back to side panel. Natural language query interface powered by Ollama (llama3.2:1b) with keyword-based fast parsing as primary and LLM as fallback. Supports queries like:
    - "How many clients did UPI in last 15 mins?"

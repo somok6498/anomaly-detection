@@ -373,6 +373,48 @@ class ApiService {
     return AerospikeInfo.fromJson(jsonDecode(response.body));
   }
 
+  // ── Twilio Config API ──
+
+  Future<TwilioConfigModel> getTwilioConfig() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/twilio'));
+    if (response.statusCode != 200) throw Exception('Failed to load Twilio config');
+    return TwilioConfigModel.fromJson(jsonDecode(response.body));
+  }
+
+  Future<TwilioConfigModel> updateTwilioConfig(TwilioConfigModel config) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/config/twilio'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(config.toJson()),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update Twilio config');
+    }
+    return TwilioConfigModel.fromJson(jsonDecode(response.body));
+  }
+
+  // ── Ollama Config API ──
+
+  Future<OllamaConfigModel> getOllamaConfig() async {
+    final response = await http.get(Uri.parse('$baseUrl/config/ollama'));
+    if (response.statusCode != 200) throw Exception('Failed to load Ollama config');
+    return OllamaConfigModel.fromJson(jsonDecode(response.body));
+  }
+
+  Future<OllamaConfigModel> updateOllamaConfig(OllamaConfigModel config) async {
+    final response = await http.put(
+      Uri.parse('$baseUrl/config/ollama'),
+      headers: {'Content-Type': 'application/json'},
+      body: jsonEncode(config.toJson()),
+    );
+    if (response.statusCode != 200) {
+      final err = jsonDecode(response.body);
+      throw Exception(err['error'] ?? 'Failed to update Ollama config');
+    }
+    return OllamaConfigModel.fromJson(jsonDecode(response.body));
+  }
+
   // ── Silence Detection API ──
 
   Future<SilenceStatus> getSilenceStatus() async {

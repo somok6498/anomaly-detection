@@ -1433,6 +1433,60 @@
             "url": "{{baseUrl}}/api/v1/config/aerospike",
             "header": []
           }
+        },
+        {
+          "name": "Get Twilio Config",
+          "description": "Returns Twilio notification settings. Auth token is masked for security.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/config/twilio",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Twilio Config",
+          "description": "Update Twilio settings. Omit authToken to keep existing value; send a non-masked value to change it. Channel must be 'sms' or 'whatsapp'.",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/config/twilio",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"enabled\": true,\n  \"channel\": \"whatsapp\",\n  \"fromNumber\": \"+14155238886\",\n  \"toNumber\": \"+919830709527\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Get Ollama / LLM Config",
+          "description": "Returns Ollama LLM settings: host URL, model name, and timeout.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/config/ollama",
+            "header": []
+          }
+        },
+        {
+          "name": "Update Ollama / LLM Config",
+          "description": "Update Ollama settings. Host and model must not be empty. Timeout must be > 0.",
+          "request": {
+            "method": "PUT",
+            "url": "{{baseUrl}}/api/v1/config/ollama",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"host\": \"http://localhost:11434\",\n  \"model\": \"llama3.2:1b\",\n  \"timeoutSeconds\": 300\n}"
+            }
+          }
         }
       ]
     },

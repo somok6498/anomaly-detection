@@ -2,7 +2,9 @@ package com.bank.anomaly.controller;
 
 import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.config.FeedbackConfig;
+import com.bank.anomaly.config.OllamaConfig;
 import com.bank.anomaly.config.RiskThresholdConfig;
+import com.bank.anomaly.config.TwilioNotificationConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
@@ -19,13 +21,19 @@ public class ConfigController {
     private final RiskThresholdConfig thresholdConfig;
     private final FeedbackConfig feedbackConfig;
     private final AerospikeConfig aerospikeConfig;
+    private final TwilioNotificationConfig twilioConfig;
+    private final OllamaConfig ollamaConfig;
 
     public ConfigController(RiskThresholdConfig thresholdConfig,
                             FeedbackConfig feedbackConfig,
-                            AerospikeConfig aerospikeConfig) {
+                            AerospikeConfig aerospikeConfig,
+                            TwilioNotificationConfig twilioConfig,
+                            OllamaConfig ollamaConfig) {
         this.thresholdConfig = thresholdConfig;
         this.feedbackConfig = feedbackConfig;
         this.aerospikeConfig = aerospikeConfig;
+        this.twilioConfig = twilioConfig;
+        this.ollamaConfig = ollamaConfig;
     }
 
     // ── Thresholds ──
@@ -197,6 +205,97 @@ public class ConfigController {
                 "port", aerospikeConfig.getPort(),
                 "namespace", aerospikeConfig.getNamespace()
         ));
+    }
+
+    // ── Twilio Notification ──
+
+    @Operation(summary = "Get Twilio notification configuration",
+            description = "Auth token is masked for security.")
+    @GetMapping("/twilio")
+    public ResponseEntity<Map<String, Object>> getTwilioConfig() {
+        String maskedToken = "";
+        if (twilioConfig.getAuthToken() != null && !twilioConfig.getAuthToken().isEmpty()) {
+            String token = twilioConfig.getAuthToken();
+            maskedToken = token.length() > 4
+                    ? "****" + token.substring(token.length() - 4)
+                    : "****";
+        }
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("accountSid", twilioConfig.getAccountSid() != null ? twilioConfig.getAccountSid() : "");
+        result.put("authToken", maskedToken);
+        result.put("fromNumber", twilioConfig.getFromNumber() != null ? twilioConfig.getFromNumber() : "");
+        result.put("toNumber", twilioConfig.getToNumber() != null ? twilioConfig.getToNumber() : "");
+        result.put("enabled", twilioConfig.isEnabled());
+        result.put("channel", twilioConfig.getChannel() != null ? twilioConfig.getChannel() : "sms");
+        return ResponseEntity.ok(result);
+    }
+
+    @Operation(summary = "Update Twilio notification configuration",
+            description = "Changes apply immediately but reset on restart. " +
+                    "Omit authToken to keep the current value; send a non-masked value to change it.")
+    @PutMapping("/twilio")
+    public ResponseEntity<?> updateTwilioConfig(@RequestBody Map<String, Object> body) {
+        if (body.containsKey("accountSid")) {
+            twilioConfig.setAccountSid(body.get("accountSid").toString());
+        }
+        if (body.containsKey("authToken")) {
+            String token = body.get("authToken").toString();
+            // Don't overwrite with the masked value
+            if (!token.startsWith("****")) {
+                twilioConfig.setAuthToken(token);
+            }
+        }
+        if (body.containsKey("fromNumber")) {
+            twilioConfig.setFromNumber(body.get("fromNumber").toString());
+        }
+        if (body.containsKey("toNumber")) {
+            twilioConfig.setToNumber(body.get("toNumber").toString());
+        }
+        if (body.containsKey("enabled")) {
+            twilioConfig.setEnabled(Boolean.parseBoolean(body.get("enabled").toString()));
+        }
+        if (body.containsKey("channel")) {
+            String channel = body.get("channel").toString().toLowerCase();
+            if (!channel.equals("sms") && !channel.equals("whatsapp")) {
+                return badRequest("channel must be 'sms' or 'whatsapp'", "channel");
+            }
+            twilioConfig.setChannel(channel);
+        }
+        return getTwilioConfig();
+    }
+
+    // ── Ollama / LLM ──
+
+    @Operation(summary = "Get Ollama LLM configuration")
+    @GetMapping("/ollama")
+    public ResponseEntity<Map<String, Object>> getOllamaConfig() {
+        return ResponseEntity.ok(Map.of(
+                "host", ollamaConfig.getHost(),
+                "model", ollamaConfig.getModel(),
+                "timeoutSeconds", ollamaConfig.getTimeoutSeconds()
+        ));
+    }
+
+    @Operation(summary = "Update Ollama LLM configuration",
+            description = "Changes apply immediately but reset on restart.")
+    @PutMapping("/ollama")
+    public ResponseEntity<?> updateOllamaConfig(@RequestBody Map<String, Object> body) {
+        if (body.containsKey("host")) {
+            String host = body.get("host").toString().trim();
+            if (host.isEmpty()) return badRequest("host must not be empty", "host");
+            ollamaConfig.setHost(host);
+        }
+        if (body.containsKey("model")) {
+            String model = body.get("model").toString().trim();
+            if (model.isEmpty()) return badRequest("model must not be empty", "model");
+            ollamaConfig.setModel(model);
+        }
+        if (body.containsKey("timeoutSeconds")) {
+            int timeout = toInt(body, "timeoutSeconds", ollamaConfig.getTimeoutSeconds());
+            if (timeout <= 0) return badRequest("timeoutSeconds must be > 0", "timeoutSeconds");
+            ollamaConfig.setTimeoutSeconds(timeout);
+        }
+        return getOllamaConfig();
     }
 
     // ── Helpers ──

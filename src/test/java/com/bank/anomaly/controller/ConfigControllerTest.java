@@ -2,7 +2,9 @@ package com.bank.anomaly.controller;
 
 import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.config.FeedbackConfig;
+import com.bank.anomaly.config.OllamaConfig;
 import com.bank.anomaly.config.RiskThresholdConfig;
+import com.bank.anomaly.config.TwilioNotificationConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -36,6 +38,12 @@ class ConfigControllerTest {
 
     @MockBean
     private AerospikeConfig aerospikeConfig;
+
+    @MockBean
+    private TwilioNotificationConfig twilioConfig;
+
+    @MockBean
+    private OllamaConfig ollamaConfig;
 
     // ── Thresholds ──
 
@@ -279,5 +287,138 @@ class ConfigControllerTest {
                 .andExpect(jsonPath("$.host").value("127.0.0.1"))
                 .andExpect(jsonPath("$.port").value(3000))
                 .andExpect(jsonPath("$.namespace").value("banking"));
+    }
+
+    // ── Twilio ──
+
+    @Test
+    void getTwilioConfig_masksAuthToken() throws Exception {
+        when(twilioConfig.getAccountSid()).thenReturn("AC123456");
+        when(twilioConfig.getAuthToken()).thenReturn("secret_token_abcd");
+        when(twilioConfig.getFromNumber()).thenReturn("+14155238886");
+        when(twilioConfig.getToNumber()).thenReturn("+919830709527");
+        when(twilioConfig.isEnabled()).thenReturn(true);
+        when(twilioConfig.getChannel()).thenReturn("whatsapp");
+
+        mockMvc.perform(get("/api/v1/config/twilio"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accountSid").value("AC123456"))
+                .andExpect(jsonPath("$.authToken").value("****abcd"))
+                .andExpect(jsonPath("$.fromNumber").value("+14155238886"))
+                .andExpect(jsonPath("$.enabled").value(true))
+                .andExpect(jsonPath("$.channel").value("whatsapp"));
+    }
+
+    @Test
+    void updateTwilioConfig_success() throws Exception {
+        when(twilioConfig.getAccountSid()).thenReturn("AC123456");
+        when(twilioConfig.getAuthToken()).thenReturn("secret_token_abcd");
+        when(twilioConfig.getFromNumber()).thenReturn("+14155238886");
+        when(twilioConfig.getToNumber()).thenReturn("+919830709527");
+        when(twilioConfig.isEnabled()).thenReturn(false);
+        when(twilioConfig.getChannel()).thenReturn("sms");
+
+        mockMvc.perform(put("/api/v1/config/twilio")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "enabled", false,
+                                "channel", "sms"
+                        ))))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.enabled").value(false))
+                .andExpect(jsonPath("$.channel").value("sms"));
+
+        verify(twilioConfig).setEnabled(false);
+        verify(twilioConfig).setChannel("sms");
+    }
+
+    @Test
+    void updateTwilioConfig_invalidChannel_returns400() throws Exception {
+        mockMvc.perform(put("/api/v1/config/twilio")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "channel", "email"
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("channel"));
+    }
+
+    @Test
+    void updateTwilioConfig_maskedTokenNotOverwritten() throws Exception {
+        when(twilioConfig.getAccountSid()).thenReturn("AC123456");
+        when(twilioConfig.getAuthToken()).thenReturn("original_secret");
+        when(twilioConfig.getFromNumber()).thenReturn("+14155238886");
+        when(twilioConfig.getToNumber()).thenReturn("+919830709527");
+        when(twilioConfig.isEnabled()).thenReturn(true);
+        when(twilioConfig.getChannel()).thenReturn("whatsapp");
+
+        mockMvc.perform(put("/api/v1/config/twilio")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "authToken", "****cret"
+                        ))))
+                .andExpect(status().isOk());
+
+        // Should NOT overwrite with masked value
+        verify(twilioConfig, never()).setAuthToken(anyString());
+    }
+
+    // ── Ollama / LLM ──
+
+    @Test
+    void getOllamaConfig_success() throws Exception {
+        when(ollamaConfig.getHost()).thenReturn("http://localhost:11434");
+        when(ollamaConfig.getModel()).thenReturn("llama3.2:1b");
+        when(ollamaConfig.getTimeoutSeconds()).thenReturn(300);
+
+        mockMvc.perform(get("/api/v1/config/ollama"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.host").value("http://localhost:11434"))
+                .andExpect(jsonPath("$.model").value("llama3.2:1b"))
+                .andExpect(jsonPath("$.timeoutSeconds").value(300));
+    }
+
+    @Test
+    void updateOllamaConfig_success() throws Exception {
+        when(ollamaConfig.getHost()).thenReturn("http://newhost:11434");
+        when(ollamaConfig.getModel()).thenReturn("llama3:8b");
+        when(ollamaConfig.getTimeoutSeconds()).thenReturn(600);
+
+        mockMvc.perform(put("/api/v1/config/ollama")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "host", "http://newhost:11434",
+                                "model", "llama3:8b",
+                                "timeoutSeconds", 600
+                        ))))
+                .andExpect(status().isOk());
+
+        verify(ollamaConfig).setHost("http://newhost:11434");
+        verify(ollamaConfig).setModel("llama3:8b");
+        verify(ollamaConfig).setTimeoutSeconds(600);
+    }
+
+    @Test
+    void updateOllamaConfig_emptyModel_returns400() throws Exception {
+        mockMvc.perform(put("/api/v1/config/ollama")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "model", ""
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("model"));
+    }
+
+    @Test
+    void updateOllamaConfig_invalidTimeout_returns400() throws Exception {
+        when(ollamaConfig.getTimeoutSeconds()).thenReturn(300);
+
+        mockMvc.perform(put("/api/v1/config/ollama")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(Map.of(
+                                "timeoutSeconds", 0
+                        ))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.field").value("timeoutSeconds"));
     }
 }

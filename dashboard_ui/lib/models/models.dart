@@ -612,6 +612,70 @@ class AerospikeInfo {
   }
 }
 
+class TwilioConfigModel {
+  String accountSid;
+  String authToken;
+  String fromNumber;
+  String toNumber;
+  bool enabled;
+  String channel;
+
+  TwilioConfigModel({
+    required this.accountSid,
+    required this.authToken,
+    required this.fromNumber,
+    required this.toNumber,
+    required this.enabled,
+    required this.channel,
+  });
+
+  factory TwilioConfigModel.fromJson(Map<String, dynamic> json) {
+    return TwilioConfigModel(
+      accountSid: json['accountSid'] ?? '',
+      authToken: json['authToken'] ?? '',
+      fromNumber: json['fromNumber'] ?? '',
+      toNumber: json['toNumber'] ?? '',
+      enabled: json['enabled'] ?? false,
+      channel: json['channel'] ?? 'sms',
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'accountSid': accountSid,
+    'authToken': authToken,
+    'fromNumber': fromNumber,
+    'toNumber': toNumber,
+    'enabled': enabled,
+    'channel': channel,
+  };
+}
+
+class OllamaConfigModel {
+  String host;
+  String model;
+  int timeoutSeconds;
+
+  OllamaConfigModel({
+    required this.host,
+    required this.model,
+    required this.timeoutSeconds,
+  });
+
+  factory OllamaConfigModel.fromJson(Map<String, dynamic> json) {
+    return OllamaConfigModel(
+      host: json['host'] ?? 'http://localhost:11434',
+      model: json['model'] ?? 'llama3.2:1b',
+      timeoutSeconds: (json['timeoutSeconds'] ?? 300).toInt(),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+    'host': host,
+    'model': model,
+    'timeoutSeconds': timeoutSeconds,
+  };
+}
+
 // ── Chat models ──
 
 class ChatResult {
