@@ -1,6 +1,8 @@
 package com.bank.anomaly.controller;
 
+import com.bank.anomaly.model.EvaluationResult;
 import com.bank.anomaly.model.NetworkGraph;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.RulePerformance;
 import com.bank.anomaly.repository.AiFeedbackRepository;
 import com.bank.anomaly.repository.ClientProfileRepository;
@@ -19,6 +21,8 @@ import java.util.List;
 import java.util.Map;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -102,5 +106,43 @@ class AnalyticsControllerTest {
                 .andExpect(jsonPath("$.notHelpful").value(5))
                 .andExpect(jsonPath("$.total").value(20))
                 .andExpect(jsonPath("$.helpfulPct").value(75.0));
+    }
+
+    @Test
+    void getClientNarrative_success() throws Exception {
+        when(clientProfileRepository.findByClientId("CLIENT-001"))
+                .thenReturn(TestDataFactory.createClientProfile("CLIENT-001", 500));
+        when(riskResultRepository.findByClientId(eq("CLIENT-001"), anyInt(), any()))
+                .thenReturn(new PagedResponse<>(
+                        List.of(TestDataFactory.createEvaluationResult("TXN-1", "CLIENT-001", 45.0, "ALERT")),
+                        false, null));
+        when(ollamaService.generateClientNarrative(any(), any()))
+                .thenReturn("CLIENT-001 shows moderate risk with occasional amount anomalies.");
+
+        mockMvc.perform(get("/api/v1/analytics/client/CLIENT-001/narrative"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.clientId").value("CLIENT-001"))
+                .andExpect(jsonPath("$.narrative").value("CLIENT-001 shows moderate risk with occasional amount anomalies."));
+    }
+
+    @Test
+    void getClientNarrative_clientNotFound_returns404() throws Exception {
+        when(clientProfileRepository.findByClientId("UNKNOWN")).thenReturn(null);
+
+        mockMvc.perform(get("/api/v1/analytics/client/UNKNOWN/narrative"))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void getClientNarrative_ollamaUnavailable_returnsFallback() throws Exception {
+        when(clientProfileRepository.findByClientId("CLIENT-001"))
+                .thenReturn(TestDataFactory.createClientProfile("CLIENT-001", 500));
+        when(riskResultRepository.findByClientId(eq("CLIENT-001"), anyInt(), any()))
+                .thenReturn(new PagedResponse<>(List.of(), false, null));
+        when(ollamaService.generateClientNarrative(any(), any())).thenReturn(null);
+
+        mockMvc.perform(get("/api/v1/analytics/client/CLIENT-001/narrative"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.narrative").value("Unable to generate narrative. The AI service may be unavailable."));
     }
 }

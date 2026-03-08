@@ -1269,6 +1269,28 @@
             },
             "header": []
           }
+        },
+        {
+          "name": "Client Risk Narrative \u2014 AI Generated",
+          "description": "Uses the LLM to generate a plain-English behavioral summary and risk assessment for the specified client. Considers transaction patterns, rule trigger history, and profile stats. Returns {narrative, clientId}. Returns 404 if client profile not found. Falls back gracefully if Ollama is unavailable.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/analytics/client/CLIENT-001/narrative",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "analytics",
+                "client",
+                "CLIENT-001",
+                "narrative"
+              ]
+            },
+            "header": []
+          }
         }
       ]
     },

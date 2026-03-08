@@ -8,7 +8,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
 - **16 anomaly evaluators** — 15 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
-- **Ollama LLM** (llama3.2:1b) — AI chatbot for natural language queries + on-demand AI explanations for flagged transactions
+- **Ollama LLM** (llama3.2:1b) — AI chatbot for natural language queries, on-demand AI explanations for flagged transactions (with feedback-aware prompting), and client risk profile narratives
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
 - **Swagger UI** for interactive API exploration
@@ -263,6 +263,7 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 | GET | `/api/v1/analytics/rules/performance?fromDate=&toDate=` | Per-rule TP/FP counts and precision from feedback (optional epoch ms time range) |
 | GET | `/api/v1/analytics/ai-feedback/stats` | AI explanation feedback stats `{helpful, notHelpful, total, helpfulPct}` |
 | GET | `/api/v1/analytics/graph/client/{clientId}/network` | Network graph nodes + edges for visualization |
+| GET | `/api/v1/analytics/client/{clientId}/narrative` | AI-generated plain-English client risk narrative (LLM) |
 
 ### Silence Detection
 
@@ -369,9 +370,9 @@ The dashboard has four tabs plus a floating AI assistant:
 
 1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
 
-2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export. Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation with thumbs up/down feedback for rating explanations as helpful or not helpful), rule breakdown, client profile summary, and weight history.
+2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export (includes REVIEWED AT column). Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation with thumbs up/down feedback for rating explanations as helpful or not helpful), rule breakdown, client profile summary with **AI Narrative button** (generates LLM-powered behavioral summary), and weight history.
 
-3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
+3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
 4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), and Aerospike connection info (read-only). Changes take effect immediately.
 
@@ -394,6 +395,18 @@ When an operator views a flagged transaction (in Review Queue detail or Investig
 - Avoids technical jargon (no "EWMA", "z-score", "isolation forest")
 
 Explanations are **generated on-demand** (first view) and **cached in Aerospike** — subsequent views are instant. If Ollama is unavailable, the card simply doesn't appear (graceful degradation).
+
+**Feedback-Aware Prompting:** Operators can rate AI explanations as helpful or not helpful (thumbs up/down). Recent "not helpful" explanations are automatically injected as negative examples into the LLM system prompt, so future explanations improve over time based on operator feedback.
+
+### AI Client Risk Narrative
+
+When viewing a client's profile in the Review Queue detail panel, operators can click **"AI Narrative"** to generate a **plain-English behavioral summary** using the LLM. The narrative considers:
+
+- Client transaction patterns (volume, typical amounts, channels used)
+- Recent rule trigger history (PASS/ALERT/BLOCK distribution, top triggered rules)
+- EWMA behavioral profile stats
+
+The narrative is regenerated on each request (not cached) to reflect the latest data. Available via the dashboard button or directly via `GET /api/v1/analytics/client/{clientId}/narrative`.
 
 ## Observability
 
