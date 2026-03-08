@@ -221,6 +221,16 @@ class ApiService {
     );
   }
 
+  // ── Smart Alert Triage API ──
+
+  Future<Map<String, dynamic>> getAlertTriage() async {
+    final response = await http.get(Uri.parse('$baseUrl/review/queue/triage'));
+    if (response.statusCode != 200) {
+      throw Exception('Failed to generate triage: ${response.statusCode}');
+    }
+    return jsonDecode(response.body) as Map<String, dynamic>;
+  }
+
   // ── Analytics API ──
 
   Future<Map<String, dynamic>> getAiFeedbackStats() async {

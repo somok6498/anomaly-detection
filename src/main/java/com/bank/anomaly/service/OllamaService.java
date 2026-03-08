@@ -3,6 +3,7 @@ package com.bank.anomaly.service;
 import com.bank.anomaly.model.ChatIntent;
 import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.EvaluationResult;
+import com.bank.anomaly.model.ReviewQueueItem;
 import com.bank.anomaly.model.RuleResult;
 import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.AiFeedbackRepository;
@@ -386,6 +387,89 @@ public class OllamaService {
 
         } catch (Exception e) {
             log.warn("Failed to generate client narrative: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    private static final String TRIAGE_SYSTEM_PROMPT = """
+            You are a banking fraud analyst AI. Given a list of pending review queue alerts,
+            rank them by urgency (most urgent first) and provide a brief reason for each ranking.
+
+            Consider these factors when prioritizing:
+            - Higher composite risk scores indicate more severe anomalies
+            - BLOCK actions are more urgent than ALERT actions
+            - Multiple triggered rules suggest a more complex/dangerous pattern
+            - Mule network, dormancy reactivation, and rapid repeat patterns are high priority
+            - Large transaction amounts combined with other anomalies are especially concerning
+            - Temporal rule correlations (same client flagged repeatedly) suggest ongoing fraud
+
+            Respond with ONLY a JSON array, no markdown, no explanation outside JSON.
+            Each item: {"txnId":"...","rank":1,"urgency":"CRITICAL|HIGH|MEDIUM|LOW","reasoning":"one sentence why"}
+            Order by rank ascending (most urgent first). Maximum 10 items.
+            """;
+
+    public String generateAlertTriage(List<ReviewQueueItem> pendingItems, Map<String, EvaluationResult> evalMap) {
+        if (pendingItems.isEmpty()) return null;
+
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Pending review queue alerts (").append(pendingItems.size()).append(" items):\n\n");
+
+        for (int i = 0; i < Math.min(pendingItems.size(), 15); i++) {
+            ReviewQueueItem item = pendingItems.get(i);
+            prompt.append(i + 1).append(". TxnId: ").append(item.getTxnId())
+                  .append(" | Client: ").append(item.getClientId())
+                  .append(" | Action: ").append(item.getAction())
+                  .append(" | Score: ").append(String.format("%.1f", item.getCompositeScore()))
+                  .append(" | Risk: ").append(item.getRiskLevel())
+                  .append(" | Rules: ").append(String.join(", ", item.getTriggeredRuleIds()));
+
+            EvaluationResult eval = evalMap.get(item.getTxnId());
+            if (eval != null && eval.getRuleResults() != null) {
+                List<String> reasons = eval.getRuleResults().stream()
+                        .filter(RuleResult::isTriggered)
+                        .map(r -> r.getRuleName() + " (" + String.format("%.0f", r.getPartialScore()) + ")")
+                        .toList();
+                if (!reasons.isEmpty()) {
+                    prompt.append(" | Details: ").append(String.join(", ", reasons));
+                }
+            }
+            prompt.append("\n");
+        }
+
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", MODEL,
+                    "prompt", prompt.toString(),
+                    "system", TRIAGE_SYSTEM_PROMPT,
+                    "stream", false,
+                    "options", Map.of(
+                            "temperature", 0.2,
+                            "num_predict", 800
+                    )
+            );
+            String bodyJson = objectMapper.writeValueAsString(body);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                log.warn("Ollama returned HTTP {} for alert triage", response.statusCode());
+                return null;
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            String triage = root.path("response").asText("").trim();
+            return triage.isEmpty() ? null : triage;
+
+        } catch (Exception e) {
+            log.warn("Failed to generate alert triage: {}", e.getMessage());
             return null;
         }
     }

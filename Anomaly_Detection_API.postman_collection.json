@@ -1054,6 +1054,25 @@
             },
             "header": []
           }
+        },
+        {
+          "name": "Smart Alert Triage (AI)",
+          "description": "Uses LLM to rank pending review queue items by urgency. Returns a JSON array of triaged alerts with rank, urgency level (CRITICAL/HIGH/MEDIUM/LOW), and reasoning for each prioritization decision.",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/review/queue/triage",
+              "host": ["{{baseUrl}}"],
+              "path": [
+                "api",
+                "v1",
+                "review",
+                "queue",
+                "triage"
+              ]
+            },
+            "header": []
+          }
         }
       ]
     },

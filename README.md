@@ -362,6 +362,7 @@ Every 6 hours (configurable), the tuning job:
 | GET | `/api/v1/review/queue/{txnId}/ai-feedback` | Get existing AI explanation feedback |
 | POST | `/api/v1/review/queue/bulk-feedback` | Bulk feedback `{txnIds[], status, feedbackBy}` |
 | GET | `/api/v1/review/stats` | Queue stats `{pending, truePositive, falsePositive, autoAccepted}` |
+| GET | `/api/v1/review/queue/triage` | Smart Alert Triage — LLM ranks pending items by urgency with reasoning |
 | GET | `/api/v1/review/weight-history` | Rule weight change history (filters: ruleId, limit) |
 
 ### Flutter Dashboard
@@ -370,7 +371,7 @@ The dashboard has four tabs plus a floating AI assistant:
 
 1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
 
-2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export (includes REVIEWED AT column). Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation with thumbs up/down feedback for rating explanations as helpful or not helpful), rule breakdown, client profile summary with **AI Narrative button** (generates LLM-powered behavioral summary), and weight history.
+2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), **Smart Triage button** (LLM ranks pending alerts by urgency with reasoning — shows ranked list with CRITICAL/HIGH/MEDIUM/LOW badges), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export (includes REVIEWED AT column). Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation with thumbs up/down feedback for rating explanations as helpful or not helpful), rule breakdown, client profile summary with **AI Narrative button** (generates LLM-powered behavioral summary), and weight history.
 
 3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
@@ -407,6 +408,15 @@ When viewing a client's profile in the Review Queue detail panel, operators can 
 - EWMA behavioral profile stats
 
 The narrative is regenerated on each request (not cached) to reflect the latest data. Available via the dashboard button or directly via `GET /api/v1/analytics/client/{clientId}/narrative`.
+
+### Smart Alert Triage
+
+The **Smart Triage** button in the Review Queue uses the LLM to rank pending alerts by urgency. It analyzes up to 15 pending items — considering composite scores, triggered rules, and evaluation details — then returns a prioritized list with:
+
+- **Rank** and **urgency level** (CRITICAL / HIGH / MEDIUM / LOW)
+- **Reasoning** explaining why each alert was prioritized (e.g., "combines high amount deviation with new beneficiary and dormancy reactivation — classic mule pattern")
+
+Results appear as a compact ranked list in the queue panel. Clicking any item opens its detail view. Available via `GET /api/v1/review/queue/triage`.
 
 ## Observability
 

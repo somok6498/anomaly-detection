@@ -4,6 +4,7 @@ import com.bank.anomaly.model.*;
 import com.bank.anomaly.repository.AiFeedbackRepository;
 import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.repository.RuleWeightHistoryRepository;
+import com.bank.anomaly.service.OllamaService;
 import com.bank.anomaly.service.ReviewQueueService;
 import com.bank.anomaly.testutil.TestDataFactory;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -42,6 +43,9 @@ class ReviewQueueControllerTest {
 
     @MockBean
     private RiskResultRepository riskResultRepository;
+
+    @MockBean
+    private OllamaService ollamaService;
 
     @Test
     void getQueueItems_success() throws Exception {
@@ -242,5 +246,58 @@ class ReviewQueueControllerTest {
         mockMvc.perform(get("/api/v1/review/weight-history?ruleId=R1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].ruleId").value("R1"));
+    }
+
+    // ── Smart Alert Triage Tests ──
+
+    @Test
+    void getAlertTriage_success() throws Exception {
+        PagedResponse<ReviewQueueItem> pending = new PagedResponse<>(
+                List.of(
+                        TestDataFactory.createReviewQueueItem("TXN-1", "C-1", ReviewStatus.PENDING),
+                        TestDataFactory.createReviewQueueItem("TXN-2", "C-2", ReviewStatus.PENDING)),
+                false, null);
+        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(15), isNull()))
+                .thenReturn(pending);
+
+        EvaluationResult eval1 = TestDataFactory.createEvaluationResult("TXN-1", "C-1", 75.0, "ALERT");
+        EvaluationResult eval2 = TestDataFactory.createEvaluationResult("TXN-2", "C-2", 45.0, "ALERT");
+        when(riskResultRepository.findByTxnId("TXN-1")).thenReturn(eval1);
+        when(riskResultRepository.findByTxnId("TXN-2")).thenReturn(eval2);
+
+        String triageJson = "[{\"txnId\":\"TXN-1\",\"rank\":1,\"urgency\":\"CRITICAL\",\"reasoning\":\"High score\"}]";
+        when(ollamaService.generateAlertTriage(anyList(), anyMap())).thenReturn(triageJson);
+
+        mockMvc.perform(get("/api/v1/review/queue/triage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.triage").exists())
+                .andExpect(jsonPath("$.itemCount").value(2));
+    }
+
+    @Test
+    void getAlertTriage_noPendingItems() throws Exception {
+        PagedResponse<ReviewQueueItem> empty = new PagedResponse<>(List.of(), false, null);
+        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(15), isNull()))
+                .thenReturn(empty);
+
+        mockMvc.perform(get("/api/v1/review/queue/triage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("No pending items to triage"));
+    }
+
+    @Test
+    void getAlertTriage_ollamaUnavailable() throws Exception {
+        PagedResponse<ReviewQueueItem> pending = new PagedResponse<>(
+                List.of(TestDataFactory.createReviewQueueItem("TXN-1", "C-1", ReviewStatus.PENDING)),
+                false, null);
+        when(reviewQueueService.getQueueItems(isNull(), isNull(), isNull(), isNull(), isNull(), eq("PENDING"), eq(15), isNull()))
+                .thenReturn(pending);
+        when(riskResultRepository.findByTxnId("TXN-1"))
+                .thenReturn(TestDataFactory.createEvaluationResult("TXN-1", "C-1", 55.0, "ALERT"));
+        when(ollamaService.generateAlertTriage(anyList(), anyMap())).thenReturn(null);
+
+        mockMvc.perform(get("/api/v1/review/queue/triage"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("Unable to generate triage. The AI service may be unavailable."));
     }
 }

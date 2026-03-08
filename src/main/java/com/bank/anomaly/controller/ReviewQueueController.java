@@ -4,6 +4,7 @@ import com.bank.anomaly.model.*;
 import com.bank.anomaly.repository.AiFeedbackRepository;
 import com.bank.anomaly.repository.RiskResultRepository;
 import com.bank.anomaly.repository.RuleWeightHistoryRepository;
+import com.bank.anomaly.service.OllamaService;
 import com.bank.anomaly.service.ReviewQueueService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -24,15 +25,18 @@ public class ReviewQueueController {
     private final RuleWeightHistoryRepository weightHistoryRepo;
     private final AiFeedbackRepository aiFeedbackRepository;
     private final RiskResultRepository riskResultRepository;
+    private final OllamaService ollamaService;
 
     public ReviewQueueController(ReviewQueueService reviewQueueService,
                                   RuleWeightHistoryRepository weightHistoryRepo,
                                   AiFeedbackRepository aiFeedbackRepository,
-                                  RiskResultRepository riskResultRepository) {
+                                  RiskResultRepository riskResultRepository,
+                                  OllamaService ollamaService) {
         this.reviewQueueService = reviewQueueService;
         this.weightHistoryRepo = weightHistoryRepo;
         this.aiFeedbackRepository = aiFeedbackRepository;
         this.riskResultRepository = riskResultRepository;
+        this.ollamaService = ollamaService;
     }
 
     @GetMapping("/queue")
@@ -177,5 +181,35 @@ public class ReviewQueueController {
             return ResponseEntity.ok(weightHistoryRepo.findByRuleId(ruleId, limit, before));
         }
         return ResponseEntity.ok(weightHistoryRepo.findAll(limit, before));
+    }
+
+    @GetMapping("/queue/triage")
+    @Operation(summary = "Smart alert triage",
+               description = "Uses LLM to rank pending review queue items by urgency with reasoning for each prioritization decision")
+    public ResponseEntity<?> getAlertTriage() {
+        PagedResponse<ReviewQueueItem> pending = reviewQueueService.getQueueItems(
+                null, null, null, null, null, "PENDING", 15, null);
+
+        if (pending == null || pending.data().isEmpty()) {
+            return ResponseEntity.ok(Map.of("triage", List.of(), "message", "No pending items to triage"));
+        }
+
+        // Build evaluation lookup for richer context
+        Map<String, EvaluationResult> evalMap = new LinkedHashMap<>();
+        for (ReviewQueueItem item : pending.data()) {
+            EvaluationResult eval = riskResultRepository.findByTxnId(item.getTxnId());
+            if (eval != null) {
+                evalMap.put(item.getTxnId(), eval);
+            }
+        }
+
+        String triageJson = ollamaService.generateAlertTriage(pending.data(), evalMap);
+        if (triageJson == null) {
+            return ResponseEntity.ok(Map.of(
+                    "triage", List.of(),
+                    "message", "Unable to generate triage. The AI service may be unavailable."));
+        }
+
+        return ResponseEntity.ok(Map.of("triage", triageJson, "itemCount", pending.data().size()));
     }
 }

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../theme/app_theme.dart';
@@ -67,6 +68,11 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
   // Weight history
   List<RuleWeightChange> _weightHistory = [];
 
+  // Smart triage
+  bool _loadingTriage = false;
+  List<Map<String, dynamic>>? _triageResults;
+  String? _triageError;
+
   @override
   void initState() {
     super.initState();
@@ -134,6 +140,41 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
       setState(() {
         _error = e.toString().replaceFirst('Exception: ', '');
         _loading = false;
+      });
+    }
+  }
+
+  Future<void> _loadTriage() async {
+    setState(() {
+      _loadingTriage = true;
+      _triageResults = null;
+      _triageError = null;
+    });
+    try {
+      final result = await _api.getAlertTriage();
+      final triageRaw = result['triage'];
+      List<Map<String, dynamic>> parsed = [];
+      if (triageRaw is String && triageRaw.isNotEmpty) {
+        final decoded = jsonDecode(triageRaw) as List<dynamic>;
+        parsed = decoded.cast<Map<String, dynamic>>();
+      } else if (triageRaw is List) {
+        parsed = triageRaw.cast<Map<String, dynamic>>();
+      }
+      if (parsed.isEmpty && result['message'] != null) {
+        setState(() {
+          _triageError = result['message'] as String;
+          _loadingTriage = false;
+        });
+      } else {
+        setState(() {
+          _triageResults = parsed;
+          _loadingTriage = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _triageError = e.toString().replaceFirst('Exception: ', '');
+        _loadingTriage = false;
       });
     }
   }
@@ -378,6 +419,10 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
         _buildScoreFilterBar(),
         // Stats row
         if (_stats != null) _buildStatsRow(),
+        // Smart Triage button
+        _buildTriageBar(),
+        // Triage results
+        if (_triageResults != null && _triageResults!.isNotEmpty) _buildTriageResults(),
         // Bulk action bar
         if (_selectedTxnIds.isNotEmpty) _buildBulkActionBar(),
         // Queue list
@@ -660,6 +705,129 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildTriageBar() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: SizedBox(
+              height: 32,
+              child: ElevatedButton.icon(
+                onPressed: _loadingTriage ? null : _loadTriage,
+                icon: _loadingTriage
+                    ? const SizedBox(width: 14, height: 14, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Icon(Icons.auto_awesome, size: 14),
+                label: Text(_loadingTriage ? 'Analyzing...' : 'Smart Triage', style: const TextStyle(fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF6C3FC5),
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                  padding: const EdgeInsets.symmetric(horizontal: 12),
+                ),
+              ),
+            ),
+          ),
+          if (_triageResults != null) ...[
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () => setState(() {
+                _triageResults = null;
+                _triageError = null;
+              }),
+              child: Icon(Icons.close, color: AppTheme.textSecondary, size: 16),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTriageResults() {
+    return Container(
+      constraints: const BoxConstraints(maxHeight: 200),
+      margin: const EdgeInsets.fromLTRB(16, 0, 16, 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF1A1A2E),
+        border: Border.all(color: const Color(0xFF6C3FC5).withValues(alpha: 0.3)),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: ListView.separated(
+        shrinkWrap: true,
+        padding: const EdgeInsets.all(8),
+        itemCount: _triageResults!.length,
+        separatorBuilder: (_, __) => const Divider(height: 1, color: Color(0xFF2A2A3E)),
+        itemBuilder: (context, index) {
+          final item = _triageResults![index];
+          final urgency = (item['urgency'] ?? 'MEDIUM') as String;
+          final txnId = item['txnId'] as String? ?? '';
+          final reasoning = item['reasoning'] as String? ?? '';
+          final rank = item['rank'] ?? (index + 1);
+
+          Color urgencyColor;
+          switch (urgency) {
+            case 'CRITICAL':
+              urgencyColor = AppTheme.critical;
+              break;
+            case 'HIGH':
+              urgencyColor = const Color(0xFFFF8C00);
+              break;
+            case 'LOW':
+              urgencyColor = AppTheme.low;
+              break;
+            default:
+              urgencyColor = AppTheme.medium;
+          }
+
+          return InkWell(
+            onTap: () => _selectItem(txnId),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 20, height: 20,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: urgencyColor.withValues(alpha: 0.2),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Text('$rank', style: TextStyle(color: urgencyColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(txnId, style: TextStyle(color: AppTheme.textPrimary, fontSize: 11, fontWeight: FontWeight.w600)),
+                            const SizedBox(width: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                              decoration: BoxDecoration(
+                                color: urgencyColor.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(3),
+                              ),
+                              child: Text(urgency, style: TextStyle(color: urgencyColor, fontSize: 9, fontWeight: FontWeight.bold)),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 2),
+                        Text(reasoning, style: TextStyle(color: AppTheme.textSecondary, fontSize: 10), maxLines: 2, overflow: TextOverflow.ellipsis),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
       ),
     );
   }
