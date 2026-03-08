@@ -105,6 +105,7 @@ public final class TestDataFactory {
         return RulePerformance.builder()
                 .ruleId(ruleId)
                 .ruleName(name)
+                .description("Test rule: " + name)
                 .ruleType("AMOUNT_ANOMALY")
                 .currentWeight(1.0)
                 .triggerCount(total)

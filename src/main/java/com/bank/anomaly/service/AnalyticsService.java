@@ -64,6 +64,7 @@ public class AnalyticsService {
             results.add(RulePerformance.builder()
                     .ruleId(rule.getRuleId())
                     .ruleName(rule.getName())
+                    .description(rule.getDescription())
                     .ruleType(rule.getRuleType() != null ? rule.getRuleType().name() : "")
                     .currentWeight(rule.getRiskWeight())
                     .triggerCount(counts[0])

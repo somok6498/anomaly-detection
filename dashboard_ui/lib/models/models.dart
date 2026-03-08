@@ -278,6 +278,7 @@ class ReviewStats {
 class RulePerformance {
   final String ruleId;
   final String ruleName;
+  final String description;
   final String ruleType;
   final double currentWeight;
   final int triggerCount;
@@ -288,6 +289,7 @@ class RulePerformance {
   RulePerformance({
     required this.ruleId,
     required this.ruleName,
+    this.description = '',
     required this.ruleType,
     required this.currentWeight,
     required this.triggerCount,
@@ -300,6 +302,7 @@ class RulePerformance {
     return RulePerformance(
       ruleId: json['ruleId'] ?? '',
       ruleName: json['ruleName'] ?? '',
+      description: json['description'] ?? '',
       ruleType: json['ruleType'] ?? '',
       currentWeight: (json['currentWeight'] ?? 0).toDouble(),
       triggerCount: (json['triggerCount'] ?? 0).toInt(),

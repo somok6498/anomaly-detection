@@ -381,7 +381,20 @@ class SettingsPageState extends State<SettingsPage> {
                     });
                   },
                 )),
-                DataCell(Text(rule.name, style: TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w500))),
+                DataCell(Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(rule.name, style: TextStyle(color: AppTheme.textPrimary, fontSize: 12, fontWeight: FontWeight.w500)),
+                    if (rule.description.isNotEmpty) ...[
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message: rule.description,
+                        preferBelow: false,
+                        child: Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
+                      ),
+                    ],
+                  ],
+                )),
                 DataCell(Text(rule.ruleType, style: TextStyle(color: AppTheme.textSecondary, fontSize: 11))),
                 DataCell(SizedBox(
                   width: 80,

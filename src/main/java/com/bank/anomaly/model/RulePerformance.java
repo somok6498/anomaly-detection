@@ -21,6 +21,9 @@ public class RulePerformance {
     @Schema(example = "AMOUNT_ANOMALY", description = "Rule type enum value")
     private String ruleType;
 
+    @Schema(example = "Flag unusually large single transactions", description = "Human-readable rule description")
+    private String description;
+
     @Schema(example = "2.5", description = "Current risk weight")
     private double currentWeight;
 

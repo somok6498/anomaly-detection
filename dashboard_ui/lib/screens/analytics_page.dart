@@ -287,8 +287,9 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                       getTooltipColor: (_) => AppTheme.surface,
                       getTooltipItem: (group, groupIndex, rod, rodIndex) {
                         final rule = rulesWithTriggers[group.x];
+                        final desc = rule.description.isNotEmpty ? '\n${rule.description}' : '';
                         return BarTooltipItem(
-                          '${rule.ruleName}\nPrecision: ${(rule.precision * 100).toStringAsFixed(1)}%\nTP: ${rule.tpCount} FP: ${rule.fpCount}',
+                          '${rule.ruleName}$desc\nPrecision: ${(rule.precision * 100).toStringAsFixed(1)}%\nTP: ${rule.tpCount} FP: ${rule.fpCount}',
                           TextStyle(color: AppTheme.textPrimary, fontSize: 11),
                         );
                       },
@@ -397,7 +398,20 @@ class AnalyticsPageState extends State<AnalyticsPage> {
                   }
                 }
                 return DataRow(cells: [
-                  DataCell(Text(r.ruleName, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
+                  DataCell(Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(r.ruleName, style: TextStyle(fontSize: 12, color: AppTheme.textPrimary)),
+                      if (r.description.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        Tooltip(
+                          message: r.description,
+                          preferBelow: false,
+                          child: Icon(Icons.info_outline, size: 14, color: AppTheme.textSecondary),
+                        ),
+                      ],
+                    ],
+                  )),
                   DataCell(Text(r.ruleType, style: TextStyle(fontSize: 11, color: AppTheme.textSecondary))),
                   DataCell(Text(r.currentWeight.toStringAsFixed(1), style: TextStyle(fontSize: 12, color: AppTheme.textPrimary))),
                   DataCell(Text(r.triggerCount.toString(), style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: AppTheme.textPrimary))),

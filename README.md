@@ -8,7 +8,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **Aerospike 7.1** in-memory NoSQL database (via Docker)
 - **16 anomaly evaluators** — 15 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
-- **Ollama LLM** (llama3.2:1b) — AI chatbot for natural language queries, on-demand AI explanations for flagged transactions (with feedback-aware prompting), and client risk profile narratives
+- **Ollama LLM** (llama3.2:1b) — AI chatbot for natural language queries, on-demand AI explanations for flagged transactions (with feedback-aware prompting), client risk profile narratives, smart alert triage, and attack pattern classification
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
 - **Swagger UI** for interactive API exploration
@@ -371,11 +371,11 @@ The dashboard has four tabs plus a floating AI assistant:
 
 1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
 
-2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), **Smart Triage button** (LLM ranks pending alerts by urgency with reasoning — shows ranked list with CRITICAL/HIGH/MEDIUM/LOW badges), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export (includes REVIEWED AT column). Right panel shows full transaction detail with **AI Analysis card** (LLM-generated explanation with thumbs up/down feedback for rating explanations as helpful or not helpful), rule breakdown, client profile summary with **AI Narrative button** (generates LLM-powered behavioral summary), and weight history.
+2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), **Smart Triage button** (LLM ranks pending alerts by urgency with reasoning — shows ranked list with CRITICAL/HIGH/MEDIUM/LOW badges), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export (includes REVIEWED AT column). Right panel shows full transaction detail with **AI Analysis card** featuring **attack pattern badge** (color-coded LLM classification — e.g., MULE_ACCOUNT, VELOCITY_ABUSE, STRUCTURING — with confidence and summary), LLM-generated explanation with thumbs up/down feedback, rule breakdown, client profile summary with **AI Narrative button** (generates LLM-powered behavioral summary), and weight history.
 
-3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
+3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. Each rule has an **(i) info tooltip** showing its description on hover. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
-4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), and Aerospike connection info (read-only). Changes take effect immediately.
+4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), and Aerospike connection info (read-only). Each rule has an **(i) info tooltip** showing its description on hover. Changes take effect immediately.
 
 5. **AI Assistant** (floating) — Opens as a **slide-in side panel** (35% width, 360–520px clamped) from the bottom-right FAB button. Supports **maximize to fullscreen** and minimize back to side panel. Natural language query interface powered by Ollama (llama3.2:1b) with keyword-based fast parsing as primary and LLM as fallback. Supports queries like:
    - "How many clients did UPI in last 15 mins?"
@@ -417,6 +417,24 @@ The **Smart Triage** button in the Review Queue uses the LLM to rank pending ale
 - **Reasoning** explaining why each alert was prioritized (e.g., "combines high amount deviation with new beneficiary and dormancy reactivation — classic mule pattern")
 
 Results appear as a compact ranked list in the queue panel. Clicking any item opens its detail view. Available via `GET /api/v1/review/queue/triage`.
+
+### Attack Pattern Labeling
+
+Each flagged transaction is automatically classified into an **attack pattern** by the LLM, giving analysts a higher-level understanding beyond individual rule triggers. The pattern label appears as a color-coded badge in the AI Analysis card with a confidence level and brief summary.
+
+Supported patterns:
+- **SMURFING** — many small transactions to stay under thresholds
+- **MULE_ACCOUNT** — rapid fund dispersal to multiple new beneficiaries
+- **ACCOUNT_TAKEOVER** — sudden behavioral change, new device/IP
+- **STRUCTURING** — amounts just below reporting thresholds
+- **DORMANCY_EXPLOITATION** — reactivated dormant account with suspicious activity
+- **VELOCITY_ABUSE** — abnormally high transaction frequency
+- **BENEFICIARY_FRAUD** — new or suspicious beneficiary patterns
+- **MULTI_VECTOR_ATTACK** — multiple distinct attack patterns combined
+- **UNUSUAL_BEHAVIOR** — anomalous but doesn't fit other categories
+- **CLEAN** — no significant risk detected
+
+Pattern labels are generated on-demand alongside AI explanations and cached in Aerospike. The `attackPattern` field is included in the `EvaluationResult` response as a JSON string with `pattern`, `confidence`, and `summary`.
 
 ## Observability
 
