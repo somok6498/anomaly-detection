@@ -235,8 +235,8 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
         _loadingDetail = false;
       });
 
-      // Fetch AI explanation asynchronously — doesn't block the detail panel
-      if (detail.evaluation != null && detail.evaluation!.aiExplanation == null) {
+      // Fetch AI explanation + pattern label asynchronously — doesn't block the detail panel
+      if (detail.evaluation != null && (detail.evaluation!.aiExplanation == null || detail.evaluation!.attackPattern == null)) {
         setState(() => _loadingAiExplanation = true);
         _fetchAiExplanation(txnId);
       }
@@ -1201,15 +1201,59 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
     );
   }
 
+  Map<String, dynamic>? _parseAttackPattern() {
+    final eval = _selectedDetail?.evaluation;
+    if (eval?.attackPattern == null) return null;
+    try {
+      return jsonDecode(eval!.attackPattern!) as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Color _patternColor(String pattern) {
+    switch (pattern) {
+      case 'MULE_ACCOUNT':
+      case 'ACCOUNT_TAKEOVER':
+        return AppTheme.critical;
+      case 'SMURFING':
+      case 'STRUCTURING':
+        return Colors.deepOrange;
+      case 'MULTI_VECTOR_ATTACK':
+        return Colors.red;
+      case 'DORMANCY_EXPLOITATION':
+      case 'VELOCITY_ABUSE':
+        return AppTheme.medium;
+      case 'BENEFICIARY_FRAUD':
+        return Colors.orange;
+      case 'UNUSUAL_BEHAVIOR':
+        return AppTheme.accent;
+      case 'CLEAN':
+        return AppTheme.low;
+      default:
+        return AppTheme.textSecondary;
+    }
+  }
+
+  String _patternDisplayName(String pattern) {
+    return pattern.replaceAll('_', ' ');
+  }
+
   Widget _buildAiExplanationCard(String explanation) {
     final hasRated = _aiFeedback != null;
     final isHelpful = _aiFeedback?.helpful ?? false;
+    final patternData = _parseAttackPattern();
 
     return SectionCard(
       title: 'AI Analysis',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Attack pattern badge
+          if (patternData != null) ...[
+            _buildPatternBadge(patternData),
+            const SizedBox(height: 12),
+          ],
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -1275,6 +1319,66 @@ class _ReviewQueuePageState extends State<ReviewQueuePage> {
                 ),
               ],
             ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPatternBadge(Map<String, dynamic> patternData) {
+    final pattern = patternData['pattern']?.toString() ?? 'UNKNOWN';
+    final confidence = patternData['confidence']?.toString() ?? '';
+    final summary = patternData['summary']?.toString() ?? '';
+    final color = _patternColor(pattern);
+
+    return Container(
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: color.withValues(alpha: 0.3)),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.fingerprint, color: color, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: color.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        _patternDisplayName(pattern),
+                        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    if (confidence.isNotEmpty) ...[
+                      const SizedBox(width: 8),
+                      Text(
+                        confidence,
+                        style: TextStyle(color: color.withValues(alpha: 0.7), fontSize: 10, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                  ],
+                ),
+                if (summary.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    summary,
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
           ),
         ],
       ),

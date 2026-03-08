@@ -44,4 +44,7 @@ public class EvaluationResult {
 
     @Schema(description = "LLM-generated human-readable explanation of why this transaction was flagged")
     private String aiExplanation;
+
+    @Schema(description = "LLM-classified attack pattern label (JSON with pattern, confidence, summary)")
+    private String attackPattern;
 }

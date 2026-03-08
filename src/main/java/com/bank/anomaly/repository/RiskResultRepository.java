@@ -63,11 +63,12 @@ public class RiskResultRepository {
         Bin triggeredCountBin = new Bin("trigRuleCount", result.getTriggeredRuleCount());
         Bin breadthBonusBin = new Bin("breadthBonus", result.getBreadthBonus());
         Bin aiExplanationBin = new Bin("aiExplanation", result.getAiExplanation());
+        Bin attackPatternBin = new Bin("atkPattern", result.getAttackPattern());
 
         client.put(writePolicy, key,
                 txnIdBin, clientIdBin, scoreBin, riskLevelBin,
                 actionBin, evaluatedAtBin, ruleResultsBin,
-                triggeredCountBin, breadthBonusBin, aiExplanationBin);
+                triggeredCountBin, breadthBonusBin, aiExplanationBin, attackPatternBin);
     }
 
     public EvaluationResult findByTxnId(String txnId) {
@@ -86,6 +87,7 @@ public class RiskResultRepository {
                 .triggeredRuleCount(safeInt(record, "trigRuleCount"))
                 .breadthBonus(safeDouble(record, "breadthBonus"))
                 .aiExplanation(record.getString("aiExplanation"))
+                .attackPattern(record.getString("atkPattern"))
                 .build();
     }
 
@@ -167,6 +169,7 @@ public class RiskResultRepository {
                 .triggeredRuleCount(safeInt(record, "trigRuleCount"))
                 .breadthBonus(safeDouble(record, "breadthBonus"))
                 .aiExplanation(record.getString("aiExplanation"))
+                .attackPattern(record.getString("atkPattern"))
                 .build();
     }
 
@@ -181,6 +184,11 @@ public class RiskResultRepository {
     public void updateAiExplanation(String txnId, String aiExplanation) {
         Key key = new Key(namespace, AerospikeConfig.SET_RISK_RESULTS, txnId);
         client.put(writePolicy, key, new Bin("aiExplanation", aiExplanation));
+    }
+
+    public void updateAttackPattern(String txnId, String attackPattern) {
+        Key key = new Key(namespace, AerospikeConfig.SET_RISK_RESULTS, txnId);
+        client.put(writePolicy, key, new Bin("atkPattern", attackPattern));
     }
 
     private String serializeRuleResults(List<RuleResult> results) {

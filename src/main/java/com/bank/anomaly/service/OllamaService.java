@@ -498,6 +498,117 @@ public class OllamaService {
         }
     }
 
+    private static final String PATTERN_LABEL_SYSTEM_PROMPT = """
+            You are a banking fraud analyst. Given the triggered anomaly rules for a transaction, \
+            classify the attack pattern into exactly ONE of these categories:
+
+            SMURFING, MULE_ACCOUNT, ACCOUNT_TAKEOVER, STRUCTURING, DORMANCY_EXPLOITATION, \
+            VELOCITY_ABUSE, BENEFICIARY_FRAUD, MULTI_VECTOR_ATTACK, UNUSUAL_BEHAVIOR, CLEAN
+
+            Rules:
+            - SMURFING: many small transactions to stay under thresholds
+            - MULE_ACCOUNT: money received and quickly sent to multiple beneficiaries
+            - ACCOUNT_TAKEOVER: sudden change in behavior, new device/IP, unusual channel
+            - STRUCTURING: amounts just below reporting thresholds
+            - DORMANCY_EXPLOITATION: reactivated dormant account with suspicious activity
+            - VELOCITY_ABUSE: abnormally high transaction frequency
+            - BENEFICIARY_FRAUD: new or suspicious beneficiary patterns
+            - MULTI_VECTOR_ATTACK: multiple distinct attack patterns combined
+            - UNUSUAL_BEHAVIOR: anomalous but doesn't fit other categories
+            - CLEAN: no significant risk detected
+
+            Reply with ONLY a JSON object. Example:
+            {"pattern":"MULE_ACCOUNT","confidence":"HIGH","summary":"rapid fund dispersal to new beneficiaries"}
+            """;
+
+    public String generatePatternLabel(EvaluationResult eval) {
+        List<RuleResult> triggered = eval.getRuleResults().stream()
+                .filter(RuleResult::isTriggered)
+                .collect(Collectors.toList());
+
+        if (triggered.isEmpty()) {
+            return "{\"pattern\":\"CLEAN\",\"confidence\":\"HIGH\",\"summary\":\"no rules triggered\"}";
+        }
+
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("Transaction ").append(eval.getTxnId())
+              .append(" | Action: ").append(eval.getAction())
+              .append(" | Score: ").append(String.format("%.0f", eval.getCompositeScore()))
+              .append("/100\n\nTriggered rules:\n");
+
+        for (RuleResult r : triggered) {
+            prompt.append("- ").append(r.getRuleName())
+                  .append(" (score=").append(String.format("%.0f", r.getPartialScore()))
+                  .append("): ").append(r.getReason()).append("\n");
+        }
+
+        try {
+            Map<String, Object> body = Map.of(
+                    "model", MODEL,
+                    "prompt", prompt.toString(),
+                    "system", PATTERN_LABEL_SYSTEM_PROMPT,
+                    "stream", false,
+                    "options", Map.of(
+                            "temperature", 0.1,
+                            "num_predict", 100
+                    )
+            );
+            String bodyJson = objectMapper.writeValueAsString(body);
+
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(ollamaHost + "/api/generate"))
+                    .header("Content-Type", "application/json")
+                    .timeout(Duration.ofSeconds(TIMEOUT_SECONDS))
+                    .POST(HttpRequest.BodyPublishers.ofString(bodyJson))
+                    .build();
+
+            HttpResponse<String> response = httpClient.send(
+                    request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() != 200) {
+                log.warn("Ollama returned HTTP {} for pattern labeling", response.statusCode());
+                return null;
+            }
+
+            JsonNode root = objectMapper.readTree(response.body());
+            String rawOutput = root.path("response").asText("").trim();
+            if (rawOutput.isEmpty()) return null;
+
+            // Strip markdown fences
+            rawOutput = rawOutput.replaceAll("(?s)```json\\s*", "").replaceAll("(?s)```\\s*", "").trim();
+
+            // Extract first JSON object using brace matching
+            int depth = 0;
+            int objStart = -1;
+            for (int ci = 0; ci < rawOutput.length(); ci++) {
+                char ch = rawOutput.charAt(ci);
+                if (ch == '{') {
+                    if (depth == 0) objStart = ci;
+                    depth++;
+                } else if (ch == '}') {
+                    depth--;
+                    if (depth == 0 && objStart >= 0) {
+                        String objStr = rawOutput.substring(objStart, ci + 1);
+                        try {
+                            JsonNode parsed = objectMapper.readTree(objStr);
+                            // Validate pattern field exists
+                            String pattern = parsed.path("pattern").asText("");
+                            if (!pattern.isEmpty()) {
+                                return objectMapper.writeValueAsString(parsed);
+                            }
+                        } catch (Exception ignored) {}
+                        objStart = -1;
+                    }
+                }
+            }
+            return null;
+
+        } catch (Exception e) {
+            log.warn("Failed to generate pattern label: {}", e.getMessage());
+            return null;
+        }
+    }
+
     public static class OllamaUnavailableException extends RuntimeException {
         public OllamaUnavailableException(String msg) { super(msg); }
     }

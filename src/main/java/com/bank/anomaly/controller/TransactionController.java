@@ -101,8 +101,8 @@ public class TransactionController {
         if (result == null) {
             return ResponseEntity.notFound().build();
         }
-        // Generate AI explanation on-demand if not already cached
-        if (result.getAiExplanation() == null) {
+        // Generate AI explanation and pattern label on-demand if not already cached
+        if (result.getAiExplanation() == null || result.getAttackPattern() == null) {
             Transaction txn = transactionService.getTransaction(txnId);
             if (txn != null) {
                 reviewQueueService.enrichWithAiExplanation(result, txn);

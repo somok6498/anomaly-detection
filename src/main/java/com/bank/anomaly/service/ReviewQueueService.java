@@ -78,6 +78,20 @@ public class ReviewQueueService {
         } catch (Exception e) {
             log.warn("Could not generate AI explanation for txn={}: {}", evaluation.getTxnId(), e.getMessage());
         }
+
+        // Generate attack pattern label if not already cached
+        if (evaluation.getAttackPattern() == null) {
+            try {
+                String patternJson = ollamaService.generatePatternLabel(evaluation);
+                if (patternJson != null) {
+                    evaluation.setAttackPattern(patternJson);
+                    riskResultRepo.updateAttackPattern(evaluation.getTxnId(), patternJson);
+                    log.debug("Attack pattern label generated for txn={}", evaluation.getTxnId());
+                }
+            } catch (Exception e) {
+                log.warn("Could not generate pattern label for txn={}: {}", evaluation.getTxnId(), e.getMessage());
+            }
+        }
     }
 
     public ReviewQueueItem submitFeedback(String txnId, ReviewStatus status, String feedbackBy) {

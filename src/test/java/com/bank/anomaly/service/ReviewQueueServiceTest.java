@@ -96,6 +96,38 @@ class ReviewQueueServiceTest {
     }
 
     @Test
+    void enrichWithAiExplanation_generatesExplanationAndPattern() {
+        EvaluationResult eval = TestDataFactory.createEvaluationResult("T1", "C-1", 55.0, "ALERT");
+        Transaction txn = TestDataFactory.createTransaction("T1", "C-1", "NEFT", 50000);
+
+        when(ollamaService.generateExplanation(txn, eval)).thenReturn("Test explanation");
+        when(ollamaService.generatePatternLabel(eval))
+                .thenReturn("{\"pattern\":\"MULE_ACCOUNT\",\"confidence\":\"HIGH\",\"summary\":\"rapid dispersal\"}");
+
+        service.enrichWithAiExplanation(eval, txn);
+
+        assertThat(eval.getAiExplanation()).isEqualTo("Test explanation");
+        assertThat(eval.getAttackPattern()).contains("MULE_ACCOUNT");
+        verify(riskResultRepo).updateAiExplanation("T1", "Test explanation");
+        verify(riskResultRepo).updateAttackPattern(eq("T1"), contains("MULE_ACCOUNT"));
+    }
+
+    @Test
+    void enrichWithAiExplanation_skipsPatternWhenAlreadyCached() {
+        EvaluationResult eval = TestDataFactory.createEvaluationResult("T1", "C-1", 55.0, "ALERT");
+        eval.setAttackPattern("{\"pattern\":\"CLEAN\"}");
+        Transaction txn = TestDataFactory.createTransaction("T1", "C-1", "NEFT", 50000);
+
+        when(ollamaService.generateExplanation(txn, eval)).thenReturn("Test explanation");
+
+        service.enrichWithAiExplanation(eval, txn);
+
+        assertThat(eval.getAiExplanation()).isEqualTo("Test explanation");
+        verify(ollamaService, never()).generatePatternLabel(any());
+        verify(riskResultRepo, never()).updateAttackPattern(any(), any());
+    }
+
+    @Test
     void getQueueStats_mapsArrayToMap() {
         when(reviewQueueRepo.countByStatus(isNull(), isNull())).thenReturn(new int[]{10, 5, 3, 2});
 

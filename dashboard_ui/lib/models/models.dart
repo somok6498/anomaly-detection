@@ -142,6 +142,7 @@ class EvaluationResult {
   final int triggeredRuleCount;
   final double breadthBonus;
   final String? aiExplanation;
+  final String? attackPattern;
 
   EvaluationResult({
     required this.txnId,
@@ -154,6 +155,7 @@ class EvaluationResult {
     this.triggeredRuleCount = 0,
     this.breadthBonus = 0.0,
     this.aiExplanation,
+    this.attackPattern,
   });
 
   factory EvaluationResult.fromJson(Map<String, dynamic> json) {
@@ -170,6 +172,7 @@ class EvaluationResult {
       triggeredRuleCount: (json['triggeredRuleCount'] ?? 0).toInt(),
       breadthBonus: (json['breadthBonus'] ?? 0).toDouble(),
       aiExplanation: json['aiExplanation'],
+      attackPattern: json['attackPattern'],
     );
   }
 }
