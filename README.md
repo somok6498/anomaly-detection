@@ -464,9 +464,9 @@ View traces at **http://localhost:16686** → select service `anomaly-detection`
 
 ### Metrics & Dashboards (Grafana + Prometheus)
 
-Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provisioned with an **Anomaly Detection** dashboard at **http://localhost:3333**.
+Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provisioned with **3 dashboards** at **http://localhost:3333**:
 
-**Dashboard panels:**
+#### 1. Anomaly Detection (Global)
 
 | Panel | Type | What it shows |
 |-------|------|---------------|
@@ -482,6 +482,37 @@ Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provi
 | HTTP Response Time (p95/p99) | Time series | Latency percentiles |
 | JVM Heap Memory | Time series | Used / committed / max heap |
 
+#### 2. Support Team Dashboard
+
+Designed for the ops/support team — global view across all clients with drill-down capability.
+
+| Panel | Type | What it shows |
+|-------|------|---------------|
+| Total Evaluations | Stat | Total PASS + ALERT + BLOCK count (clickable → rule/client breakdown) |
+| Total Alerts | Stat | ALERT count (clickable → rule/client breakdown) |
+| Total Blocks | Stat | BLOCK count (clickable → rule/client breakdown) |
+| Rule Trigger Breakdown | Table | Per-rule trigger counts across all clients |
+| Flagged Clients Breakdown | Table | Per-client trigger counts with drill-down links to client dashboard |
+| TPS vs Baseline (per type) | Repeating time series | One panel per txn type (NEFT/RTGS/IMPS/UPI/IFT) — green = normal TPS, red = excess above 1.5× rolling baseline |
+| Txn Type Anomaly Clients | Table | Clients with TRANSACTION_TYPE_ANOMALY triggers, clickable to client dashboard |
+| Amount Anomaly Clients | Table | Clients with amount-related rule triggers, clickable to client dashboard |
+| Beneficiary Pattern Breach Clients | Table | Clients with beneficiary-related rule triggers, clickable to client dashboard |
+
+#### 3. Client Anomaly Detection (Per-Client)
+
+Per-client deep-dive dashboard with a `$client_id` dropdown selector.
+
+| Panel | Type | What it shows |
+|-------|------|---------------|
+| TPS Over Time | Time series | Transaction rate by action (PASS/ALERT/BLOCK) |
+| Transaction Amount Trend | Time series | Average and max transaction amounts |
+| Type Distribution (Total) | Donut chart | Transaction type breakdown |
+| Type Distribution Over Time | Stacked time series | Transaction types over time |
+| TPS by Transaction Type | Time series | Per-type transaction rates |
+| Total Amount by Transaction Type | Time series | Per-type amount flow |
+| Transaction Activity | Time series | Overall TPS with silence gap detection |
+| Composite Risk Score Trend | Time series | Average and max risk scores with threshold zones |
+
 **Custom Prometheus metrics:**
 
 | Metric | Type | Labels |
@@ -493,6 +524,16 @@ Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provi
 | `review_feedback_count_total` | Counter | `status` (TRUE_POSITIVE/FALSE_POSITIVE) |
 | `review_auto_accepted_count_total` | Counter | — |
 | `rule_weight_adjustment_count_total` | Counter | `rule_id` |
+| `client_evaluation_count_total` | Counter | `client_id`, `action` |
+| `client_evaluation_composite_score` | Distribution Summary | `client_id`, `action` |
+| `client_transaction_amount` | Distribution Summary | `client_id`, `txn_type` |
+| `client_transaction_type_count_total` | Counter | `client_id`, `txn_type` |
+| `client_rule_triggered_count_total` | Counter | `client_id`, `rule_type` |
+| `client_silence_state` | Gauge | `client_id` (1=silent, 0=active) |
+| `silence_active_clients` | Gauge | — |
+| `silence_detected_count_total` | Counter | `client_id` |
+| `silence_resolved_count_total` | Counter | `client_id` |
+| `silence_last_txn_epoch` | Gauge | `client_id` |
 
 Grafana login: **admin / admin** (anonymous viewing also enabled).
 

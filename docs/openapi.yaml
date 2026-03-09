@@ -5,25 +5,28 @@ info:
     Real-time behavioral anomaly detection system for banking transactions.
 
     The system evaluates incoming transactions against a client's historical behavioral
-    profile using a combination of rule-based evaluators and an Isolation Forest ML model.
+    profile using a combination of 15 rule-based evaluators and an Isolation Forest ML model,
+    with EWMA-based client profiling, ops review queue with feedback-driven rule auto-tuning,
+    WhatsApp/SMS alerts, and full OpenTelemetry observability.
 
     **Evaluation Pipeline:**
     1. Receive transaction via `POST /transactions/evaluate`
     2. Load/create client behavioral profile (EWMA stats)
-    3. Evaluate against all active anomaly rules (5 rule-based + 1 Isolation Forest)
-    4. Compute weighted composite risk score (0-100)
-    5. Determine action: **PASS** (<30), **ALERT** (30-70), **BLOCK** (>=70)
-    6. Update client profile with new transaction data
-    7. Persist and return evaluation result
+    3. Build evaluation context (hourly counters, beneficiary data)
+    4. Evaluate against all active anomaly rules (16 evaluators)
+    5. Compute weighted composite risk score (0–100)
+    6. Determine action: **PASS** (<30), **ALERT** (30–70), **BLOCK** (≥70)
+    7. Update client profile with new transaction data
+    8. Persist transaction + evaluation result
+    9. Enqueue ALERT/BLOCK transactions for ops review
+    10. Send WhatsApp/SMS alert (async, BLOCK only)
 
-    **Rule Types:**
-    - `TRANSACTION_TYPE_ANOMALY` — flags rarely/never used transaction types
-    - `TPS_SPIKE` — flags hourly transaction count spikes
-    - `AMOUNT_ANOMALY` — flags unusually large single transactions
-    - `HOURLY_AMOUNT_ANOMALY` — flags hourly total amount spikes
-    - `AMOUNT_PER_TYPE_ANOMALY` — flags unusual amounts for specific transaction types
-    - `ISOLATION_FOREST` — ML-based multi-dimensional anomaly detection
-  version: 1.0.0
+    **Rule Types:** TRANSACTION_TYPE_ANOMALY, TPS_SPIKE, AMOUNT_ANOMALY, HOURLY_AMOUNT_ANOMALY,
+    AMOUNT_PER_TYPE_ANOMALY, BENEFICIARY_RAPID_REPEAT, BENEFICIARY_CONCENTRATION,
+    BENEFICIARY_AMOUNT_REPETITION, DAILY_CUMULATIVE_AMOUNT, NEW_BENEFICIARY_VELOCITY,
+    DORMANCY_REACTIVATION, CROSS_CHANNEL_BENEFICIARY_AMOUNT, SEASONAL_DEVIATION,
+    MULE_NETWORK, TEMPORAL_RULE_CORRELATION, ISOLATION_FOREST
+  version: 2.0.0
   contact:
     name: Anomaly Detection Team
 
@@ -40,12 +43,26 @@ tags:
     description: Manage anomaly detection rules
   - name: Models
     description: Isolation Forest model training and metadata
+  - name: Review Queue
+    description: Ops review queue with feedback loop and auto-tuning
+  - name: Analytics
+    description: Rule performance analytics, AI feedback stats, network graphs, client narratives
+  - name: Configuration
+    description: Live-reloadable system configuration
+  - name: Silence Detection
+    description: Detect when normally-active clients stop transacting
+  - name: Beneficiary Graph
+    description: Mule network graph queries
+  - name: Chat
+    description: AI chatbot for natural language queries
+  - name: Demo Data
+    description: On-demand demo data generation
 
 paths:
+  # ── Transactions ──────────────────────────────────────────
   /api/v1/transactions/evaluate:
     post:
-      tags:
-        - Transactions
+      tags: [Transactions]
       summary: Evaluate a transaction for anomalies
       description: |
         Submits a transaction for real-time anomaly evaluation. The transaction is
@@ -67,23 +84,18 @@ paths:
                   txnType: "NEFT"
                   amount: 45000.00
                   timestamp: 1739886764000
-              borderlineIF:
-                summary: Borderline transaction (IF catches, rules miss)
-                description: Amount is 1.8x EWMA but below rule thresholds. Only the Isolation Forest detects the multi-dimensional anomaly.
-                value:
-                  txnId: "IF-DEMO-001"
-                  clientId: "CLIENT-001"
-                  txnType: "NEFT"
-                  amount: 90000.00
-                  timestamp: 1739886764000
+                  beneficiaryAccount: "1234567890"
+                  beneficiaryIfsc: "HDFC0001234"
               blockTransaction:
                 summary: Anomalous transaction (likely BLOCK)
                 value:
-                  txnId: "IF-DEMO-BLOCK-001"
+                  txnId: "TXN-BLOCK-001"
                   clientId: "CLIENT-001"
                   txnType: "IFT"
                   amount: 95000.00
                   timestamp: 1739886764000
+                  beneficiaryAccount: "9876543210"
+                  beneficiaryIfsc: "ICIC0005678"
       responses:
         '200':
           description: Evaluation completed successfully
@@ -91,42 +103,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/EvaluationResult'
-              examples:
-                passResult:
-                  summary: Transaction passed
-                  value:
-                    txnId: "TXN-NORMAL-001"
-                    clientId: "CLIENT-001"
-                    compositeScore: 0.0
-                    riskLevel: "LOW"
-                    action: "PASS"
-                    ruleResults: []
-                    evaluatedAt: 1739886764000
-                alertResult:
-                  summary: IF triggered — ALERT
-                  value:
-                    txnId: "IF-DEMO-001"
-                    clientId: "CLIENT-001"
-                    compositeScore: 42.5
-                    riskLevel: "MEDIUM"
-                    action: "ALERT"
-                    ruleResults:
-                      - ruleId: "RULE-IF"
-                        ruleName: "Isolation Forest"
-                        ruleType: "ISOLATION_FOREST"
-                        triggered: true
-                        deviationPct: 15.0
-                        partialScore: 42.5
-                        riskWeight: 2.0
-                        reason: "Isolation Forest: score=0.690 (threshold=0.60). Multi-dimensional anomaly detected. Top factors: Amount Z-score=2.67 (contribution=0.045), Type Amount Z-score=1.82 (contribution=0.031)"
-                    evaluatedAt: 1739886764000
         '400':
           description: Missing required fields (txnId, clientId, or txnType)
 
   /api/v1/transactions/{txnId}:
     get:
-      tags:
-        - Transactions
+      tags: [Transactions]
       summary: Get a transaction by ID
       operationId: getTransaction
       parameters:
@@ -148,8 +130,7 @@ paths:
 
   /api/v1/transactions/client/{clientId}:
     get:
-      tags:
-        - Transactions
+      tags: [Transactions]
       summary: List transactions by client ID
       operationId: getTransactionsByClient
       parameters:
@@ -165,22 +146,26 @@ paths:
           schema:
             type: integer
             default: 50
-          description: Maximum number of transactions to return
+        - name: before
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Cursor for pagination — epoch millis timestamp
       responses:
         '200':
-          description: List of transactions
+          description: Paginated list of transactions
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/Transaction'
+                $ref: '#/components/schemas/PagedTransactions'
 
   /api/v1/transactions/results/{txnId}:
     get:
-      tags:
-        - Transactions
+      tags: [Transactions]
       summary: Get evaluation result for a transaction
+      description: Returns the anomaly evaluation result. If Ollama is running, includes an AI explanation (generated on first view, cached).
       operationId: getEvaluationResult
       parameters:
         - name: txnId
@@ -197,12 +182,11 @@ paths:
               schema:
                 $ref: '#/components/schemas/EvaluationResult'
         '404':
-          description: No evaluation result found for this transaction
+          description: No evaluation result found
 
   /api/v1/transactions/results/client/{clientId}:
     get:
-      tags:
-        - Transactions
+      tags: [Transactions]
       summary: List evaluation results by client ID
       operationId: getEvaluationResultsByClient
       parameters:
@@ -218,21 +202,25 @@ paths:
           schema:
             type: integer
             default: 20
-          description: Maximum number of results to return
+        - name: before
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Cursor for pagination — epoch millis timestamp
       responses:
         '200':
-          description: List of evaluation results
+          description: Paginated list of evaluation results
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/EvaluationResult'
+                $ref: '#/components/schemas/PagedEvaluationResults'
 
+  # ── Profiles ──────────────────────────────────────────────
   /api/v1/profiles/{clientId}:
     get:
-      tags:
-        - Profiles
+      tags: [Profiles]
       summary: Get client behavioral profile
       description: |
         Returns the client's behavioral profile built from historical transaction data.
@@ -256,10 +244,10 @@ paths:
         '404':
           description: No profile found (client has no transaction history)
 
+  # ── Rules ─────────────────────────────────────────────────
   /api/v1/rules:
     get:
-      tags:
-        - Rules
+      tags: [Rules]
       summary: List all anomaly rules
       operationId: listRules
       responses:
@@ -272,8 +260,7 @@ paths:
                 items:
                   $ref: '#/components/schemas/AnomalyRule'
     post:
-      tags:
-        - Rules
+      tags: [Rules]
       summary: Create a new anomaly rule
       operationId: createRule
       requestBody:
@@ -282,15 +269,6 @@ paths:
           application/json:
             schema:
               $ref: '#/components/schemas/AnomalyRule'
-            example:
-              name: "Custom TPS Rule"
-              description: "Detect TPS spikes above 80%"
-              ruleType: "TPS_SPIKE"
-              variancePct: 80.0
-              riskWeight: 2.0
-              enabled: true
-              params:
-                minProfileTxns: "20"
       responses:
         '200':
           description: Rule created successfully
@@ -303,8 +281,7 @@ paths:
 
   /api/v1/rules/{ruleId}:
     get:
-      tags:
-        - Rules
+      tags: [Rules]
       summary: Get a specific rule by ID
       operationId: getRule
       parameters:
@@ -324,12 +301,8 @@ paths:
         '404':
           description: Rule not found
     put:
-      tags:
-        - Rules
+      tags: [Rules]
       summary: Update an existing rule
-      description: |
-        Updates rule configuration. Use this to modify variance thresholds,
-        risk weights, enable/disable rules, or change parameters.
       operationId: updateRule
       parameters:
         - name: ruleId
@@ -337,17 +310,12 @@ paths:
           required: true
           schema:
             type: string
-          example: "RULE-IF"
       requestBody:
         required: true
         content:
           application/json:
             schema:
               $ref: '#/components/schemas/AnomalyRule'
-            example:
-              variancePct: 55.0
-              riskWeight: 3.0
-              enabled: true
       responses:
         '200':
           description: Rule updated successfully
@@ -358,8 +326,7 @@ paths:
         '404':
           description: Rule not found
     delete:
-      tags:
-        - Rules
+      tags: [Rules]
       summary: Delete a rule
       operationId: deleteRule
       parameters:
@@ -368,22 +335,17 @@ paths:
           required: true
           schema:
             type: string
-          example: "RULE-TXN-TYPE"
       responses:
         '204':
           description: Rule deleted successfully
         '404':
           description: Rule not found
 
+  # ── Models ────────────────────────────────────────────────
   /api/v1/models/train/{clientId}:
     post:
-      tags:
-        - Models
+      tags: [Models]
       summary: Train Isolation Forest model for a client
-      description: |
-        Trains a new Isolation Forest model using the client's historical transaction data.
-        The model learns the client's normal behavioral patterns across 6 feature dimensions
-        and is persisted to Aerospike for real-time evaluation.
       operationId: trainModelForClient
       parameters:
         - name: clientId
@@ -398,14 +360,12 @@ paths:
           schema:
             type: integer
             default: 100
-          description: Number of isolation trees in the forest
         - name: sampleSize
           in: query
           required: false
           schema:
             type: integer
             default: 256
-          description: Sub-sampling size per tree
       responses:
         '200':
           description: Model trained successfully
@@ -413,30 +373,13 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelMetadata'
-              example:
-                clientId: "CLIENT-001"
-                treeCount: 100
-                featureCount: 6
-                trainingSamples: 6000
-                trainedAt: 1739886764000
         '500':
           description: Training failed
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  error:
-                    type: string
 
   /api/v1/models/train:
     post:
-      tags:
-        - Models
+      tags: [Models]
       summary: Train Isolation Forest models for all clients
-      description: |
-        Triggers IF model training for all known clients. This is a batch operation
-        that scans all client profiles and trains individual models.
       operationId: trainAllModels
       parameters:
         - name: numTrees
@@ -461,14 +404,11 @@ paths:
                 properties:
                   status:
                     type: string
-                    example: "Training complete for all clients"
 
   /api/v1/models/{clientId}:
     get:
-      tags:
-        - Models
+      tags: [Models]
       summary: Get model metadata for a client
-      description: Returns metadata about the trained IF model (tree count, training samples, trained date).
       operationId: getModelMetadata
       parameters:
         - name: clientId
@@ -485,78 +425,933 @@ paths:
               schema:
                 $ref: '#/components/schemas/ModelMetadata'
         '404':
-          description: No trained model found for this client
+          description: No trained model found
+
+  # ── Review Queue ──────────────────────────────────────────
+  /api/v1/review/queue:
+    get:
+      tags: [Review Queue]
+      summary: List review queue items
+      description: Returns paginated ALERT/BLOCK items for ops review with filtering.
+      operationId: getQueueItems
+      parameters:
+        - name: action
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [ALERT, BLOCK]
+        - name: clientId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Start of time range (epoch millis)
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: End of time range (epoch millis)
+        - name: ruleId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: feedbackStatus
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [PENDING, TRUE_POSITIVE, FALSE_POSITIVE, AUTO_ACCEPTED]
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 100
+        - name: before
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Cursor for pagination
+      responses:
+        '200':
+          description: Paginated list of review queue items
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ReviewQueueItem'
+                  hasMore:
+                    type: boolean
+                  nextCursor:
+                    type: integer
+                    format: int64
+
+  /api/v1/review/queue/{txnId}:
+    get:
+      tags: [Review Queue]
+      summary: Get full detail for a review queue item
+      description: Returns queue item + evaluation result + transaction + client profile.
+      operationId: getQueueItemDetail
+      parameters:
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Full detail returned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  queueItem:
+                    $ref: '#/components/schemas/ReviewQueueItem'
+                  evaluation:
+                    $ref: '#/components/schemas/EvaluationResult'
+                  transaction:
+                    $ref: '#/components/schemas/Transaction'
+                  profile:
+                    $ref: '#/components/schemas/ClientProfile'
+        '404':
+          description: Queue item not found
+
+  /api/v1/review/queue/{txnId}/feedback:
+    post:
+      tags: [Review Queue]
+      summary: Submit feedback on a review queue item
+      operationId: submitFeedback
+      parameters:
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: string
+                  enum: [TRUE_POSITIVE, FALSE_POSITIVE]
+                feedbackBy:
+                  type: string
+                  example: "analyst-01"
+      responses:
+        '200':
+          description: Feedback recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewQueueItem'
+
+  /api/v1/review/queue/bulk-feedback:
+    post:
+      tags: [Review Queue]
+      summary: Bulk submit feedback on multiple items
+      operationId: bulkSubmitFeedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [txnIds, status]
+              properties:
+                txnIds:
+                  type: array
+                  items:
+                    type: string
+                status:
+                  type: string
+                  enum: [TRUE_POSITIVE, FALSE_POSITIVE]
+                feedbackBy:
+                  type: string
+      responses:
+        '200':
+          description: Bulk feedback recorded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  updated:
+                    type: integer
+                  failed:
+                    type: integer
+
+  /api/v1/review/stats:
+    get:
+      tags: [Review Queue]
+      summary: Get review queue statistics
+      operationId: getReviewStats
+      parameters:
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Queue statistics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pending:
+                    type: integer
+                  truePositive:
+                    type: integer
+                  falsePositive:
+                    type: integer
+                  autoAccepted:
+                    type: integer
+
+  /api/v1/review/queue/{txnId}/ai-feedback:
+    post:
+      tags: [Review Queue]
+      summary: Rate AI explanation as helpful or not
+      operationId: submitAiFeedback
+      parameters:
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [helpful]
+              properties:
+                helpful:
+                  type: boolean
+                operatorId:
+                  type: string
+      responses:
+        '200':
+          description: AI feedback recorded
+    get:
+      tags: [Review Queue]
+      summary: Get existing AI feedback for a transaction
+      operationId: getAiFeedback
+      parameters:
+        - name: txnId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: AI feedback found
+        '404':
+          description: No AI feedback found
+
+  /api/v1/review/weight-history:
+    get:
+      tags: [Review Queue]
+      summary: Get rule weight change history
+      operationId: getWeightHistory
+      parameters:
+        - name: ruleId
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+        - name: before
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+      responses:
+        '200':
+          description: Paginated weight change history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/RuleWeightChange'
+                  hasMore:
+                    type: boolean
+                  nextCursor:
+                    type: integer
+                    format: int64
+
+  /api/v1/review/queue/triage:
+    get:
+      tags: [Review Queue]
+      summary: Smart Alert Triage — LLM ranks pending alerts by urgency
+      description: Analyzes up to 15 pending items using the LLM and returns a prioritized list with urgency levels and reasoning.
+      operationId: getAlertTriage
+      responses:
+        '200':
+          description: Ranked list of pending alerts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  triage:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        rank:
+                          type: integer
+                        txnId:
+                          type: string
+                        urgency:
+                          type: string
+                          enum: [CRITICAL, HIGH, MEDIUM, LOW]
+                        reasoning:
+                          type: string
+
+  # ── Analytics ─────────────────────────────────────────────
+  /api/v1/analytics/rules/performance:
+    get:
+      tags: [Analytics]
+      summary: Per-rule TP/FP counts and precision from feedback
+      operationId: getRulePerformance
+      parameters:
+        - name: fromDate
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: Start of time range (epoch millis)
+        - name: toDate
+          in: query
+          required: false
+          schema:
+            type: integer
+            format: int64
+          description: End of time range (epoch millis)
+      responses:
+        '200':
+          description: Rule performance metrics
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RulePerformance'
+
+  /api/v1/analytics/ai-feedback/stats:
+    get:
+      tags: [Analytics]
+      summary: AI explanation feedback statistics
+      operationId: getAiFeedbackStats
+      responses:
+        '200':
+          description: Feedback stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  helpful:
+                    type: integer
+                  notHelpful:
+                    type: integer
+                  total:
+                    type: integer
+                  helpfulPct:
+                    type: number
+                    format: double
+
+  /api/v1/analytics/graph/client/{clientId}/network:
+    get:
+      tags: [Analytics]
+      summary: Network graph nodes and edges for visualization
+      operationId: getClientNetwork
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-007"
+      responses:
+        '200':
+          description: Network graph data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  nodes:
+                    type: array
+                    items:
+                      type: object
+                  edges:
+                    type: array
+                    items:
+                      type: object
+
+  /api/v1/analytics/client/{clientId}/narrative:
+    get:
+      tags: [Analytics]
+      summary: AI-generated plain-English client risk narrative
+      description: Uses the LLM to generate a behavioral summary considering transaction patterns, rule triggers, and EWMA profile stats.
+      operationId: getClientNarrative
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-001"
+      responses:
+        '200':
+          description: Client narrative
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientId:
+                    type: string
+                  narrative:
+                    type: string
+
+  # ── Configuration ─────────────────────────────────────────
+  /api/v1/config/thresholds:
+    get:
+      tags: [Configuration]
+      summary: Get alert/block thresholds and EWMA settings
+      operationId: getThresholds
+      responses:
+        '200':
+          description: Current threshold configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  alertThreshold:
+                    type: number
+                    example: 30.0
+                  blockThreshold:
+                    type: number
+                    example: 70.0
+                  ewmaAlpha:
+                    type: number
+                    example: 0.01
+                  minProfileTxns:
+                    type: integer
+                    example: 20
+    put:
+      tags: [Configuration]
+      summary: Update thresholds (live-reloadable)
+      operationId: updateThresholds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                alertThreshold:
+                  type: number
+                blockThreshold:
+                  type: number
+                ewmaAlpha:
+                  type: number
+                minProfileTxns:
+                  type: integer
+      responses:
+        '200':
+          description: Updated configuration
+
+  /api/v1/config/feedback:
+    get:
+      tags: [Configuration]
+      summary: Get feedback loop / auto-tuning settings
+      operationId: getFeedbackConfig
+      responses:
+        '200':
+          description: Feedback configuration
+    put:
+      tags: [Configuration]
+      summary: Update feedback settings (live-reloadable)
+      operationId: updateFeedbackConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated configuration
+
+  /api/v1/config/transaction-types:
+    get:
+      tags: [Configuration]
+      summary: Get accepted transaction types
+      operationId: getTransactionTypes
+      responses:
+        '200':
+          description: Transaction types list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  types:
+                    type: array
+                    items:
+                      type: string
+                    example: ["NEFT", "RTGS", "IMPS", "UPI", "IFT"]
+    put:
+      tags: [Configuration]
+      summary: Update accepted transaction types (live-reloadable)
+      operationId: updateTransactionTypes
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                types:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: Updated configuration
+
+  /api/v1/config/silence:
+    get:
+      tags: [Configuration]
+      summary: Get silence detection settings
+      operationId: getSilenceConfig
+      responses:
+        '200':
+          description: Silence detection configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  checkIntervalMinutes:
+                    type: integer
+                  silenceMultiplier:
+                    type: number
+                  minExpectedTps:
+                    type: number
+                  minCompletedHours:
+                    type: integer
+    put:
+      tags: [Configuration]
+      summary: Update silence detection settings (live-reloadable)
+      operationId: updateSilenceConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated configuration
+
+  /api/v1/config/twilio:
+    get:
+      tags: [Configuration]
+      summary: Get Twilio notification settings (auth token masked)
+      operationId: getTwilioConfig
+      responses:
+        '200':
+          description: Twilio configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled:
+                    type: boolean
+                  channel:
+                    type: string
+                    enum: [sms, whatsapp]
+                  fromNumber:
+                    type: string
+                  toNumber:
+                    type: string
+                  accountSid:
+                    type: string
+                  authToken:
+                    type: string
+                    description: Masked for security
+    put:
+      tags: [Configuration]
+      summary: Update Twilio settings (live-reloadable)
+      operationId: updateTwilioConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated configuration
+
+  /api/v1/config/ollama:
+    get:
+      tags: [Configuration]
+      summary: Get Ollama LLM settings
+      operationId: getOllamaConfig
+      responses:
+        '200':
+          description: Ollama configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  host:
+                    type: string
+                    example: "http://host.docker.internal:11434"
+                  model:
+                    type: string
+                    example: "llama3.2:1b"
+                  timeoutSeconds:
+                    type: integer
+                    example: 30
+    put:
+      tags: [Configuration]
+      summary: Update Ollama LLM settings (live-reloadable)
+      operationId: updateOllamaConfig
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '200':
+          description: Updated configuration
+
+  /api/v1/config/aerospike:
+    get:
+      tags: [Configuration]
+      summary: Get Aerospike connection info (read-only)
+      operationId: getAerospikeInfo
+      responses:
+        '200':
+          description: Aerospike connection details
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  host:
+                    type: string
+                  port:
+                    type: integer
+                  namespace:
+                    type: string
+
+  # ── Silence Detection ─────────────────────────────────────
+  /api/v1/silence:
+    get:
+      tags: [Silence Detection]
+      summary: Get currently silent clients
+      description: Returns enriched data including EWMA TPS, expected gap, silence duration, and last transaction time.
+      operationId: getSilentClients
+      responses:
+        '200':
+          description: List of silent clients
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  silentClients:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        clientId:
+                          type: string
+                        ewmaHourlyTps:
+                          type: number
+                        expectedGapMinutes:
+                          type: number
+                        silenceDurationMinutes:
+                          type: number
+                        lastTxnTime:
+                          type: integer
+                          format: int64
+                  count:
+                    type: integer
+
+  /api/v1/silence/check:
+    post:
+      tags: [Silence Detection]
+      summary: Trigger immediate silence scan
+      operationId: triggerSilenceCheck
+      responses:
+        '200':
+          description: Scan completed
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scanned:
+                    type: integer
+                  silent:
+                    type: integer
+
+  # ── Beneficiary Graph ─────────────────────────────────────
+  /api/v1/graph/status:
+    get:
+      tags: [Beneficiary Graph]
+      summary: Graph metadata
+      description: Returns total beneficiaries, clients, last refresh time, and readiness.
+      operationId: getGraphStatus
+      responses:
+        '200':
+          description: Graph status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalBeneficiaries:
+                    type: integer
+                  totalClients:
+                    type: integer
+                  lastRefresh:
+                    type: integer
+                    format: int64
+                  isReady:
+                    type: boolean
+
+  /api/v1/graph/beneficiary/{ifsc}/{account}:
+    get:
+      tags: [Beneficiary Graph]
+      summary: Fan-in count and sender list for a beneficiary
+      operationId: getBeneficiaryFanIn
+      parameters:
+        - name: ifsc
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "HDFC0001234"
+        - name: account
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "1234567890"
+      responses:
+        '200':
+          description: Beneficiary fan-in data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fanInCount:
+                    type: integer
+                  senders:
+                    type: array
+                    items:
+                      type: string
+
+  /api/v1/graph/client/{clientId}:
+    get:
+      tags: [Beneficiary Graph]
+      summary: Shared beneficiary count, ratio, and network density
+      operationId: getClientGraphMetrics
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          example: "CLIENT-007"
+      responses:
+        '200':
+          description: Client graph metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sharedBeneficiaryCount:
+                    type: integer
+                  sharedBeneficiaryRatio:
+                    type: number
+                  networkDensity:
+                    type: number
+
+  # ── Chat ──────────────────────────────────────────────────
+  /api/v1/chat:
+    post:
+      tags: [Chat]
+      summary: Send a natural language query
+      description: AI chatbot powered by Ollama. Supports queries about transactions, clients, rules, and system status.
+      operationId: chat
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [message]
+              properties:
+                message:
+                  type: string
+                  example: "How many clients did UPI in last 15 mins?"
+      responses:
+        '200':
+          description: Chat response
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  summary:
+                    type: string
+                  columns:
+                    type: array
+                    items:
+                      type: string
+                  rows:
+                    type: array
+                    items:
+                      type: array
+                      items:
+                        type: string
+                  queryType:
+                    type: string
+
+  # ── Demo Data ─────────────────────────────────────────────
+  /api/v1/demo/generate:
+    post:
+      tags: [Demo Data]
+      summary: Generate demo transactions and profiles on-the-fly
+      description: Generates clients with EWMA profiles, transactions with realistic patterns, and injects anomalies. Data is immediately visible in the dashboard.
+      operationId: generateDemoData
+      responses:
+        '200':
+          description: Demo data generation summary
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientsCreated:
+                    type: integer
+                  transactionsGenerated:
+                    type: integer
+                  pass:
+                    type: integer
+                  alert:
+                    type: integer
+                  block:
+                    type: integer
 
 components:
   schemas:
     Transaction:
       type: object
-      required:
-        - txnId
-        - clientId
-        - txnType
-        - amount
+      required: [txnId, clientId, txnType, amount]
       properties:
         txnId:
           type: string
-          description: Unique transaction identifier
           example: "CLIENT-001-TXN-000001"
         clientId:
           type: string
-          description: Client identifier
           example: "CLIENT-001"
         txnType:
           type: string
-          description: Transaction type
-          enum:
-            - NEFT
-            - RTGS
-            - IMPS
-            - UPI
-            - IFT
+          enum: [NEFT, RTGS, IMPS, UPI, IFT]
           example: "NEFT"
         amount:
           type: number
           format: double
-          description: Transaction amount
           example: 50000.00
         timestamp:
           type: integer
           format: int64
-          description: Transaction timestamp in epoch milliseconds. Defaults to current time if not provided.
+          description: Epoch milliseconds. Defaults to current time if not provided.
           example: 1739886764000
+        beneficiaryAccount:
+          type: string
+          example: "1234567890"
+        beneficiaryIfsc:
+          type: string
+          example: "HDFC0001234"
 
     EvaluationResult:
       type: object
       properties:
         txnId:
           type: string
-          example: "IF-DEMO-001"
         clientId:
           type: string
-          example: "CLIENT-001"
         compositeScore:
           type: number
           format: double
-          description: "Weighted composite risk score (0-100)"
-          example: 42.5
+          description: "Weighted composite risk score (0–100)"
         riskLevel:
           type: string
-          enum:
-            - LOW
-            - MEDIUM
-            - HIGH
-            - CRITICAL
-          description: "LOW (<30), MEDIUM (30-60), HIGH (60-80), CRITICAL (>=80)"
-          example: "MEDIUM"
+          enum: [LOW, MEDIUM, HIGH, CRITICAL]
         action:
           type: string
-          enum:
-            - PASS
-            - ALERT
-            - BLOCK
-          description: "PASS (<30), ALERT (30-70), BLOCK (>=70)"
-          example: "ALERT"
+          enum: [PASS, ALERT, BLOCK]
         ruleResults:
           type: array
           items:
@@ -564,18 +1359,20 @@ components:
         evaluatedAt:
           type: integer
           format: int64
-          description: Evaluation timestamp in epoch milliseconds
-          example: 1739886764000
+        aiExplanation:
+          type: string
+          description: LLM-generated plain-English explanation (generated on first view, cached)
+        attackPattern:
+          type: string
+          description: JSON string with pattern, confidence, and summary from LLM classification
 
     RuleResult:
       type: object
       properties:
         ruleId:
           type: string
-          example: "RULE-IF"
         ruleName:
           type: string
-          example: "Isolation Forest"
         ruleType:
           type: string
           enum:
@@ -584,47 +1381,40 @@ components:
             - AMOUNT_ANOMALY
             - HOURLY_AMOUNT_ANOMALY
             - AMOUNT_PER_TYPE_ANOMALY
+            - BENEFICIARY_RAPID_REPEAT
+            - BENEFICIARY_CONCENTRATION
+            - BENEFICIARY_AMOUNT_REPETITION
+            - DAILY_CUMULATIVE_AMOUNT
+            - NEW_BENEFICIARY_VELOCITY
+            - DORMANCY_REACTIVATION
+            - CROSS_CHANNEL_BENEFICIARY_AMOUNT
+            - SEASONAL_DEVIATION
+            - MULE_NETWORK
+            - TEMPORAL_RULE_CORRELATION
             - ISOLATION_FOREST
-          example: "ISOLATION_FOREST"
         triggered:
           type: boolean
-          description: Whether this rule flagged the transaction
-          example: true
         deviationPct:
           type: number
           format: double
-          description: How far the value deviated from baseline (as percentage)
-          example: 15.0
         partialScore:
           type: number
           format: double
-          description: "This rule's contribution score (0-100) before weighting"
-          example: 42.5
         riskWeight:
           type: number
           format: double
-          description: The rule's weight in composite score calculation
-          example: 2.0
         reason:
           type: string
-          description: Human-readable explanation of the evaluation
-          example: "Isolation Forest: score=0.690 (threshold=0.60). Multi-dimensional anomaly detected."
 
     AnomalyRule:
       type: object
       properties:
         ruleId:
           type: string
-          description: Unique rule identifier (auto-generated if not provided on create)
-          example: "RULE-IF"
         name:
           type: string
-          description: Rule display name
-          example: "Isolation Forest"
         description:
           type: string
-          description: Detailed description of what the rule detects
-          example: "ML-based detection of multi-dimensional anomalies that individual rules miss"
         ruleType:
           type: string
           enum:
@@ -633,137 +1423,188 @@ components:
             - AMOUNT_ANOMALY
             - HOURLY_AMOUNT_ANOMALY
             - AMOUNT_PER_TYPE_ANOMALY
+            - BENEFICIARY_RAPID_REPEAT
+            - BENEFICIARY_CONCENTRATION
+            - BENEFICIARY_AMOUNT_REPETITION
+            - DAILY_CUMULATIVE_AMOUNT
+            - NEW_BENEFICIARY_VELOCITY
+            - DORMANCY_REACTIVATION
+            - CROSS_CHANNEL_BENEFICIARY_AMOUNT
+            - SEASONAL_DEVIATION
+            - MULE_NETWORK
+            - TEMPORAL_RULE_CORRELATION
             - ISOLATION_FOREST
-          description: The type of anomaly this rule detects
-          example: "ISOLATION_FOREST"
         variancePct:
           type: number
           format: double
-          description: |
-            Threshold percentage. Meaning varies by rule type:
-            - Rule-based: flag if value exceeds baseline by this percentage
-            - Isolation Forest: anomaly score threshold (60 = 0.60)
-          example: 60.0
         riskWeight:
           type: number
           format: double
-          description: Weight of this rule in composite score (higher = more influence)
           default: 1.0
-          example: 2.0
         enabled:
           type: boolean
-          description: Whether this rule is currently active
           default: true
-          example: true
         params:
           type: object
           additionalProperties:
             type: string
-          description: Rule-specific parameters
-          example:
-            numTrees: "100"
-            sampleSize: "256"
 
     ClientProfile:
       type: object
       properties:
         clientId:
           type: string
-          example: "CLIENT-001"
         txnTypeCounts:
           type: object
           additionalProperties:
             type: integer
             format: int64
-          description: "Transaction count per type"
-          example:
-            NEFT: 5400
-            RTGS: 600
         totalTxnCount:
           type: integer
           format: int64
-          description: Total number of transactions processed
-          example: 6000
         ewmaAmount:
           type: number
           format: double
-          description: Exponentially weighted moving average of transaction amounts
-          example: 50234.56
         amountM2:
           type: number
           format: double
-          description: Welford's M2 accumulator for amount variance
         ewmaHourlyTps:
           type: number
           format: double
-          description: EWMA of hourly transaction count
-          example: 8.33
         tpsM2:
           type: number
           format: double
-          description: Welford's M2 accumulator for TPS variance
         completedHoursCount:
           type: integer
           format: int64
-          description: Number of completed hour windows observed
         avgAmountByType:
           type: object
           additionalProperties:
             type: number
             format: double
-          description: EWMA amount per transaction type
-          example:
-            NEFT: 48500.00
-            RTGS: 65000.00
         amountM2ByType:
           type: object
           additionalProperties:
             type: number
             format: double
-          description: Welford's M2 per transaction type
         amountCountByType:
           type: object
           additionalProperties:
             type: integer
             format: int64
-          description: Transaction count per type (for Welford's)
         ewmaHourlyAmount:
           type: number
           format: double
-          description: EWMA of hourly total transaction amount
-          example: 416000.00
         hourlyAmountM2:
           type: number
           format: double
-          description: Welford's M2 for hourly amount variance
         lastUpdated:
           type: integer
           format: int64
-          description: Last profile update timestamp (epoch millis)
         lastHourBucket:
           type: string
-          description: Hour bucket key of the last processed hour (for TPS rollover)
 
     ModelMetadata:
       type: object
       properties:
         clientId:
           type: string
-          example: "CLIENT-001"
         treeCount:
           type: integer
-          description: Number of isolation trees in the forest
-          example: 100
         featureCount:
           type: integer
-          description: Number of features in the feature vector
-          example: 6
         trainingSamples:
           type: integer
-          description: Number of transaction samples used for training
-          example: 6000
         trainedAt:
           type: integer
           format: int64
-          description: Model training timestamp (epoch millis)
-          example: 1739886764000
+
+    ReviewQueueItem:
+      type: object
+      properties:
+        txnId:
+          type: string
+        clientId:
+          type: string
+        action:
+          type: string
+          enum: [ALERT, BLOCK]
+        compositeScore:
+          type: number
+          format: double
+        status:
+          type: string
+          enum: [PENDING, TRUE_POSITIVE, FALSE_POSITIVE, AUTO_ACCEPTED]
+        feedbackBy:
+          type: string
+        feedbackAt:
+          type: integer
+          format: int64
+        createdAt:
+          type: integer
+          format: int64
+        autoAcceptDeadline:
+          type: integer
+          format: int64
+
+    RuleWeightChange:
+      type: object
+      properties:
+        ruleId:
+          type: string
+        previousWeight:
+          type: number
+          format: double
+        newWeight:
+          type: number
+          format: double
+        reason:
+          type: string
+        timestamp:
+          type: integer
+          format: int64
+
+    RulePerformance:
+      type: object
+      properties:
+        ruleId:
+          type: string
+        ruleName:
+          type: string
+        ruleType:
+          type: string
+        truePositives:
+          type: integer
+        falsePositives:
+          type: integer
+        total:
+          type: integer
+        precision:
+          type: number
+          format: double
+
+    PagedTransactions:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: integer
+          format: int64
+
+    PagedEvaluationResults:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvaluationResult'
+        hasMore:
+          type: boolean
+        nextCursor:
+          type: integer
+          format: int64
