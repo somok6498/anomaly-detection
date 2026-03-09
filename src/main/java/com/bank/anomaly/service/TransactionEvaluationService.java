@@ -104,6 +104,9 @@ public class TransactionEvaluationService {
                     .build();
 
             riskResultRepository.save(passResult);
+            metricsConfig.recordClientEvaluation(txn.getClientId(), "PASS", 0.0);
+            metricsConfig.recordClientTransactionAmount(txn.getClientId(), txn.getTxnType(), txn.getAmount());
+            metricsConfig.recordClientTransactionType(txn.getClientId(), txn.getTxnType());
             return passResult;
         }
 
@@ -185,6 +188,9 @@ public class TransactionEvaluationService {
 
         // 8. Record metrics
         metricsConfig.recordEvaluation(result.getAction(), result.getCompositeScore());
+        metricsConfig.recordClientEvaluation(txn.getClientId(), result.getAction(), result.getCompositeScore());
+        metricsConfig.recordClientTransactionAmount(txn.getClientId(), txn.getTxnType(), txn.getAmount());
+        metricsConfig.recordClientTransactionType(txn.getClientId(), txn.getTxnType());
 
         // 9. Send notification if blocked (async — does not delay response)
         notificationService.notifyIfBlocked(txn, result);

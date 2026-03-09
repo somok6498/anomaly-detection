@@ -86,6 +86,7 @@ public class RuleEngine {
 
                 if (result.isTriggered()) {
                     metricsConfig.recordRuleTriggered(rule.getRuleType().name());
+                    metricsConfig.recordClientRuleTriggered(txn.getClientId(), rule.getRuleType().name());
                     log.debug("Rule triggered: {} for client {} txn {} — score={}, reason={}",
                             rule.getName(), txn.getClientId(), txn.getTxnId(),
                             result.getPartialScore(), result.getReason());

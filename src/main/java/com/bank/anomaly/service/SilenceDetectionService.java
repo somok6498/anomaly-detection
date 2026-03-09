@@ -76,7 +76,8 @@ public class SilenceDetectionService {
                 if (!alertedClients.containsKey(profile.getClientId())) {
                     // New silence detected — alert!
                     alertedClients.put(profile.getClientId(), now);
-                    metricsConfig.recordSilenceDetected(profile.getClientId());
+                    metricsConfig.recordSilenceDetected(profile.getClientId(), profile.getLastUpdated());
+                    metricsConfig.updateClientSilenceState(profile.getClientId(), true);
 
                     notificationService.notifySilentClient(
                             profile.getClientId(), silenceMinutes,
@@ -96,6 +97,7 @@ public class SilenceDetectionService {
         alertedClients.keySet().removeIf(clientId -> {
             if (!currentlySilent.contains(clientId)) {
                 metricsConfig.recordSilenceResolved(clientId);
+                metricsConfig.updateClientSilenceState(clientId, false);
                 log.info("SILENCE RESOLVED: {} — transactions resumed", clientId);
                 return true;
             }
