@@ -798,6 +798,49 @@ All data is stored in the `banking` namespace across 12 sets:
 
 Sets 1–4 are core data, 5–8 are atomic counters for real-time aggregation, 9 is ML models, 10–11 support the feedback loop, and 12 stores AI explanation feedback.
 
+## Claude Code Skills (Developer Automation)
+
+The project includes **8 custom Claude Code skills** (slash commands) in `.claude/skills/` that automate common development workflows. These are available in VS Code with the Claude Code extension.
+
+| Slash Command | Description |
+|---------------|-------------|
+| `/deploy` | Build Java project (`./gradlew build -x test`), rebuild Docker image, restart the app container, and verify health. Use after any backend code change. |
+| `/test-all` | Run the full test suite with `./gradlew testReport` and display the executive summary (total, passed, failed, skipped, duration). |
+| `/seed` | Re-seed the Aerospike database with demo data by restarting the app with the `seed` Spring profile. Verifies 16 rules are loaded, then restarts in normal mode. |
+| `/verify` | Run the full post-change verification checklist: health check, API data, Prometheus targets, dashboard, Grafana, and Jaeger accessibility. Reports each as PASS/FAIL. |
+| `/status` | Quick system status: Docker container states, API health, system overview, and review queue stats. |
+| `/rebuild-dashboard` | Rebuild the Flutter web dashboard (`flutter build web`) and copy static assets to `src/main/resources/static/`. |
+| `/mcp-reload` | Rebuild the MCP server TypeScript code (`npm run build`), verify compiled output, and report tool count. |
+| `/smoke-test` | End-to-end pipeline test: evaluate a high-amount transaction, check it appears in the review queue, run a dry-run simulation, and report which rules triggered. |
+
+### Usage
+
+1. Open the project in VS Code with the Claude Code extension installed.
+2. Type `/` in the Claude Code chat to see available skills in autocomplete.
+3. Select a skill (e.g., `/deploy`) — Claude will execute the steps automatically and report results.
+
+### Customization
+
+Each skill is defined as a `SKILL.md` file with YAML frontmatter:
+
+```
+.claude/skills/
+├── deploy/SKILL.md
+├── test-all/SKILL.md
+├── seed/SKILL.md
+├── verify/SKILL.md
+├── status/SKILL.md
+├── rebuild-dashboard/SKILL.md
+├── mcp-reload/SKILL.md
+└── smoke-test/SKILL.md
+```
+
+Skills can be customized by editing the `SKILL.md` files. Key frontmatter fields:
+- `name` — Skill name (used as the slash command)
+- `description` — When to use this skill
+- `disable-model-invocation: true` — Prevents Claude from auto-triggering (manual-only)
+- `allowed-tools` — Restricts which tools Claude can use during execution
+
 ## Tech Stack
 
 | Component | Technology |
