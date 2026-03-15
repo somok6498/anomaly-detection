@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "anomaly-detection": {
+      "command": "node",
+      "args": ["mcp-server/dist/index.js"],
+      "env": {
+        "ANOMALY_API_URL": "http://localhost:8080"
+      }
+    }
+  }
+}

@@ -26,7 +26,11 @@ info:
     BENEFICIARY_AMOUNT_REPETITION, DAILY_CUMULATIVE_AMOUNT, NEW_BENEFICIARY_VELOCITY,
     DORMANCY_REACTIVATION, CROSS_CHANNEL_BENEFICIARY_AMOUNT, SEASONAL_DEVIATION,
     MULE_NETWORK, TEMPORAL_RULE_CORRELATION, ISOLATION_FOREST
-  version: 2.0.0
+
+    **New in 3.0.0:** Advanced Analytics endpoints — top risk clients, system overview,
+    cross-client transaction search, dry-run simulation, anomaly trends, mule candidates,
+    investigation reports, and rule correlation analysis.
+  version: 3.0.0
   contact:
     name: Anomaly Detection Team
 
@@ -55,6 +59,8 @@ tags:
     description: Mule network graph queries
   - name: Chat
     description: AI chatbot for natural language queries
+  - name: Advanced Analytics
+    description: Top risk clients, anomaly trends, mule candidates, investigation reports, transaction search, simulation, and rule correlations
   - name: Demo Data
     description: On-demand demo data generation
 
@@ -1276,6 +1282,442 @@ paths:
                         type: string
                   queryType:
                     type: string
+
+  # ── Advanced Analytics ────────────────────────────────────
+  /api/v1/advanced/top-risk-clients:
+    get:
+      tags: [Advanced Analytics]
+      summary: Get top risk clients ranked by score or alert/block count
+      operationId: getTopRiskClients
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+          description: Number of clients to return
+        - name: sortBy
+          in: query
+          schema:
+            type: string
+            enum: [avgScore, maxScore, blockCount, alertCount]
+            default: avgScore
+          description: Sort criteria
+      responses:
+        '200':
+          description: Ranked list of highest-risk clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    clientId:
+                      type: string
+                    avgScore:
+                      type: number
+                      format: double
+                    maxScore:
+                      type: number
+                      format: double
+                    alertCount:
+                      type: integer
+                    blockCount:
+                      type: integer
+                    totalEvaluated:
+                      type: integer
+                    totalTransactions:
+                      type: integer
+
+  /api/v1/advanced/system-overview:
+    get:
+      tags: [Advanced Analytics]
+      summary: Get system-wide overview dashboard
+      description: Returns total clients, transactions, review queue depth by status, silent client count, and beneficiary graph health.
+      operationId: getSystemOverview
+      responses:
+        '200':
+          description: System overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalClients:
+                    type: integer
+                  totalTransactions:
+                    type: integer
+                    format: int64
+                  reviewQueue:
+                    type: object
+                    properties:
+                      pending:
+                        type: integer
+                      truePositive:
+                        type: integer
+                      falsePositive:
+                        type: integer
+                      autoAccepted:
+                        type: integer
+                  silentClients:
+                    type: integer
+                  beneficiaryGraph:
+                    type: object
+                    properties:
+                      ready:
+                        type: boolean
+                      totalBeneficiaries:
+                        type: integer
+                      totalClients:
+                        type: integer
+                      lastRefresh:
+                        type: string
+
+  /api/v1/advanced/search-transactions:
+    get:
+      tags: [Advanced Analytics]
+      summary: Search transactions across all clients with flexible filters
+      operationId: searchTransactions
+      parameters:
+        - name: fromDate
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: Start time (epoch millis)
+        - name: toDate
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: End time (epoch millis)
+        - name: clientId
+          in: query
+          schema:
+            type: string
+          description: Filter by client ID
+        - name: txnType
+          in: query
+          schema:
+            type: string
+            enum: [NEFT, RTGS, IMPS, UPI, IFT]
+          description: Filter by transaction type
+        - name: minAmount
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Minimum transaction amount
+        - name: maxAmount
+          in: query
+          schema:
+            type: number
+            format: double
+          description: Maximum transaction amount
+        - name: beneficiaryAccount
+          in: query
+          schema:
+            type: string
+          description: Filter by beneficiary account number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+          description: Max results to return
+      responses:
+        '200':
+          description: Matching transactions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    txnId:
+                      type: string
+                    clientId:
+                      type: string
+                    txnType:
+                      type: string
+                    amount:
+                      type: number
+                      format: double
+                    timestamp:
+                      type: integer
+                      format: int64
+                    beneficiaryAccount:
+                      type: string
+                    beneficiaryIfsc:
+                      type: string
+
+  /api/v1/advanced/simulate:
+    post:
+      tags: [Advanced Analytics]
+      summary: Simulate a transaction evaluation without persisting (dry-run)
+      description: Runs all 16 rules and returns the score, action, and per-rule breakdown without saving the transaction, updating the profile, or creating a review queue entry.
+      operationId: simulateTransaction
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Transaction'
+      responses:
+        '200':
+          description: Simulation result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  simulated:
+                    type: boolean
+                    example: true
+                  result:
+                    $ref: '#/components/schemas/EvaluationResult'
+                  note:
+                    type: string
+                    description: Present when client has insufficient history
+
+  /api/v1/advanced/anomaly-trends:
+    get:
+      tags: [Advanced Analytics]
+      summary: Get anomaly count and score trends over time buckets
+      operationId: getAnomalyTrends
+      parameters:
+        - name: fromDate
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: Start time epoch millis (default 7 days ago)
+        - name: toDate
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: End time epoch millis (default now)
+        - name: bucketSize
+          in: query
+          schema:
+            type: string
+            enum: [15m, 1h, 6h, 1d]
+            default: 1h
+          description: Time bucket size
+      responses:
+        '200':
+          description: Anomaly trends
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  fromDate:
+                    type: integer
+                    format: int64
+                  toDate:
+                    type: integer
+                    format: int64
+                  bucketSize:
+                    type: string
+                  bucketCount:
+                    type: integer
+                  totalAlerts:
+                    type: integer
+                  totalBlocks:
+                    type: integer
+                  totalEvaluated:
+                    type: integer
+                  trend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        timestamp:
+                          type: integer
+                          format: int64
+                        total:
+                          type: integer
+                        passCount:
+                          type: integer
+                        alertCount:
+                          type: integer
+                        blockCount:
+                          type: integer
+                        avgScore:
+                          type: number
+                          format: double
+
+  /api/v1/advanced/mule-candidates:
+    get:
+      tags: [Advanced Analytics]
+      summary: Get top beneficiaries ranked by fan-in (potential mule accounts)
+      description: High fan-in indicates money from many clients converging on one account.
+      operationId: getMuleCandidates
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Number of candidates to return
+        - name: minFanIn
+          in: query
+          schema:
+            type: integer
+            default: 2
+          description: Minimum fan-in to qualify
+      responses:
+        '200':
+          description: Ranked mule candidates
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    beneficiaryKey:
+                      type: string
+                    fanIn:
+                      type: integer
+                    senders:
+                      type: array
+                      items:
+                        type: string
+
+  /api/v1/advanced/investigation-report/{clientId}:
+    get:
+      tags: [Advanced Analytics]
+      summary: Generate a comprehensive investigation report for a client
+      description: Includes profile summary, evaluation statistics, top triggered rules, beneficiary network metrics, and an AI-generated risk narrative.
+      operationId: generateInvestigationReport
+      parameters:
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Client ID to investigate
+      responses:
+        '200':
+          description: Investigation report
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientId:
+                    type: string
+                  generatedAt:
+                    type: integer
+                    format: int64
+                  profile:
+                    type: object
+                    properties:
+                      totalTransactions:
+                        type: integer
+                        format: int64
+                      ewmaAmount:
+                        type: number
+                        format: double
+                      ewmaHourlyTps:
+                        type: number
+                        format: double
+                      txnTypeCounts:
+                        type: object
+                        additionalProperties:
+                          type: integer
+                  evaluationSummary:
+                    type: object
+                    properties:
+                      totalEvaluated:
+                        type: integer
+                      alerts:
+                        type: integer
+                      blocks:
+                        type: integer
+                      avgCompositeScore:
+                        type: number
+                        format: double
+                  topTriggeredRules:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ruleId:
+                          type: string
+                        triggerCount:
+                          type: integer
+                  beneficiaryNetwork:
+                    type: object
+                    properties:
+                      totalBeneficiaries:
+                        type: integer
+                      sharedBeneficiaries:
+                        type: integer
+                      networkDensity:
+                        type: number
+                        format: double
+                  aiNarrative:
+                    type: string
+
+  /api/v1/advanced/rule-correlations:
+    get:
+      tags: [Advanced Analytics]
+      summary: Get rule co-occurrence matrix with Jaccard similarity
+      description: Shows which rules tend to fire together. Useful for finding compound attack patterns or redundant rules.
+      operationId: getRuleCorrelations
+      parameters:
+        - name: fromDate
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: Start time epoch millis
+        - name: toDate
+          in: query
+          schema:
+            type: integer
+            format: int64
+          description: End time epoch millis
+      responses:
+        '200':
+          description: Rule correlation analysis
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  totalEvaluationsAnalyzed:
+                    type: integer
+                  uniqueRulesTriggered:
+                    type: integer
+                  correlationPairs:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        ruleA:
+                          type: string
+                        ruleB:
+                          type: string
+                        coOccurrenceCount:
+                          type: integer
+                        ruleATriggers:
+                          type: integer
+                        ruleBTriggers:
+                          type: integer
+                        jaccardIndex:
+                          type: number
+                          format: double
+                  ruleTriggerCounts:
+                    type: object
+                    additionalProperties:
+                      type: integer
 
   # ── Demo Data ─────────────────────────────────────────────
   /api/v1/demo/generate:

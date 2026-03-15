@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 16 anomaly rules (including Temporal Rule Correlation), configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations with operator feedback, and demo data generation.\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 16 anomaly rules (including Temporal Rule Correlation), configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations with operator feedback, demo data generation, and Advanced Analytics (top risk clients, system overview, cross-client search, simulation, anomaly trends, mule candidates, investigation reports, rule correlations).\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -1618,6 +1618,166 @@
               "mode": "raw",
               "raw": "{\n  \"message\": \"List transactions blocked in last 30 mins\"\n}"
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Advanced Analytics",
+      "description": "Top risk clients, anomaly trends, mule candidates, investigation reports, transaction search, simulation, and rule correlations.",
+      "item": [
+        {
+          "name": "Top Risk Clients (default sort)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/advanced/top-risk-clients",
+            "header": []
+          }
+        },
+        {
+          "name": "Top Risk Clients (by block count, top 5)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/advanced/top-risk-clients?limit=5&sortBy=blockCount",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "advanced", "top-risk-clients"],
+              "query": [
+                { "key": "limit", "value": "5" },
+                { "key": "sortBy", "value": "blockCount" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "System Overview",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/advanced/system-overview",
+            "header": []
+          }
+        },
+        {
+          "name": "Search Transactions (all)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/advanced/search-transactions",
+            "header": []
+          }
+        },
+        {
+          "name": "Search Transactions (filtered by client + type)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/advanced/search-transactions?clientId=CLIENT-001&txnType=NEFT&limit=20",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "advanced", "search-transactions"],
+              "query": [
+                { "key": "clientId", "value": "CLIENT-001" },
+                { "key": "txnType", "value": "NEFT" },
+                { "key": "limit", "value": "20" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Search Transactions (by amount range)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/advanced/search-transactions?minAmount=100000&maxAmount=500000&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "advanced", "search-transactions"],
+              "query": [
+                { "key": "minAmount", "value": "100000" },
+                { "key": "maxAmount", "value": "500000" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Simulate Transaction (dry-run)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/advanced/simulate",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnId\": \"SIM-001\",\n  \"clientId\": \"CLIENT-001\",\n  \"txnType\": \"NEFT\",\n  \"amount\": 250000,\n  \"beneficiaryAccount\": \"9999888877\",\n  \"beneficiaryIfsc\": \"HDFC0009999\"\n}"
+            }
+          }
+        },
+        {
+          "name": "Anomaly Trends (default 7 days, 1h buckets)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/advanced/anomaly-trends",
+            "header": []
+          }
+        },
+        {
+          "name": "Anomaly Trends (15-minute buckets)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/advanced/anomaly-trends?bucketSize=15m",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "advanced", "anomaly-trends"],
+              "query": [
+                { "key": "bucketSize", "value": "15m" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Mule Candidates (default)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/advanced/mule-candidates",
+            "header": []
+          }
+        },
+        {
+          "name": "Mule Candidates (high fan-in only)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/advanced/mule-candidates?minFanIn=3&limit=10",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "advanced", "mule-candidates"],
+              "query": [
+                { "key": "minFanIn", "value": "3" },
+                { "key": "limit", "value": "10" }
+              ]
+            },
+            "header": []
+          }
+        },
+        {
+          "name": "Investigation Report",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/advanced/investigation-report/CLIENT-007",
+            "header": []
+          }
+        },
+        {
+          "name": "Rule Correlations",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/advanced/rule-correlations",
+            "header": []
           }
         }
       ]

@@ -1,4 +1,5 @@
 build/
+!build/libs/
 target/
 .gradle/
 .idea/

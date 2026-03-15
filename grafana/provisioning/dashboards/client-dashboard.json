@@ -116,13 +116,13 @@
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "expr": "rate(client_transaction_amount_sum{client_id=\"$client_id\"}[1m]) / rate(client_transaction_amount_count{client_id=\"$client_id\"}[1m])",
-          "legendFormat": "avg amount",
+          "legendFormat": "avg amount ({{txn_type}})",
           "refId": "A"
         },
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "expr": "client_transaction_amount_max{client_id=\"$client_id\"}",
-          "legendFormat": "max amount",
+          "legendFormat": "max amount ({{txn_type}})",
           "refId": "B"
         }
       ]

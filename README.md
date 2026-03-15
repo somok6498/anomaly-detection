@@ -12,6 +12,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **Twilio** WhatsApp / SMS notifications on blocked transactions
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
 - **Swagger UI** for interactive API exploration
+- **MCP Server** (Model Context Protocol) — 38 tools for AI agent integration (Claude, GPT, custom agents)
 - **Postman Collection** included (`Anomaly_Detection_API.postman_collection.json`) with all endpoints
 - **Flutter Web** dashboard (pre-built, served as static assets)
 
@@ -440,6 +441,103 @@ Supported patterns:
 
 Pattern labels are generated on-demand alongside AI explanations and cached in Aerospike. The `attackPattern` field is included in the `EvaluationResult` response as a JSON string with `pattern`, `confidence`, and `summary`.
 
+### Advanced Analytics
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/advanced/top-risk-clients?limit=10&sortBy=avgScore` | Top risk clients ranked by avgScore, maxScore, blockCount, or alertCount |
+| GET | `/api/v1/advanced/system-overview` | System-wide dashboard: client count, queue depth, silent clients, graph health |
+| GET | `/api/v1/advanced/search-transactions?clientId=&txnType=&minAmount=&maxAmount=` | Cross-client transaction search with flexible filters |
+| POST | `/api/v1/advanced/simulate` | Dry-run transaction evaluation — runs all 16 rules without persisting |
+| GET | `/api/v1/advanced/anomaly-trends?bucketSize=1h` | Time-bucketed anomaly count/score trends (15m, 1h, 6h, 1d buckets) |
+| GET | `/api/v1/advanced/mule-candidates?limit=20&minFanIn=2` | Beneficiaries ranked by fan-in (potential mule accounts) |
+| GET | `/api/v1/advanced/investigation-report/{clientId}` | Comprehensive client report: profile, evaluations, rules, network, AI narrative |
+| GET | `/api/v1/advanced/rule-correlations` | Rule co-occurrence matrix with Jaccard similarity index |
+
+## MCP Server (AI Agent Integration)
+
+The project includes a standalone **Model Context Protocol (MCP) server** that exposes the entire Anomaly Detection API as **38 tools** for AI agent integration (e.g., Claude, GPT, custom agents).
+
+### Setup
+
+```bash
+cd mcp-server
+npm install
+npm run build
+```
+
+Configure in your AI client's MCP settings (e.g., `.mcp.json`):
+
+```json
+{
+  "mcpServers": {
+    "anomaly-detection": {
+      "command": "node",
+      "args": ["mcp-server/dist/index.js"],
+      "env": {
+        "ANOMALY_API_URL": "http://localhost:8080"
+      }
+    }
+  }
+}
+```
+
+### MCP Tool Catalog (38 Tools)
+
+| Category | Tool | Description |
+|----------|------|-------------|
+| **Transactions** | `evaluate_transaction` | Evaluate a transaction for anomalies (returns score, action, rule breakdown, AI explanation) |
+| | `get_transaction` | Look up a specific transaction by ID |
+| | `get_client_transactions` | List a client's recent transactions (paginated) |
+| | `get_evaluation_result` | Get anomaly evaluation result for a transaction |
+| | `get_client_evaluation_results` | List evaluation results for a client |
+| **Profiles** | `get_client_profile` | Get EWMA behavioral profile (avg amount, hourly TPS, type distribution) |
+| **Rules** | `list_rules` | List all 16 anomaly detection rules with config |
+| | `get_rule` | Get details of a specific rule |
+| | `create_rule` | Create a new anomaly detection rule |
+| | `update_rule` | Update rule weight, threshold, or parameters |
+| | `delete_rule` | Delete a rule permanently |
+| **Models** | `get_model_metadata` | Get Isolation Forest model metadata for a client |
+| | `train_model` | Train per-client Isolation Forest model |
+| | `batch_train_models` | Train models for all clients with sufficient history |
+| **Review Queue** | `get_review_queue` | List ALERT/BLOCK items pending review (filterable) |
+| | `get_review_queue_detail` | Full detail: queue item + evaluation + transaction + profile |
+| | `submit_feedback` | Mark as TRUE_POSITIVE or FALSE_POSITIVE |
+| | `bulk_submit_feedback` | Batch feedback on multiple items |
+| | `get_review_stats` | Queue statistics (pending, TP, FP, auto-accepted) |
+| | `smart_triage` | LLM-powered urgency ranking of pending alerts |
+| | `get_weight_history` | Rule weight change audit trail |
+| **Analytics** | `get_rule_performance` | Per-rule TP/FP counts and precision |
+| | `get_ai_feedback_stats` | AI explanation quality ratings |
+| | `get_client_network` | Beneficiary network graph (nodes + edges) |
+| | `get_client_narrative` | AI-generated plain-English risk narrative |
+| **Silence Detection** | `get_silent_clients` | Clients who stopped transacting (with durations) |
+| | `trigger_silence_check` | Trigger immediate silence scan |
+| **Beneficiary Graph** | `get_graph_status` | Graph metadata and readiness |
+| | `get_beneficiary_fan_in` | Fan-in count for a beneficiary account |
+| | `get_client_graph_metrics` | Shared beneficiaries, ratio, network density |
+| **Configuration** | `get_thresholds` / `update_thresholds` | PASS/ALERT/BLOCK score boundaries |
+| | `get_feedback_config` / `update_feedback_config` | Auto-tuning settings |
+| | `get_silence_config` / `update_silence_config` | Silence detection parameters |
+| | `get_ollama_config` / `update_ollama_config` | LLM host, model, timeout |
+| **Advanced Analytics** | `get_top_risk_clients` | Ranked risk list by score/alerts/blocks |
+| | `get_system_overview` | System-wide status dashboard |
+| | `search_transactions` | Cross-client transaction search |
+| | `simulate_transaction` | Dry-run evaluation (no persistence) |
+| | `get_anomaly_trends` | Time-bucketed anomaly trends |
+| | `get_mule_candidates` | Potential mule accounts by fan-in |
+| | `generate_investigation_report` | Comprehensive client investigation report |
+| | `get_rule_correlations` | Rule co-occurrence matrix |
+| **Demo & Health** | `generate_demo_data` | Populate system with test data |
+| | `health_check` | API health status |
+
+### Transport
+
+- **Protocol:** MCP (Model Context Protocol) over **stdio**
+- **SDK:** `@modelcontextprotocol/sdk` v1.12.1
+- **Schema validation:** Zod
+- **Environment:** `ANOMALY_API_URL` (default `http://localhost:8080`)
+
 ## Observability
 
 ### Tracing (Jaeger)
@@ -592,19 +690,20 @@ The "Silence Detection" row in the Grafana dashboard shows:
 ```
 src/main/java/com/bank/anomaly/
 ├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
-├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue, Graph)
+├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue, Graph, Advanced Analytics)
 ├── engine/
 │   ├── evaluators/       # 16 rule evaluators (15 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
 ├── repository/           # Aerospike data access (8 repositories)
 ├── seeder/               # Demo data seeder & profile builder
-└── service/              # Business logic (evaluation, scoring, profiling, notifications, review queue, auto-tuning)
+└── service/              # Business logic (evaluation, scoring, profiling, notifications, review queue, auto-tuning, advanced analytics)
 
+mcp-server/               # MCP server for AI agent integration (38 tools, TypeScript, stdio transport)
 dashboard_ui/             # Flutter Web dashboard
 aerospike/                # Aerospike server configuration
 prometheus/               # Prometheus scrape configuration
-grafana/provisioning/     # Grafana datasources + pre-built dashboard
+grafana/provisioning/     # Grafana datasources + pre-built dashboards (3)
 ```
 
 ## Seeded Test Data
