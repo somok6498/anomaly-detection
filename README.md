@@ -1,6 +1,6 @@
 # Anomaly Detection System
 
-Real-time behavioral anomaly detection for banking transactions using rule-based evaluation + Isolation Forest ML model, with EWMA-based client profiling, ops review queue with feedback-driven rule auto-tuning, WhatsApp/SMS alerts, and full OpenTelemetry observability.
+Real-time behavioral anomaly detection for banking transactions using rule-based evaluation + Isolation Forest ML model, with EWMA-based client profiling, ops review queue with feedback-driven rule auto-tuning, WhatsApp/SMS alerts, full OpenTelemetry observability, and **business intelligence** — client segmentation, rail migration intelligence, targeted campaign recommendations, and volume analytics.
 
 ## Architecture
 
@@ -453,6 +453,71 @@ Pattern labels are generated on-demand alongside AI explanations and cached in A
 | GET | `/api/v1/advanced/mule-candidates?limit=20&minFanIn=2` | Beneficiaries ranked by fan-in (potential mule accounts) |
 | GET | `/api/v1/advanced/investigation-report/{clientId}` | Comprehensive client report: profile, evaluations, rules, network, AI narrative |
 | GET | `/api/v1/advanced/rule-correlations` | Rule co-occurrence matrix with Jaccard similarity index |
+
+### Business Insights
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/insights/segments` | All clients with segment classification (HIGH_VALUE, GROWING, STABLE, DECLINING, DORMANT, NEW) |
+| GET | `/api/v1/insights/segments/summary` | Segment distribution: count, total txns, avg EWMA per segment |
+| GET | `/api/v1/insights/rails` | System-wide rail usage: volume share, avg amounts, active clients per rail |
+| GET | `/api/v1/insights/rails/client/{clientId}` | Per-client rail breakdown + migration opportunities |
+| GET | `/api/v1/insights/rails/migration-opportunities` | All rail migration opportunities ranked by impact score |
+| GET | `/api/v1/insights/campaigns` | Auto-generated campaign recommendations with target client lists |
+| GET | `/api/v1/insights/volume` | Peak hours, day-of-week patterns, system throughput |
+| GET | `/api/v1/insights/client/{clientId}` | Full BI profile: segment, metrics, rails, risk, seasonal fingerprint, campaigns |
+
+## Business Insights
+
+The system computes business intelligence from the same EWMA behavioral profiles used for anomaly detection — no additional data collection required.
+
+### Client Segmentation
+
+Clients are classified in real-time into 6 segments based on EWMA amount, transaction volume, recency, and growth signals:
+
+| Segment | Criteria |
+|---------|----------|
+| **HIGH_VALUE** | EWMA amount ≥ 2× median, 500+ transactions |
+| **GROWING** | Growth signal > +15% (daily volume exceeding hourly expectations) |
+| **STABLE** | Active, within normal growth range |
+| **DECLINING** | Growth signal < −15% |
+| **DORMANT** | No activity for 7+ days |
+| **NEW** | Fewer than 100 transactions |
+
+### Rail Migration Intelligence
+
+Analyzes per-client rail usage to identify cost and speed optimization opportunities:
+
+| Opportunity | Detection Logic |
+|-------------|----------------|
+| NEFT → RTGS | Avg NEFT amount > ₹2L (real-time settlement reduces counterparty risk) |
+| IMPS → UPI | Avg IMPS amount < ₹5K (zero-cost UPI for small transfers) |
+| NEFT → UPI | Avg NEFT amount < ₹10K (instant, zero-cost for low values) |
+| RTGS → NEFT | Avg RTGS amount < ₹2L (below typical RTGS threshold, NEFT is cheaper) |
+
+Each opportunity is scored by impact (affected transactions × amount) for prioritization.
+
+### Campaign Recommendations
+
+Auto-generated campaigns based on segmentation and behavioral data:
+
+| Campaign | Target | Priority |
+|----------|--------|----------|
+| **UPI Adoption Drive** | Clients with < 10% UPI usage | HIGH |
+| **Dormant Re-engagement** | DORMANT segment clients | MEDIUM |
+| **High-Value Retention** | HIGH_VALUE segment clients | HIGH |
+| **Growing Client Upsell** | GROWING segment clients | MEDIUM |
+| **NEFT-to-RTGS Migration** | Clients with high-value NEFT (avg > ₹2L, > 30% NEFT usage) | HIGH |
+| **Beneficiary Diversification** | Active clients with < 5 distinct beneficiaries | LOW |
+
+### Volume Analytics
+
+System-wide insights derived from seasonal EWMA profiles:
+
+- **Hourly TPS distribution** (24 slots) — identifies peak transaction hours
+- **Hourly amount distribution** — identifies peak value-flow hours
+- **Day-of-week patterns** (Mon–Sun) — weekday vs weekend volume
+- **System EWMA daily volume** — aggregate throughput estimate
 
 ## MCP Server (AI Agent Integration)
 

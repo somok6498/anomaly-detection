@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 16 anomaly rules (including Temporal Rule Correlation), configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations with operator feedback, demo data generation, and Advanced Analytics (top risk clients, system overview, cross-client search, simulation, anomaly trends, mule candidates, investigation reports, rule correlations).\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 16 anomaly rules (including Temporal Rule Correlation), configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations with operator feedback, demo data generation, Advanced Analytics (top risk clients, system overview, cross-client search, simulation, anomaly trends, mule candidates, investigation reports, rule correlations), and Business Insights (client segmentation, rail migration intelligence, campaign recommendations, volume analytics).\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -1777,6 +1777,84 @@
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/advanced/rule-correlations",
+            "header": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "Business Insights",
+      "description": "Client segmentation (HIGH_VALUE, GROWING, STABLE, DECLINING, DORMANT, NEW), rail migration intelligence, auto-generated campaign recommendations, volume/revenue analytics, and full client BI profiles.",
+      "item": [
+        {
+          "name": "Client Segmentation (all clients)",
+          "description": "Returns all clients with segment classification, growth signal, primary rail, and key metrics. Segments are computed in real-time from EWMA behavioral profiles.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/segments",
+            "header": []
+          }
+        },
+        {
+          "name": "Segment Summary",
+          "description": "Aggregate view: count, total transactions, and average EWMA amount per segment, plus median EWMA across all clients.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/segments/summary",
+            "header": []
+          }
+        },
+        {
+          "name": "System Rail Insights",
+          "description": "System-wide rail usage: transaction count, volume share %, total amount, avg amount per txn, active clients per rail (NEFT/RTGS/IMPS/UPI/IFT). Sorted by volume.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/rails",
+            "header": []
+          }
+        },
+        {
+          "name": "Client Rail Profile - CLIENT-001",
+          "description": "Per-client rail breakdown: usage percentage, avg amount, std dev per rail, plus migration opportunities (e.g., NEFT→RTGS for high-value transfers, IMPS→UPI for low-value).",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/rails/client/CLIENT-001",
+            "header": []
+          }
+        },
+        {
+          "name": "Rail Migration Opportunities (all clients)",
+          "description": "All migration opportunities across clients, ranked by impact score. Identifies suboptimal rail usage: high-value NEFT→RTGS, low-value IMPS→UPI, under-threshold RTGS→NEFT.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/rails/migration-opportunities",
+            "header": []
+          }
+        },
+        {
+          "name": "Campaign Recommendations",
+          "description": "Auto-generated campaign recommendations with target client lists. Campaigns: UPI Adoption, Dormant Re-engagement, High-Value Retention, Growing Client Upsell, NEFT-to-RTGS Migration, Beneficiary Network Expansion.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/campaigns",
+            "header": []
+          }
+        },
+        {
+          "name": "Volume Insights",
+          "description": "System-wide volume analytics: hourly TPS and amount distribution (24 slots), day-of-week patterns (Mon–Sun), peak hours, peak days, system EWMA daily volume.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/volume",
+            "header": []
+          }
+        },
+        {
+          "name": "Full Client BI Profile - CLIENT-001",
+          "description": "Complete business intelligence profile: segment classification, key metrics (EWMA amount, TPS, growth signal), rail breakdown with migration opportunities, risk summary with trend, seasonal fingerprint (peak hour/day), and applicable campaign list.",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/insights/client/CLIENT-001",
             "header": []
           }
         }
