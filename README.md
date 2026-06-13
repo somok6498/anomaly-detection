@@ -14,7 +14,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **Swagger UI** for interactive API exploration
 - **MCP Server** (Model Context Protocol) — 38 tools for AI agent integration (Claude, GPT, custom agents)
 - **Postman Collection** included (`Anomaly_Detection_API.postman_collection.json`) with 153 endpoints
-- **Flutter Web** dashboard (pre-built, served as static assets)
+- **React** dashboard (Vite + Recharts, pre-built, served as static assets)
 
 ### Evaluation Pipeline
 
@@ -129,7 +129,7 @@ docker-compose up -d --build allinone
 | URL | Description |
 |-----|-------------|
 | http://localhost:8080/swagger-ui.html | Swagger UI |
-| http://localhost:8080/index.html | Flutter dashboard |
+| http://localhost:8080/index.html | React dashboard |
 | http://localhost:8080/v3/api-docs | OpenAPI spec (JSON) |
 | http://localhost:3333 | Grafana dashboard (admin/admin) |
 | http://localhost:16686 | Jaeger tracing UI |
@@ -162,11 +162,12 @@ The app starts on **http://localhost:8080**.
 
 ### 3. Build the Dashboard (optional)
 
-Requires [Flutter SDK](https://docs.flutter.dev/get-started/install):
+Requires [Node.js](https://nodejs.org/) (v18+):
 
 ```bash
-cd dashboard_ui
-flutter build web
+cd dashboard_react
+npm install
+npm run build
 cp -r build/web/* ../src/main/resources/static/
 ```
 
@@ -370,15 +371,15 @@ Every 6 hours (configurable), the tuning job:
 | GET | `/api/v1/review/queue/triage` | Smart Alert Triage — LLM ranks pending items by urgency with reasoning |
 | GET | `/api/v1/review/weight-history` | Rule weight change history (filters: ruleId, limit) |
 
-### Flutter Dashboard
+### React Dashboard
 
-The dashboard has four tabs plus a floating AI assistant:
+The React dashboard (Vite + Recharts) has four tabs plus a floating AI assistant, with dark/light theme toggle:
 
-1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (fl_chart line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
+1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (Recharts line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
 
 2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), **Smart Triage button** (LLM ranks pending alerts by urgency with reasoning — shows ranked list with CRITICAL/HIGH/MEDIUM/LOW badges), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export (includes REVIEWED AT column). Right panel shows full transaction detail with **AI Analysis card** featuring **attack pattern badge** (color-coded LLM classification — e.g., MULE_ACCOUNT, VELOCITY_ABUSE, STRUCTURING — with confidence and summary), LLM-generated explanation with thumbs up/down feedback, rule breakdown, client profile summary with **AI Narrative button** (generates LLM-powered behavioral summary), and weight history.
 
-3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. Each rule has an **(i) info tooltip** showing its description on hover. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Beneficiary network visualization (force-directed graph showing client-beneficiary relationships, shared beneficiaries, and mule network topology with pan/zoom support). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
+3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. Each rule has an **(i) info tooltip** showing its description on hover. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Interactive beneficiary network visualization (SVG-based graph showing client-beneficiary relationships with click-to-highlight shared connections and gold-ring selection). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
 4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), Twilio notification settings (enabled toggle, SMS/WhatsApp channel selector, account SID, from/to numbers, masked auth token), Ollama/LLM settings (host URL, model name, timeout), and Aerospike connection info (read-only). Each rule has an **(i) info tooltip** showing its description on hover. Changes take effect immediately.
 
@@ -840,7 +841,7 @@ src/main/java/com/bank/anomaly/
 └── service/              # Business logic (evaluation, scoring, profiling, notifications, review queue, auto-tuning, advanced analytics)
 
 mcp-server/               # MCP server for AI agent integration (38 tools, TypeScript, stdio transport)
-dashboard_ui/             # Flutter Web dashboard
+dashboard_react/          # React dashboard (Vite + Recharts)
 aerospike/                # Aerospike server configuration
 prometheus/               # Prometheus scrape configuration
 grafana/provisioning/     # Grafana datasources + pre-built dashboards (4)
@@ -950,7 +951,7 @@ The project includes **8 custom Claude Code skills** (slash commands) in `.claud
 | `/seed` | Re-seed the Aerospike database with demo data by restarting the app with the `seed` Spring profile. Verifies 16 rules are loaded, then restarts in normal mode. |
 | `/verify` | Run the full post-change verification checklist: health check, API data, Prometheus targets, dashboard, Grafana, and Jaeger accessibility. Reports each as PASS/FAIL. |
 | `/status` | Quick system status: Docker container states, API health, system overview, and review queue stats. |
-| `/rebuild-dashboard` | Rebuild the Flutter web dashboard (`flutter build web`) and copy static assets to `src/main/resources/static/`. |
+| `/rebuild-dashboard` | Rebuild the React dashboard (`npm run build`) and copy static assets to `src/main/resources/static/`. |
 | `/mcp-reload` | Rebuild the MCP server TypeScript code (`npm run build`), verify compiled output, and report tool count. |
 | `/smoke-test` | End-to-end pipeline test: evaluate a high-amount transaction, check it appears in the review queue, run a dry-run simulation, and report which rules triggered. |
 
@@ -996,5 +997,5 @@ Skills can be customized by editing the `SKILL.md` files. Key frontmatter fields
 | Tracing | Micrometer + OpenTelemetry → Jaeger |
 | Metrics | Micrometer + Prometheus + Grafana |
 | API Docs | springdoc-openapi (Swagger UI) |
-| Dashboard | Flutter Web |
+| Dashboard | React (Vite + Recharts) |
 | Containerization | Docker, Docker Compose |
