@@ -1,0 +1,1142 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "title": "Client Segmentation",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "title": "Segment Distribution",
+      "type": "piechart",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "label",
+              "text": "Segment",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Count",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "global_query_id": "",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/pie/segment-distribution",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "segment"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 8,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "ewmaAmount"
+          }
+        ]
+      },
+      "title": "Client Segments",
+      "type": "table",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "clientId",
+              "text": "Client ID",
+              "type": "string"
+            },
+            {
+              "selector": "segment",
+              "text": "Segment",
+              "type": "string"
+            },
+            {
+              "selector": "label",
+              "text": "Label",
+              "type": "string"
+            },
+            {
+              "selector": "ewmaAmount",
+              "text": "EWMA Amount",
+              "type": "number"
+            },
+            {
+              "selector": "totalTransactions",
+              "text": "Total Txns",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/table/segments",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 11
+      },
+      "id": 101,
+      "title": "Payment Rail Intelligence",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 12
+      },
+      "id": 3,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "title": "Rail Volume Distribution",
+      "type": "piechart",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "label",
+              "text": "Rail",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Transactions",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/pie/rail-distribution",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 16,
+        "x": 8,
+        "y": 12
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "volumeSharePct"
+          }
+        ]
+      },
+      "title": "Rail Usage Details",
+      "type": "table",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "rail",
+              "text": "Rail",
+              "type": "string"
+            },
+            {
+              "selector": "transactionCount",
+              "text": "Txn Count",
+              "type": "number"
+            },
+            {
+              "selector": "volumeSharePct",
+              "text": "Volume %",
+              "type": "number"
+            },
+            {
+              "selector": "avgAmountPerTxn",
+              "text": "Avg Amount",
+              "type": "number"
+            },
+            {
+              "selector": "activeClients",
+              "text": "Clients",
+              "type": "number"
+            },
+            {
+              "selector": "realTime",
+              "text": "Real-Time",
+              "type": "string"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/table/rail-usage?clientId=${client_id}",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 102,
+      "title": "Volume & Timing Intelligence",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 23
+      },
+      "id": 5,
+      "options": {},
+      "title": "Hourly TPS Distribution (24h)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://app:8080/api/v1/grafana/timeseries/hourly-tps?clientId=${client_id}",
+          "url_options": {
+            "method": "GET"
+          },
+          "columns": [
+            {
+              "selector": "time",
+              "text": "time",
+              "type": "timestamp_epoch"
+            },
+            {
+              "selector": "value",
+              "text": "value",
+              "type": "number"
+            }
+          ],
+          "root_selector": "",
+          "filters": []
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 23
+      },
+      "id": 6,
+      "options": {},
+      "title": "Daily Amount Distribution",
+      "type": "timeseries",
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://app:8080/api/v1/grafana/timeseries/daily-amount?clientId=${client_id}",
+          "url_options": {
+            "method": "GET"
+          },
+          "columns": [
+            {
+              "selector": "time",
+              "text": "time",
+              "type": "timestamp_epoch"
+            },
+            {
+              "selector": "value",
+              "text": "value",
+              "type": "number"
+            }
+          ],
+          "root_selector": "",
+          "filters": []
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 103,
+      "title": "Campaign Recommendations",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "description"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 400
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true,
+        "sortBy": []
+      },
+      "title": "Active Campaigns",
+      "type": "table",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "name",
+              "text": "Campaign",
+              "type": "string"
+            },
+            {
+              "selector": "priority",
+              "text": "Priority",
+              "type": "string"
+            },
+            {
+              "selector": "description",
+              "text": "Description",
+              "type": "string"
+            },
+            {
+              "selector": "targetClients",
+              "text": "Target Clients",
+              "type": "string"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/table/campaigns",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 104,
+      "title": "Rail Migration Opportunities",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "impactScore"
+          }
+        ]
+      },
+      "title": "Migration Opportunities",
+      "type": "table",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "clientId",
+              "text": "Client",
+              "type": "string"
+            },
+            {
+              "selector": "fromRail",
+              "text": "From Rail",
+              "type": "string"
+            },
+            {
+              "selector": "toRail",
+              "text": "To Rail",
+              "type": "string"
+            },
+            {
+              "selector": "reason",
+              "text": "Reason",
+              "type": "string"
+            },
+            {
+              "selector": "affectedTransactions",
+              "text": "Affected Txns",
+              "type": "number"
+            },
+            {
+              "selector": "avgAmount",
+              "text": "Avg Amount",
+              "type": "number"
+            },
+            {
+              "selector": "impactScore",
+              "text": "Impact Score",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/table/migration-opportunities",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 105,
+      "title": "Evaluation & Rule Trends (Time-Range Aware)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 52
+      },
+      "id": 9,
+      "options": {},
+      "title": "Evaluation Rate Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "time",
+              "text": "Time",
+              "type": "timestamp_epoch"
+            },
+            {
+              "selector": "value",
+              "text": "Count",
+              "type": "number"
+            },
+            {
+              "selector": "label",
+              "text": "Action",
+              "type": "string"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/timeseries/evaluations?from=${__from}&to=${__to}&clientId=${client_id}",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 52
+      },
+      "id": 10,
+      "options": {},
+      "title": "Transaction Amount Trend",
+      "type": "timeseries",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "time",
+              "text": "Time",
+              "type": "timestamp_epoch"
+            },
+            {
+              "selector": "value",
+              "text": "Avg Amount",
+              "type": "number"
+            },
+            {
+              "selector": "label",
+              "text": "Type",
+              "type": "string"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/timeseries/txn-amount?from=${__from}&to=${__to}&clientId=${client_id}&calc=avg",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 0,
+        "y": 62
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "title": "Evaluations by Action",
+      "type": "piechart",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "label",
+              "text": "Action",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Count",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/pie/evaluations-by-action?from=${__from}&to=${__to}&clientId=${client_id}",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 8,
+        "y": 62
+      },
+      "id": 12,
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "right",
+          "values": [
+            "value",
+            "percent"
+          ]
+        },
+        "pieType": "donut",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "title": "Transaction Type Distribution",
+      "type": "piechart",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "label",
+              "text": "Type",
+              "type": "string"
+            },
+            {
+              "selector": "value",
+              "text": "Count",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/pie/txn-type-distribution?from=${__from}&to=${__to}&clientId=${client_id}",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 8,
+        "x": 16,
+        "y": 62
+      },
+      "id": 13,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "triggers"
+          }
+        ]
+      },
+      "title": "Rule Trigger Breakdown",
+      "type": "table",
+      "targets": [
+        {
+          "columns": [
+            {
+              "selector": "rule",
+              "text": "Rule",
+              "type": "string"
+            },
+            {
+              "selector": "triggers",
+              "text": "Triggers",
+              "type": "number"
+            }
+          ],
+          "filters": [],
+          "format": "table",
+          "refId": "A",
+          "root_selector": "",
+          "source": "url",
+          "type": "json",
+          "url": "http://app:8080/api/v1/grafana/table/rule-breakdown?from=${__from}&to=${__to}",
+          "url_options": {
+            "method": "GET"
+          },
+          "parser": "backend"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "id": 106,
+      "title": "Client Activity Trends",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "yesoreyeram-infinity-datasource",
+        "uid": "infinity"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 73
+      },
+      "id": 14,
+      "options": {},
+      "title": "Client Transaction Volume Over Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "refId": "A",
+          "type": "json",
+          "source": "url",
+          "format": "table",
+          "parser": "backend",
+          "url": "http://app:8080/api/v1/grafana/timeseries/client-volume?from=${__from}&to=${__to}&clientId=${client_id}",
+          "url_options": {
+            "method": "GET"
+          },
+          "columns": [
+            {
+              "selector": "time",
+              "text": "time",
+              "type": "timestamp_epoch"
+            },
+            {
+              "selector": "value",
+              "text": "value",
+              "type": "number"
+            },
+            {
+              "selector": "label",
+              "text": "label",
+              "type": "string"
+            }
+          ],
+          "root_selector": "",
+          "filters": []
+        }
+      ],
+      "transformations": [
+        {
+          "id": "prepareTimeSeries",
+          "options": {
+            "format": "many"
+          }
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": [
+    "business-insights",
+    "infinity"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": ""
+        },
+        "datasource": {
+          "type": "yesoreyeram-infinity-datasource",
+          "uid": "infinity"
+        },
+        "definition": "",
+        "includeAll": true,
+        "allValue": "",
+        "label": "Client ID",
+        "multi": false,
+        "name": "client_id",
+        "options": [],
+        "query": {
+          "type": "json",
+          "source": "url",
+          "url": "http://app:8080/api/v1/grafana/table/client-list",
+          "root_selector": "",
+          "columns": [
+            {
+              "selector": "clientId",
+              "text": "clientId",
+              "type": "string"
+            }
+          ]
+        },
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-60d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "utc",
+  "title": "Business Insights",
+  "uid": "business-insights",
+  "version": 1
+}

@@ -15,12 +15,14 @@ import java.util.concurrent.atomic.AtomicLong;
 public class MetricsConfig {
 
     private final MeterRegistry registry;
+    private final MetricsBucketWriter bucketWriter;
     private final AtomicInteger silentClientCount;
     private final Map<String, AtomicLong> lastTxnGauges = new ConcurrentHashMap<>();
     private final Map<String, AtomicInteger> silenceStateGauges = new ConcurrentHashMap<>();
 
-    public MetricsConfig(MeterRegistry registry) {
+    public MetricsConfig(MeterRegistry registry, MetricsBucketWriter bucketWriter) {
         this.registry = registry;
+        this.bucketWriter = bucketWriter;
         this.silentClientCount = registry.gauge("silence.active.clients", new AtomicInteger(0));
     }
 
@@ -34,6 +36,9 @@ public class MetricsConfig {
                 .tag("action", action)
                 .register(registry)
                 .record(compositeScore);
+
+        bucketWriter.recordCounter("SYSTEM", "eval_count_" + action, 1);
+        bucketWriter.recordDistribution("SYSTEM", "eval_score_" + action, compositeScore);
     }
 
     public void recordRuleTriggered(String ruleType) {
@@ -41,6 +46,8 @@ public class MetricsConfig {
                 .tag("rule_type", ruleType)
                 .register(registry)
                 .increment();
+
+        bucketWriter.recordCounter("SYSTEM", "rule_" + ruleType, 1);
     }
 
     public void recordNotification(String channel, String status) {
@@ -49,6 +56,8 @@ public class MetricsConfig {
                 .tag("status", status)
                 .register(registry)
                 .increment();
+
+        bucketWriter.recordCounter("SYSTEM", "notif_" + channel + "_" + status, 1);
     }
 
     public void recordSilenceDetected(String clientId, long lastTxnEpochMs) {
@@ -65,6 +74,9 @@ public class MetricsConfig {
                     .register(registry);
             return holder;
         }).set(lastTxnEpochMs);
+
+        bucketWriter.recordCounter("SYSTEM", "silence_detected", 1);
+        bucketWriter.recordCounter(clientId, "silence_detected", 1);
     }
 
     public void recordSilenceResolved(String clientId) {
@@ -72,6 +84,9 @@ public class MetricsConfig {
                 .tag("client_id", clientId)
                 .register(registry)
                 .increment();
+
+        bucketWriter.recordCounter("SYSTEM", "silence_resolved", 1);
+        bucketWriter.recordCounter(clientId, "silence_resolved", 1);
     }
 
     public void updateSilentClientCount(int count) {
@@ -83,12 +98,16 @@ public class MetricsConfig {
                 .tag("status", status)
                 .register(registry)
                 .increment();
+
+        bucketWriter.recordCounter("SYSTEM", "feedback_" + status, 1);
     }
 
     public void recordAutoAccepted(int count) {
         Counter.builder("review.auto_accepted.count")
                 .register(registry)
                 .increment(count);
+
+        bucketWriter.recordCounter("SYSTEM", "auto_accepted", count);
     }
 
     public void recordWeightAdjustment(String ruleId) {
@@ -96,6 +115,8 @@ public class MetricsConfig {
                 .tag("rule_id", ruleId)
                 .register(registry)
                 .increment();
+
+        bucketWriter.recordCounter("SYSTEM", "weight_adj", 1);
     }
 
     // --- Per-client metrics for Grafana client dashboard ---
@@ -113,7 +134,6 @@ public class MetricsConfig {
                 .register(registry)
                 .record(compositeScore);
 
-        // Ensure silence state gauge exists for this client (default: 0 = Active)
         silenceStateGauges.computeIfAbsent(clientId, id -> {
             AtomicInteger holder = new AtomicInteger(0);
             Gauge.builder("client.silence.state", holder, AtomicInteger::doubleValue)
@@ -122,6 +142,9 @@ public class MetricsConfig {
                     .register(registry);
             return holder;
         });
+
+        bucketWriter.recordCounter(clientId, "eval_count_" + action, 1);
+        bucketWriter.recordDistribution(clientId, "eval_score_" + action, compositeScore);
     }
 
     public void recordClientTransactionAmount(String clientId, String txnType, double amount) {
@@ -130,6 +153,9 @@ public class MetricsConfig {
                 .tag("txn_type", txnType)
                 .register(registry)
                 .record(amount);
+
+        bucketWriter.recordDistribution(clientId, "txn_amount_" + txnType, amount);
+        bucketWriter.recordDistribution("SYSTEM", "txn_amount_" + txnType, amount);
     }
 
     public void recordClientTransactionType(String clientId, String txnType) {
@@ -138,6 +164,9 @@ public class MetricsConfig {
                 .tag("txn_type", txnType)
                 .register(registry)
                 .increment();
+
+        bucketWriter.recordCounter(clientId, "txn_type_" + txnType, 1);
+        bucketWriter.recordCounter("SYSTEM", "txn_type_" + txnType, 1);
     }
 
     public void recordClientRuleTriggered(String clientId, String ruleType) {
@@ -146,6 +175,8 @@ public class MetricsConfig {
                 .tag("rule_type", ruleType)
                 .register(registry)
                 .increment();
+
+        bucketWriter.recordCounter(clientId, "rule_" + ruleType, 1);
     }
 
     public void updateClientSilenceState(String clientId, boolean isSilent) {

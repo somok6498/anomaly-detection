@@ -13,6 +13,7 @@ import 'screens/transaction_view.dart';
 import 'screens/review_queue_page.dart';
 import 'screens/analytics_page.dart';
 import 'screens/settings_page.dart';
+import 'screens/insights_page.dart';
 import 'screens/chat_page.dart';
 
 final themeNotifier = ThemeNotifier();
@@ -75,7 +76,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
 
   bool _hasResults = false;
 
-  // Tab navigation: 0 = Investigation, 1 = Review Queue, 2 = Analytics, 3 = Settings
+  // Tab navigation: 0 = Investigation, 1 = Review Queue, 2 = Analytics, 3 = Insights, 4 = Settings
   int _activeTab = 0;
   int _pendingCount = 0;
 
@@ -89,7 +90,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
   final _analyticsKey = GlobalKey<AnalyticsPageState>();
   final _settingsKey = GlobalKey<SettingsPageState>();
 
-  static const _tabRoutes = ['investigation', 'review-queue', 'analytics', 'settings'];
+  static const _tabRoutes = ['investigation', 'review-queue', 'analytics', 'insights', 'settings'];
 
   int _tabFromUrl() {
     final path = web.window.location.pathname.replaceFirst('/', '');
@@ -340,7 +341,9 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
                                 onExportRulesCsv: _exportRulesCsv,
                                 onExportRulesPdf: _exportRulesPdf,
                               )
-                            : SettingsPage(key: _settingsKey),
+                            : _activeTab == 3
+                                ? const InsightsPage()
+                                : SettingsPage(key: _settingsKey),
               ),
             ],
           ),
@@ -420,7 +423,9 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
           const SizedBox(width: 8),
           _buildTabButton(2, 'Analytics', Icons.analytics),
           const SizedBox(width: 8),
-          _buildTabButton(3, 'Settings', Icons.settings),
+          _buildTabButton(3, 'Insights', Icons.insights),
+          const SizedBox(width: 8),
+          _buildTabButton(4, 'Settings', Icons.settings),
           const SizedBox(width: 16),
           IconButton(
             onPressed: () => setState(() => themeNotifier.toggle()),
@@ -438,7 +443,7 @@ class _DashboardPageState extends State<DashboardPage> with SingleTickerProvider
 
   Future<void> _switchTab(int index) async {
     // If leaving Settings tab, check for unsaved changes
-    if (_activeTab == 3 && index != 3) {
+    if (_activeTab == 4 && index != 4) {
       final hasUnsaved = _settingsKey.currentState?.hasUnsavedChanges ?? false;
       if (hasUnsaved) {
         final discard = await showDialog<bool>(

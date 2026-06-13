@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Anomaly Detection API",
-    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 16 anomaly rules (including Temporal Rule Correlation), configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations with operator feedback, demo data generation, Advanced Analytics (top risk clients, system overview, cross-client search, simulation, anomaly trends, mule candidates, investigation reports, rule correlations), and Business Insights (client segmentation, rail migration intelligence, campaign recommendations, volume analytics).\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
+    "description": "Complete API collection for the Banking Transaction Anomaly Detection System.\n\nIncludes all CRUD endpoints, evaluation scenarios for each of the 16 anomaly rules (including Temporal Rule Correlation), configuration management, silence detection, analytics with time filtering, AI chatbot (natural language queries), AI-powered transaction explanations with operator feedback, demo data generation, Advanced Analytics (top risk clients, system overview, cross-client search, simulation, anomaly trends, mule candidates, investigation reports, rule correlations), Business Insights (client segmentation, rail migration intelligence, campaign recommendations, volume analytics), and **Grafana Metrics** (42 JSON endpoints for the Infinity plugin \u2014 time-series, stats, tables, and pie charts powering the Business Insights dashboard).\n\n**Quick Start:** Hit `POST /api/v1/demo/generate` to populate the system with realistic data.\n\n**Base URL:** http://localhost:8080\n\n**Ollama (optional):** Run `ollama serve` and `ollama pull llama3.2:1b` for AI chatbot and transaction explanations.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
     "_exporter_id": "anomaly-detection"
   },
@@ -1062,7 +1062,9 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/review/queue/triage",
-              "host": ["{{baseUrl}}"],
+              "host": [
+                "{{baseUrl}}"
+              ],
               "path": [
                 "api",
                 "v1",
@@ -1640,11 +1642,24 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/advanced/top-risk-clients?limit=5&sortBy=blockCount",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "advanced", "top-risk-clients"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "advanced",
+                "top-risk-clients"
+              ],
               "query": [
-                { "key": "limit", "value": "5" },
-                { "key": "sortBy", "value": "blockCount" }
+                {
+                  "key": "limit",
+                  "value": "5"
+                },
+                {
+                  "key": "sortBy",
+                  "value": "blockCount"
+                }
               ]
             },
             "header": []
@@ -1672,12 +1687,28 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/advanced/search-transactions?clientId=CLIENT-001&txnType=NEFT&limit=20",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "advanced", "search-transactions"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "advanced",
+                "search-transactions"
+              ],
               "query": [
-                { "key": "clientId", "value": "CLIENT-001" },
-                { "key": "txnType", "value": "NEFT" },
-                { "key": "limit", "value": "20" }
+                {
+                  "key": "clientId",
+                  "value": "CLIENT-001"
+                },
+                {
+                  "key": "txnType",
+                  "value": "NEFT"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
               ]
             },
             "header": []
@@ -1689,12 +1720,28 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/advanced/search-transactions?minAmount=100000&maxAmount=500000&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "advanced", "search-transactions"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "advanced",
+                "search-transactions"
+              ],
               "query": [
-                { "key": "minAmount", "value": "100000" },
-                { "key": "maxAmount", "value": "500000" },
-                { "key": "limit", "value": "10" }
+                {
+                  "key": "minAmount",
+                  "value": "100000"
+                },
+                {
+                  "key": "maxAmount",
+                  "value": "500000"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
               ]
             },
             "header": []
@@ -1731,10 +1778,20 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/advanced/anomaly-trends?bucketSize=15m",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "advanced", "anomaly-trends"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "advanced",
+                "anomaly-trends"
+              ],
               "query": [
-                { "key": "bucketSize", "value": "15m" }
+                {
+                  "key": "bucketSize",
+                  "value": "15m"
+                }
               ]
             },
             "header": []
@@ -1754,11 +1811,24 @@
             "method": "GET",
             "url": {
               "raw": "{{baseUrl}}/api/v1/advanced/mule-candidates?minFanIn=3&limit=10",
-              "host": ["{{baseUrl}}"],
-              "path": ["api", "v1", "advanced", "mule-candidates"],
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "advanced",
+                "mule-candidates"
+              ],
               "query": [
-                { "key": "minFanIn", "value": "3" },
-                { "key": "limit", "value": "10" }
+                {
+                  "key": "minFanIn",
+                  "value": "3"
+                },
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
               ]
             },
             "header": []
@@ -1815,7 +1885,7 @@
         },
         {
           "name": "Client Rail Profile - CLIENT-001",
-          "description": "Per-client rail breakdown: usage percentage, avg amount, std dev per rail, plus migration opportunities (e.g., NEFT→RTGS for high-value transfers, IMPS→UPI for low-value).",
+          "description": "Per-client rail breakdown: usage percentage, avg amount, std dev per rail, plus migration opportunities (e.g., NEFT\u2192RTGS for high-value transfers, IMPS\u2192UPI for low-value).",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/insights/rails/client/CLIENT-001",
@@ -1824,7 +1894,7 @@
         },
         {
           "name": "Rail Migration Opportunities (all clients)",
-          "description": "All migration opportunities across clients, ranked by impact score. Identifies suboptimal rail usage: high-value NEFT→RTGS, low-value IMPS→UPI, under-threshold RTGS→NEFT.",
+          "description": "All migration opportunities across clients, ranked by impact score. Identifies suboptimal rail usage: high-value NEFT\u2192RTGS, low-value IMPS\u2192UPI, under-threshold RTGS\u2192NEFT.",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/insights/rails/migration-opportunities",
@@ -1842,7 +1912,7 @@
         },
         {
           "name": "Volume Insights",
-          "description": "System-wide volume analytics: hourly TPS and amount distribution (24 slots), day-of-week patterns (Mon–Sun), peak hours, peak days, system EWMA daily volume.",
+          "description": "System-wide volume analytics: hourly TPS and amount distribution (24 slots), day-of-week patterns (Mon\u2013Sun), peak hours, peak days, system EWMA daily volume.",
           "request": {
             "method": "GET",
             "url": "{{baseUrl}}/api/v1/insights/volume",
@@ -1857,6 +1927,1456 @@
             "url": "{{baseUrl}}/api/v1/insights/client/CLIENT-001",
             "header": []
           }
+        }
+      ]
+    },
+    {
+      "name": "Grafana Metrics (Infinity Plugin)",
+      "description": "JSON endpoints consumed by the Grafana Infinity plugin for the Business Insights dashboard. These power time-series, stat, table, and pie chart panels. All time-series and stat endpoints accept `from` and `to` as epoch milliseconds. Optional `clientId` filters to a specific client (omit for system-wide). Uses pre-request scripts to compute last 7 days automatically.",
+      "item": [
+        {
+          "name": "Time-Series",
+          "description": "Time-series endpoints return `[{time, value, label}, ...]` for Grafana timeseries panels.",
+          "item": [
+            {
+              "name": "Evaluations Over Time (by action)",
+              "description": "Evaluation counts over time split by action (PASS/ALERT/BLOCK). Returns labeled multi-series data.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/evaluations?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "evaluations"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Evaluations Over Time (per client)",
+              "description": "Evaluation counts filtered to a specific client.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/evaluations?from={{fromMs}}&to={{toMs}}&clientId=CLIENT-001",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "evaluations"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Composite Score Over Time (avg)",
+              "description": "Average composite score trend over time.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/composite-score?from={{fromMs}}&to={{toMs}}&calc=avg",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "composite-score"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "calc",
+                      "value": "avg"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Composite Score Over Time (max)",
+              "description": "Max composite score trend over time.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/composite-score?from={{fromMs}}&to={{toMs}}&calc=max",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "composite-score"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "calc",
+                      "value": "max"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Rule Triggers Over Time (all types)",
+              "description": "Rule trigger counts over time by rule type.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/rules?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "rules"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Rule Triggers Over Time (specific type)",
+              "description": "Rule trigger counts filtered to AMOUNT_ANOMALY rule type.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/rules?from={{fromMs}}&to={{toMs}}&ruleType=AMOUNT_ANOMALY",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "rules"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "ruleType",
+                      "value": "AMOUNT_ANOMALY"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Notifications Over Time",
+              "description": "Notification counts over time.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/notifications?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "notifications"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Transaction Amount Over Time (avg)",
+              "description": "Average transaction amount stats over time by type.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/txn-amount?from={{fromMs}}&to={{toMs}}&calc=avg",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "txn-amount"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "calc",
+                      "value": "avg"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Transaction Amount Over Time (per client + type)",
+              "description": "Transaction amount for a specific client and type.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/txn-amount?from={{fromMs}}&to={{toMs}}&clientId=CLIENT-001&txnType=NEFT&calc=avg",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "txn-amount"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    },
+                    {
+                      "key": "txnType",
+                      "value": "NEFT"
+                    },
+                    {
+                      "key": "calc",
+                      "value": "avg"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Transaction Type Counts Over Time",
+              "description": "Transaction counts over time split by type (NEFT/RTGS/IMPS/UPI/IFT).",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/txn-type-count?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "txn-type-count"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Client Volume Over Time (all types \u2014 system)",
+              "description": "System-wide transaction volume over time broken down by transaction type (NEFT/IMPS/RTGS/UPI). Shows labeled multi-series data.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/client-volume?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "client-volume"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Client Volume Over Time \u2014 CLIENT-012 (declining)",
+              "description": "CLIENT-012's transaction volume by type. Shows NEFT declining sharply, IMPS staying steady, RTGS declining moderately, and UPI growing \u2014 each as a separate series.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/client-volume?from={{fromMs}}&to={{toMs}}&clientId=CLIENT-012",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "client-volume"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-012"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Silence Events Over Time",
+              "description": "Silence detected/resolved counts over time.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/silence?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "silence"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Hourly TPS Distribution (system-wide)",
+              "description": "24-slot hourly TPS distribution across all clients.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/timeseries/hourly-tps",
+                "header": []
+              }
+            },
+            {
+              "name": "Hourly TPS Distribution (per client)",
+              "description": "24-slot hourly TPS distribution for a specific client.",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/hourly-tps?clientId=CLIENT-001",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "hourly-tps"
+                  ],
+                  "query": [
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Daily Amount Distribution (system-wide)",
+              "description": "Day-of-week amount distribution across all clients.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/timeseries/daily-amount",
+                "header": []
+              }
+            },
+            {
+              "name": "Daily Amount Distribution (per client)",
+              "description": "Day-of-week amount distribution for a specific client.",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/timeseries/daily-amount?clientId=CLIENT-001",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "timeseries",
+                    "daily-amount"
+                  ],
+                  "query": [
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "Stats",
+          "description": "Stat endpoints return `[{label, value}, ...]` for Grafana stat and gauge panels.",
+          "item": [
+            {
+              "name": "Evaluation Stats (by action)",
+              "description": "Total evaluation counts by action (PASS/ALERT/BLOCK) in time range.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/stats/evaluations?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "stats",
+                    "evaluations"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Evaluation Stats (per client)",
+              "description": "Per-client evaluation counts by action.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/stats/evaluations?from={{fromMs}}&to={{toMs}}&clientId=CLIENT-001",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "stats",
+                    "evaluations"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Rule Trigger Stats",
+              "description": "Total rule trigger counts by type in time range.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/stats/rules?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "stats",
+                    "rules"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Notification Stats",
+              "description": "Total notification counts in time range.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/stats/notifications?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "stats",
+                    "notifications"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Silent Client Count",
+              "description": "Current count of silent clients.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/stats/silence",
+                "header": []
+              }
+            },
+            {
+              "name": "Alerts + Blocks (last 1 hour)",
+              "description": "Total alerts and blocks in the last hour.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/stats/alerts-blocks-1h",
+                "header": []
+              }
+            },
+            {
+              "name": "Flagged Client Count",
+              "description": "Count of clients with rule triggers in time range.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/stats/flagged-clients?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "stats",
+                    "flagged-clients"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Top Triggered Rule",
+              "description": "The most frequently triggered rule in time range.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/stats/top-rule?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "stats",
+                    "top-rule"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Volume Insights",
+              "description": "Volume insights: peak hour, peak day, system EWMA daily volume.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/stats/volume",
+                "header": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "Tables",
+          "description": "Table endpoints return `[{col1: val, col2: val}, ...]` for Grafana table panels and variable dropdowns.",
+          "item": [
+            {
+              "name": "Client List (for dropdown)",
+              "description": "All client IDs \u2014 used to populate the client_id variable dropdown in Grafana.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/table/client-list",
+                "header": []
+              }
+            },
+            {
+              "name": "Rule Breakdown",
+              "description": "Rules ranked by trigger count in time range.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/table/rule-breakdown?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "table",
+                    "rule-breakdown"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Flagged Clients",
+              "description": "Clients with rule triggers, ranked by count.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/table/flagged-clients?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "table",
+                    "flagged-clients"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Flagged Clients (by rule category)",
+              "description": "Flagged clients filtered to a specific rule category.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/table/flagged-clients?from={{fromMs}}&to={{toMs}}&ruleCategory=AMOUNT_ANOMALY",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "table",
+                    "flagged-clients"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "ruleCategory",
+                      "value": "AMOUNT_ANOMALY"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Silent Clients",
+              "description": "Currently silent clients with last transaction time and silence duration.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/table/silent-clients",
+                "header": []
+              }
+            },
+            {
+              "name": "Client Segments",
+              "description": "Client segmentation table (HIGH_VALUE, GROWING, STABLE, DECLINING, DORMANT, NEW).",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/table/segments",
+                "header": []
+              }
+            },
+            {
+              "name": "Rail Usage (system-wide)",
+              "description": "Rail usage breakdown across all clients.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/table/rail-usage",
+                "header": []
+              }
+            },
+            {
+              "name": "Rail Usage (per client)",
+              "description": "Rail usage breakdown for a specific client.",
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/table/rail-usage?clientId=CLIENT-001",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "table",
+                    "rail-usage"
+                  ],
+                  "query": [
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Campaign Recommendations",
+              "description": "Auto-generated campaign recommendations with target client lists.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/table/campaigns",
+                "header": []
+              }
+            },
+            {
+              "name": "Rail Migration Opportunities",
+              "description": "Rail migration opportunities ranked by impact score.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/table/migration-opportunities",
+                "header": []
+              }
+            }
+          ]
+        },
+        {
+          "name": "Pie Charts",
+          "description": "Pie chart endpoints return `[{label, value}, ...]` for Grafana piechart panels.",
+          "item": [
+            {
+              "name": "Evaluations by Action",
+              "description": "Evaluation distribution by action (PASS/ALERT/BLOCK) for pie chart.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/pie/evaluations-by-action?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "pie",
+                    "evaluations-by-action"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Evaluations by Action (per client)",
+              "description": "Per-client evaluation distribution by action.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/pie/evaluations-by-action?from={{fromMs}}&to={{toMs}}&clientId=CLIENT-001",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "pie",
+                    "evaluations-by-action"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Segment Distribution",
+              "description": "Client segment distribution counts for pie chart.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/pie/segment-distribution",
+                "header": []
+              }
+            },
+            {
+              "name": "Rail Distribution",
+              "description": "Rail volume share distribution for pie chart.",
+              "request": {
+                "method": "GET",
+                "url": "{{baseUrl}}/api/v1/grafana/pie/rail-distribution",
+                "header": []
+              }
+            },
+            {
+              "name": "Transaction Type Distribution",
+              "description": "Transaction type distribution for pie chart.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/pie/txn-type-distribution?from={{fromMs}}&to={{toMs}}",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "pie",
+                    "txn-type-distribution"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            },
+            {
+              "name": "Transaction Type Distribution (per client)",
+              "description": "Per-client transaction type distribution.",
+              "event": [
+                {
+                  "listen": "prerequest",
+                  "script": {
+                    "type": "text/javascript",
+                    "exec": [
+                      "const now = Date.now();",
+                      "const sevenDaysAgo = now - (7 * 24 * 60 * 60 * 1000);",
+                      "pm.variables.set('fromMs', sevenDaysAgo);",
+                      "pm.variables.set('toMs', now);"
+                    ]
+                  }
+                }
+              ],
+              "request": {
+                "method": "GET",
+                "url": {
+                  "raw": "{{baseUrl}}/api/v1/grafana/pie/txn-type-distribution?from={{fromMs}}&to={{toMs}}&clientId=CLIENT-001",
+                  "host": [
+                    "{{baseUrl}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "grafana",
+                    "pie",
+                    "txn-type-distribution"
+                  ],
+                  "query": [
+                    {
+                      "key": "from",
+                      "value": "{{fromMs}}"
+                    },
+                    {
+                      "key": "to",
+                      "value": "{{toMs}}"
+                    },
+                    {
+                      "key": "clientId",
+                      "value": "CLIENT-001"
+                    }
+                  ]
+                },
+                "header": []
+              }
+            }
+          ]
         }
       ]
     }

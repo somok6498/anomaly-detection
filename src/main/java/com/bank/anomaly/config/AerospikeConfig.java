@@ -25,6 +25,8 @@ public class AerospikeConfig {
     public static final String SET_REVIEW_QUEUE = "review_queue";
     public static final String SET_WEIGHT_HISTORY = "rule_weight_history";
     public static final String SET_AI_FEEDBACK = "ai_feedback";
+    public static final String SET_METRICS_MINUTE = "metrics_minute_buckets";
+    public static final String SET_METRICS_HOURLY = "metrics_hourly_buckets";
 
     @Value("${aerospike.host:127.0.0.1}")
     private String host;
@@ -71,5 +73,21 @@ public class AerospikeConfig {
     @Bean
     public String aerospikeNamespace() {
         return namespace;
+    }
+
+    @Bean
+    public WritePolicy minuteBucketWritePolicy() {
+        WritePolicy policy = new WritePolicy();
+        policy.totalTimeout = 3000;
+        policy.socketTimeout = 1000;
+        return policy;
+    }
+
+    @Bean
+    public WritePolicy hourlyBucketWritePolicy() {
+        WritePolicy policy = new WritePolicy();
+        policy.totalTimeout = 3000;
+        policy.socketTimeout = 1000;
+        return policy;
     }
 }

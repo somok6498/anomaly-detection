@@ -5,6 +5,7 @@ import com.aerospike.client.Bin;
 import com.aerospike.client.Key;
 import com.aerospike.client.policy.WritePolicy;
 import com.bank.anomaly.config.AerospikeConfig;
+import com.bank.anomaly.config.MetricsBucketWriter;
 import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.model.AnomalyRule;
 import com.bank.anomaly.model.RuleType;
@@ -53,6 +54,7 @@ public class DataSeeder implements CommandLineRunner {
     private final WritePolicy writePolicy;
     private final RuleRepository ruleRepository;
     private final RiskThresholdConfig thresholdConfig;
+    private final MetricsBucketWriter bucketWriter;
     private final Random random = new Random(42); // fixed seed for reproducibility
 
     // IFSC codes for beneficiary generation
@@ -62,14 +64,16 @@ public class DataSeeder implements CommandLineRunner {
 
     public DataSeeder(AerospikeClient client,
                       @Qualifier("aerospikeNamespace") String namespace,
-                      WritePolicy writePolicy,
+                      @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
                       RuleRepository ruleRepository,
-                      RiskThresholdConfig thresholdConfig) {
+                      RiskThresholdConfig thresholdConfig,
+                      MetricsBucketWriter bucketWriter) {
         this.client = client;
         this.namespace = namespace;
         this.writePolicy = writePolicy;
         this.ruleRepository = ruleRepository;
         this.thresholdConfig = thresholdConfig;
+        this.bucketWriter = bucketWriter;
     }
 
     @Override
@@ -360,10 +364,15 @@ public class DataSeeder implements CommandLineRunner {
         // CLIENT-011: Dormant account — 28 days of history ending 2+ days ago, then one reactivation txn
         seedDormantClient("CLIENT-011", startTime, endTime, totalCount);
 
+        // CLIENT-012: Declining activity — starts at 400 txns/day, drops to ~20 by end
+        seedDecliningClient("CLIENT-012", startTime, endTime, totalCount);
+
         // Mule network patterns — shared beneficiaries across CLIENT-007, CLIENT-008, CLIENT-009
         seedMuleNetworkPatterns(endTime, totalCount);
 
-        log.info("Seeded {} total transactions", totalCount.get());
+        log.info("Seeded {} total transactions, flushing metric buckets...", totalCount.get());
+        bucketWriter.flushNow();
+        log.info("Metric bucket backfill complete");
     }
 
     /**
@@ -795,6 +804,85 @@ public class DataSeeder implements CommandLineRunner {
     /**
      * Write a single transaction record to Aerospike.
      */
+    /**
+     * CLIENT-012: Declining transaction pattern.
+     * Starts at ~400 txns/day, decays exponentially to ~20 txns/day over 60 days.
+     * Avg amount also declines from 80K to 15K — simulates a churning corporate client.
+     */
+    private void seedDecliningClient(String clientId, Instant start, Instant end,
+                                      AtomicInteger counter) {
+        log.info("  Seeding {} — declining activity pattern (NEFT declining, IMPS steady)...", clientId);
+        int poolSize = 30 + random.nextInt(20);
+        List<String[]> beneficiaryPool = generateBeneficiaryPool(poolSize);
+
+        long endMillis = end.toEpochMilli();
+        int totalDays = 60;
+        int txnCount = 0;
+        int globalIdx = 0;
+
+        for (int day = 0; day < totalDays; day++) {
+            Instant dayStart = start.plus(day, ChronoUnit.DAYS);
+            LocalDate localDate = dayStart.atZone(ZoneOffset.UTC).toLocalDate();
+            DayOfWeek dow = localDate.getDayOfWeek();
+            boolean isWeekend = (dow == DayOfWeek.SATURDAY || dow == DayOfWeek.SUNDAY);
+            double weekendMul = isWeekend ? 0.3 : 1.0;
+            double jitter = 0.9 + random.nextDouble() * 0.2;
+
+            double decayFactor = Math.exp(-3.0 * day / totalDays);
+            double dayProgress = (double) day / totalDays;
+
+            // NEFT: heavy at start (250/day), drops sharply to ~15/day
+            int neftCount = Math.max(1, (int) ((250 * decayFactor + 10) * weekendMul * jitter));
+            // IMPS: stays steady around 40-50/day throughout
+            int impsCount = Math.max(1, (int) ((45 + random.nextInt(10)) * weekendMul * jitter));
+            // RTGS: moderate decline from 80 to 20
+            int rtgsCount = Math.max(1, (int) ((60 * decayFactor + 18) * weekendMul * jitter));
+            // UPI: slight growth from 20 to 35 (client shifting to UPI)
+            int upiCount = Math.max(1, (int) ((20 + 15 * dayProgress) * weekendMul * jitter));
+
+            long dayStartMillis = dayStart.toEpochMilli();
+
+            int[][] typeCounts = {
+                {neftCount, 0}, {impsCount, 1}, {rtgsCount, 2}, {upiCount, 3}
+            };
+            String[] typeNames = {"NEFT", "IMPS", "RTGS", "UPI"};
+            double[] amountBases = {75_000, 25_000, 200_000, 5_000};
+
+            for (int[] tc : typeCounts) {
+                String txnType = typeNames[tc[1]];
+                double baseAmt = amountBases[tc[1]];
+                double dayAvgAmount = txnType.equals("NEFT")
+                        ? baseAmt * decayFactor + 15_000 : baseAmt;
+                double dayStdDev = dayAvgAmount * 0.3;
+
+                for (int i = 0; i < tc[0]; i++) {
+                    int hour;
+                    if (random.nextDouble() < 0.9) {
+                        hour = 9 + random.nextInt(8);
+                    } else {
+                        int offPeakIdx = random.nextInt(16);
+                        hour = offPeakIdx < 9 ? offPeakIdx : (offPeakIdx - 9 + 18);
+                    }
+                    long tsMillis = dayStartMillis + hour * 3600_000L
+                            + (long) (random.nextDouble() * 3600_000);
+                    if (tsMillis >= endMillis) continue;
+
+                    double amount = Math.max(1.0,
+                            Math.round(gaussianAmount(dayAvgAmount, dayStdDev) * 100.0) / 100.0);
+                    String[] bene = pickBeneficiary(beneficiaryPool);
+
+                    String txnId = clientId + "-TXN-" + String.format("%06d", globalIdx++);
+                    writeTransaction(txnId, clientId, txnType, amount, tsMillis, bene[1], bene[0]);
+                    txnCount++;
+                }
+            }
+        }
+
+        int total = counter.addAndGet(txnCount);
+        log.info("  {} — {} txns seeded (NEFT declining 250→15, IMPS steady ~45, RTGS declining 80→20, UPI growing 20→35). Running total: {}",
+                clientId, txnCount, total);
+    }
+
     private void writeTransaction(String txnId, String clientId, String txnType,
                                   double amount, long timestamp,
                                   String beneAcct, String beneIfsc) {
@@ -815,5 +903,15 @@ public class DataSeeder implements CommandLineRunner {
         }
 
         client.put(writePolicy, key, bins.toArray(new Bin[0]));
+
+        // Backfill hourly metric buckets for historical data
+        bucketWriter.recordCounterAt(clientId, "eval_count_PASS", 1, timestamp);
+        bucketWriter.recordCounterAt("SYSTEM", "eval_count_PASS", 1, timestamp);
+        bucketWriter.recordDistributionAt(clientId, "txn_amount_" + txnType, amount, timestamp);
+        bucketWriter.recordDistributionAt("SYSTEM", "txn_amount_" + txnType, amount, timestamp);
+        bucketWriter.recordCounterAt(clientId, "txn_type_" + txnType, 1, timestamp);
+        bucketWriter.recordCounterAt("SYSTEM", "txn_type_" + txnType, 1, timestamp);
+        bucketWriter.recordDistributionAt(clientId, "eval_score_PASS", 0, timestamp);
+        bucketWriter.recordDistributionAt("SYSTEM", "eval_score_PASS", 0, timestamp);
     }
 }

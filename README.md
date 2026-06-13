@@ -13,7 +13,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 - **OpenTelemetry** traces (Jaeger) + Micrometer metrics (Prometheus + Grafana)
 - **Swagger UI** for interactive API exploration
 - **MCP Server** (Model Context Protocol) — 38 tools for AI agent integration (Claude, GPT, custom agents)
-- **Postman Collection** included (`Anomaly_Detection_API.postman_collection.json`) with all endpoints
+- **Postman Collection** included (`Anomaly_Detection_API.postman_collection.json`) with 153 endpoints
 - **Flutter Web** dashboard (pre-built, served as static assets)
 
 ### Evaluation Pipeline
@@ -467,6 +467,60 @@ Pattern labels are generated on-demand alongside AI explanations and cached in A
 | GET | `/api/v1/insights/volume` | Peak hours, day-of-week patterns, system throughput |
 | GET | `/api/v1/insights/client/{clientId}` | Full BI profile: segment, metrics, rails, risk, seasonal fingerprint, campaigns |
 
+### Grafana Metrics (Infinity Plugin)
+
+JSON endpoints consumed by the Grafana Infinity plugin for the Business Insights dashboard. Replaces Prometheus for dashboard-specific queries with richer, pre-aggregated data from Aerospike time-bucketed metrics.
+
+**Time-Series** — return `[{time, value, label}, ...]`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/grafana/timeseries/evaluations?from=&to=&clientId=` | Evaluation counts over time by action |
+| GET | `/api/v1/grafana/timeseries/composite-score?from=&to=&clientId=&calc=avg` | Composite score trend (avg or max) |
+| GET | `/api/v1/grafana/timeseries/rules?from=&to=&clientId=&ruleType=` | Rule triggers over time by type |
+| GET | `/api/v1/grafana/timeseries/notifications?from=&to=` | Notification counts over time |
+| GET | `/api/v1/grafana/timeseries/txn-amount?from=&to=&clientId=&txnType=&calc=avg` | Transaction amount stats over time |
+| GET | `/api/v1/grafana/timeseries/txn-type-count?from=&to=&clientId=&txnType=` | Transaction type counts over time |
+| GET | `/api/v1/grafana/timeseries/client-volume?from=&to=&clientId=` | Transaction volume by type (multi-series: NEFT/IMPS/RTGS/UPI) |
+| GET | `/api/v1/grafana/timeseries/silence?from=&to=` | Silence detected/resolved counts |
+| GET | `/api/v1/grafana/timeseries/hourly-tps?clientId=` | Hourly TPS distribution (24 slots) |
+| GET | `/api/v1/grafana/timeseries/daily-amount?clientId=` | Day-of-week amount distribution |
+
+**Stats** — return `[{label, value}, ...]`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/grafana/stats/evaluations?from=&to=&clientId=` | Total evaluation counts by action |
+| GET | `/api/v1/grafana/stats/rules?from=&to=&clientId=` | Total rule trigger counts by type |
+| GET | `/api/v1/grafana/stats/notifications?from=&to=` | Total notification counts |
+| GET | `/api/v1/grafana/stats/silence` | Current silent client count |
+| GET | `/api/v1/grafana/stats/alerts-blocks-1h` | Alerts + blocks in last hour |
+| GET | `/api/v1/grafana/stats/flagged-clients?from=&to=` | Flagged client count |
+| GET | `/api/v1/grafana/stats/top-rule?from=&to=` | Top triggered rule |
+| GET | `/api/v1/grafana/stats/volume` | Volume insights (peak hour, daily volume) |
+
+**Tables** — return `[{col1, col2, ...}, ...]`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/grafana/table/client-list` | All client IDs (for variable dropdown) |
+| GET | `/api/v1/grafana/table/rule-breakdown?from=&to=` | Rules ranked by trigger count |
+| GET | `/api/v1/grafana/table/flagged-clients?from=&to=&ruleCategory=` | Flagged clients ranked |
+| GET | `/api/v1/grafana/table/silent-clients` | Silent clients with last txn time |
+| GET | `/api/v1/grafana/table/segments` | Client segmentation table |
+| GET | `/api/v1/grafana/table/rail-usage?clientId=` | Rail usage breakdown |
+| GET | `/api/v1/grafana/table/campaigns` | Campaign recommendations |
+| GET | `/api/v1/grafana/table/migration-opportunities` | Rail migration opportunities |
+
+**Pie Charts** — return `[{label, value}, ...]`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/v1/grafana/pie/evaluations-by-action?from=&to=&clientId=` | Evaluation distribution by action |
+| GET | `/api/v1/grafana/pie/segment-distribution` | Client segment distribution |
+| GET | `/api/v1/grafana/pie/rail-distribution` | Rail volume share |
+| GET | `/api/v1/grafana/pie/txn-type-distribution?from=&to=&clientId=` | Transaction type distribution |
+
 ## Business Insights
 
 The system computes business intelligence from the same EWMA behavioral profiles used for anomaly detection — no additional data collection required.
@@ -627,7 +681,7 @@ View traces at **http://localhost:16686** → select service `anomaly-detection`
 
 ### Metrics & Dashboards (Grafana + Prometheus)
 
-Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provisioned with **3 dashboards** at **http://localhost:3333**:
+Prometheus scrapes metrics from the app every 5 seconds. Grafana comes pre-provisioned with **4 dashboards** at **http://localhost:3333**:
 
 #### 1. Anomaly Detection (Global)
 
@@ -675,6 +729,27 @@ Per-client deep-dive dashboard with a `$client_id` dropdown selector.
 | Total Amount by Transaction Type | Time series | Per-type amount flow |
 | Transaction Activity | Time series | Overall TPS with silence gap detection |
 | Composite Risk Score Trend | Time series | Average and max risk scores with threshold zones |
+
+#### 4. Business Insights (Infinity Plugin)
+
+Uses the **Grafana Infinity plugin** to query JSON API endpoints directly — no Prometheus dependency. Includes a `client_id` dropdown variable for per-client filtering.
+
+| Panel | Type | What it shows |
+|-------|------|---------------|
+| Segment Distribution | Pie chart | HIGH_VALUE / GROWING / STABLE / DECLINING / DORMANT / NEW |
+| Client Segments Table | Table | All clients with segment, growth signal, primary rail, key metrics |
+| Rail Distribution | Pie chart | NEFT / RTGS / IMPS / UPI / IFT volume share |
+| Rail Usage Table | Table | Per-rail transaction count, avg amount, active clients |
+| Evaluation Distribution | Pie chart | PASS / ALERT / BLOCK pie |
+| Transaction Type Distribution | Pie chart | Per-type transaction distribution |
+| Hourly TPS Distribution | Time series | 24-slot hourly TPS pattern |
+| Daily Amount Distribution | Time series | Day-of-week amount pattern |
+| Evaluation Rate Over Time | Time series | Multi-series evaluations by action |
+| Transaction Amount Trend | Time series | Multi-series amounts by type |
+| Client Activity Trends | Time series | Per-type volume trend — shows NEFT declining while IMPS stays steady for CLIENT-012 |
+| Key Stats | Stat panels | Silent clients, alerts+blocks/1h, flagged clients, top rule, volume insights |
+| Campaign Recommendations | Table | Auto-generated campaigns with targets |
+| Migration Opportunities | Table | Rail migration opportunities ranked by impact |
 
 **Custom Prometheus metrics:**
 
@@ -768,7 +843,7 @@ mcp-server/               # MCP server for AI agent integration (38 tools, TypeS
 dashboard_ui/             # Flutter Web dashboard
 aerospike/                # Aerospike server configuration
 prometheus/               # Prometheus scrape configuration
-grafana/provisioning/     # Grafana datasources + pre-built dashboards (3)
+grafana/provisioning/     # Grafana datasources + pre-built dashboards (4)
 ```
 
 ## Seeded Test Data
@@ -781,6 +856,7 @@ Run with `SPRING_PROFILES_ACTIVE=seed` to generate ~100,000+ transactions across
 | CLIENT-006 to CLIENT-010 | Normal base + injected anomalies in last 2 days |
 | CLIENT-007, CLIENT-008, CLIENT-009 | Mule network patterns — 7 shared beneficiaries with fan-in=3, ~288 cross-client transactions |
 | CLIENT-011 | Dormant account — 56 days active, then 2+ day gap with reactivation |
+| CLIENT-012 | Declining activity — NEFT drops 250→15 txns/day, IMPS steady ~45/day, RTGS declines 80→20, UPI grows 20→35. Demonstrates per-rail trend divergence |
 
 **Seasonal patterns:** Transactions follow realistic time-of-day and day-of-week distributions. Weekdays concentrate 90% of volume during business hours (09–17 UTC) with 10% off-peak. Weekends generate ~30% of weekday volume. This builds rich seasonal profiles with ~8 samples per day-of-week slot and ~2–3 per hour-of-day slot.
 
