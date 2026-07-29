@@ -5,9 +5,7 @@ Real-time behavioral anomaly detection for banking transactions using rule-based
 ## Architecture
 
 - **Spring Boot 3.2.5** (Java 17) REST API
-- **Oracle 19c** (AWS RDS in production, Oracle XE 21 via Docker for local dev)
-- **Amazon MSK / Kafka** for async profile updates (Confluent Kafka 7.6 via Docker for local dev)
-- **Liquibase** for schema migration management
+- **Aerospike 7.1** in-memory NoSQL database (via Docker)
 - **16 anomaly evaluators** — 15 rule-based + 1 ML (Isolation Forest)
 - **EWMA** (Exponential Weighted Moving Average) + Welford's online variance for client behavioral profiling
 - **Ollama LLM** (llama3.2:1b) — AI chatbot for natural language queries, on-demand AI explanations for flagged transactions (with feedback-aware prompting), client risk profile narratives, smart alert triage, and attack pattern classification
@@ -96,27 +94,34 @@ TWILIO_CHANNEL=whatsapp
 ### 2. Build and seed data (first time only)
 
 ```bash
-# Build the app image and start Oracle + Kafka + Jaeger
-docker compose up -d --build oracle zookeeper kafka jaeger
+# Build the app image and start Aerospike + Jaeger
+docker-compose up -d --build aerospike jaeger
 
-# Wait for Oracle to be healthy (~2-3 min on first boot), then seed demo data
-SPRING_PROFILES_ACTIVE=seed docker compose up -d --build app
+# Wait for Aerospike to be healthy, then seed demo data
+docker-compose run --rm -e SPRING_PROFILES_ACTIVE=seed app
 
-# Watch for "Data seeding complete" and "Profile building complete" in the logs
-docker logs -f anomaly-detection-app
+# Wait for "Seeding complete" in the logs, then Ctrl+C
 ```
 
 ### 3. Start / Stop
 
 ```bash
-# Start all containers (Oracle + Kafka + Jaeger + App + Prometheus + Grafana)
-docker compose up -d
+# Start all containers (Aerospike + Jaeger + App + Prometheus + Grafana)
+docker-compose up -d
 
-# Stop (keeps data in Oracle volume)
-docker compose stop
+# Stop (keeps data in Aerospike volume)
+docker-compose stop
 
 # Start again later
-docker compose start
+docker-compose start
+```
+
+### Alternative: All-in-one container
+
+A single container with embedded Aerospike + auto-seeding (no Jaeger):
+
+```bash
+docker-compose up -d --build allinone
 ```
 
 ### 4. Explore
@@ -135,10 +140,10 @@ docker compose start
 
 Requires **Java 17+** installed locally.
 
-### 1. Start Oracle, Kafka, and Jaeger
+### 1. Start Aerospike and Jaeger
 
 ```bash
-docker compose up -d oracle zookeeper kafka jaeger
+docker-compose up -d aerospike jaeger
 ```
 
 ### 2. Seed data and start the app
@@ -207,7 +212,7 @@ curl -s -X POST http://localhost:8080/api/v1/transactions/evaluate \
 }
 ```
 
-> **Note:** The `aiExplanation` field is generated on-demand by the Ollama LLM when the evaluation result is first viewed via `GET /api/v1/transactions/results/{txnId}` or the review queue detail endpoint. It is cached in Oracle after generation. If Ollama is unavailable, the field will be `null`.
+> **Note:** The `aiExplanation` field is generated on-demand by the Ollama LLM when the evaluation result is first viewed via `GET /api/v1/transactions/results/{txnId}` or the review queue detail endpoint. It is cached in Aerospike after generation. If Ollama is unavailable, the field will be `null`.
 
 ## API Endpoints
 
@@ -299,7 +304,7 @@ All configuration endpoints are live-reloadable — changes take effect immediat
 | PUT | `/api/v1/config/twilio` | Update Twilio settings (enabled, channel, from/to numbers) |
 | GET | `/api/v1/config/ollama` | Get Ollama LLM settings (host, model, timeout) |
 | PUT | `/api/v1/config/ollama` | Update Ollama LLM settings |
-| GET | `/api/v1/config/database` | Get database connection info (read-only) |
+| GET | `/api/v1/config/aerospike` | Get Aerospike connection info (read-only) |
 
 ### Actuator / Observability
 
@@ -370,13 +375,13 @@ Every 6 hours (configurable), the tuning job:
 
 The React dashboard (Vite + Recharts) has four tabs plus a floating AI assistant, with dark/light theme toggle:
 
-1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (Recharts line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Oracle). Includes CSV/PDF export buttons.
+1. **Investigation** — Search by client or transaction ID. Client view shows profile stats, risk score trend chart (Recharts line chart with PASS/ALERT/BLOCK color zones), transaction type distribution, average amount by type, transaction history, and evaluation history. Transaction detail view includes **AI Analysis** — an LLM-generated plain-English explanation of why the transaction was flagged (generated on-demand, cached in Aerospike). Includes CSV/PDF export buttons.
 
 2. **Review Queue** — Two-panel layout with **time range selector** (1m/5m/15m/30m/1h/6h/12h/24h/7d presets + custom absolute date-time picker, default 15m), filter bar (action/status/client ID), score threshold filter (> or < operator), stats row (Pending/TP/FP/Auto-Accepted counts), **Smart Triage button** (LLM ranks pending alerts by urgency with reasoning — shows ranked list with CRITICAL/HIGH/MEDIUM/LOW badges), bulk action bar with select-all, sortable queue table, auto-accept countdown timers, and CSV/PDF export (includes REVIEWED AT column). Right panel shows full transaction detail with **AI Analysis card** featuring **attack pattern badge** (color-coded LLM classification — e.g., MULE_ACCOUNT, VELOCITY_ABUSE, STRUCTURING — with confidence and summary), LLM-generated explanation with thumbs up/down feedback, rule breakdown, client profile summary with **AI Narrative button** (generates LLM-powered behavioral summary), and weight history.
 
 3. **Analytics** — **Time range selector** (same presets as Review Queue) for rule performance analytics. Includes precision bar chart + TP/FP breakdown table for all 16 rules based on review queue feedback. Each rule has an **(i) info tooltip** showing its description on hover. **AI Feedback Stats** card showing total ratings, helpful/not-helpful counts, helpful rate percentage with color-coded distribution bar. Interactive beneficiary network visualization (SVG-based graph showing client-beneficiary relationships with click-to-highlight shared connections and gold-ring selection). **Silence detection panel** showing currently silent clients with EWMA TPS, expected gap, actual silence duration, and last transaction time. Includes CSV/PDF export for rule performance data.
 
-4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), Twilio notification settings (enabled toggle, SMS/WhatsApp channel selector, account SID, from/to numbers, masked auth token), Ollama/LLM settings (host URL, model name, timeout), and database connection info (read-only). Each rule has an **(i) info tooltip** showing its description on hover. Changes take effect immediately.
+4. **Settings** — Live configuration management for all system parameters: alert/block thresholds, EWMA settings, feedback loop tuning (auto-accept timeout, tuning interval, weight bounds), accepted transaction types, silence detection settings (enabled toggle, check interval, silence multiplier, min TPS, min completed hours), Twilio notification settings (enabled toggle, SMS/WhatsApp channel selector, account SID, from/to numbers, masked auth token), Ollama/LLM settings (host URL, model name, timeout), and Aerospike connection info (read-only). Each rule has an **(i) info tooltip** showing its description on hover. Changes take effect immediately.
 
 5. **AI Assistant** (floating) — Opens as a **slide-in side panel** (35% width, 360–520px clamped) from the bottom-right FAB button. Supports **maximize to fullscreen** and minimize back to side panel. Natural language query interface powered by Ollama (llama3.2:1b) with keyword-based fast parsing as primary and LLM as fallback. Supports queries like:
    - "How many clients did UPI in last 15 mins?"
@@ -396,7 +401,7 @@ When an operator views a flagged transaction (in Review Queue detail or Investig
 - Uses actual numbers from the evaluation (amounts, scores, deviations)
 - Avoids technical jargon (no "EWMA", "z-score", "isolation forest")
 
-Explanations are **generated on-demand** (first view) and **cached in Oracle** — subsequent views are instant. If Ollama is unavailable, the card simply doesn't appear (graceful degradation).
+Explanations are **generated on-demand** (first view) and **cached in Aerospike** — subsequent views are instant. If Ollama is unavailable, the card simply doesn't appear (graceful degradation).
 
 **Feedback-Aware Prompting:** Operators can rate AI explanations as helpful or not helpful (thumbs up/down). Recent "not helpful" explanations are automatically injected as negative examples into the LLM system prompt, so future explanations improve over time based on operator feedback.
 
@@ -435,7 +440,7 @@ Supported patterns:
 - **UNUSUAL_BEHAVIOR** — anomalous but doesn't fit other categories
 - **CLEAN** — no significant risk detected
 
-Pattern labels are generated on-demand alongside AI explanations and cached in Oracle. The `attackPattern` field is included in the `EvaluationResult` response as a JSON string with `pattern`, `confidence`, and `summary`.
+Pattern labels are generated on-demand alongside AI explanations and cached in Aerospike. The `attackPattern` field is included in the `EvaluationResult` response as a JSON string with `pattern`, `confidence`, and `summary`.
 
 ### Advanced Analytics
 
@@ -465,7 +470,7 @@ Pattern labels are generated on-demand alongside AI explanations and cached in O
 
 ### Grafana Metrics (Infinity Plugin)
 
-JSON endpoints consumed by the Grafana Infinity plugin for the Business Insights dashboard. Replaces Prometheus for dashboard-specific queries with richer, pre-aggregated data from Oracle time-bucketed metrics.
+JSON endpoints consumed by the Grafana Infinity plugin for the Business Insights dashboard. Replaces Prometheus for dashboard-specific queries with richer, pre-aggregated data from Aerospike time-bucketed metrics.
 
 **Time-Series** — return `[{time, value, label}, ...]`
 
@@ -789,7 +794,7 @@ A background scheduler proactively detects when normally-active clients **stop t
 ### How It Works
 
 Every `N` minutes (default: 5), the scheduler:
-1. Scans all client profiles from Oracle
+1. Scans all client profiles from Aerospike
 2. For each client with sufficient history (≥48 hours of data, ≥1 txn/hour baseline):
    - Computes the **expected gap** between transactions from their EWMA hourly TPS
    - If the actual silence exceeds `silenceMultiplier × expectedGap` (default 3x), flags the client
@@ -825,19 +830,19 @@ The "Silence Detection" row in the Grafana dashboard shows:
 
 ```
 src/main/java/com/bank/anomaly/
-├── config/               # Kafka, OpenAPI, Twilio, Metrics, Observation configs
+├── config/               # Aerospike, OpenAPI, Twilio, Metrics, Observation configs
 ├── controller/           # REST controllers (Transactions, Rules, Profiles, Models, Review Queue, Graph, Advanced Analytics)
 ├── engine/
 │   ├── evaluators/       # 16 rule evaluators (15 rule-based + 1 Isolation Forest)
 │   └── isolationforest/  # Pure Java IF implementation (tree, node, feature extractor)
 ├── model/                # Domain models (Transaction, ClientProfile, AnomalyRule, etc.)
-├── repository/           # Oracle JDBC data access (9 repositories)
+├── repository/           # Aerospike data access (8 repositories)
 ├── seeder/               # Demo data seeder & profile builder
 └── service/              # Business logic (evaluation, scoring, profiling, notifications, review queue, auto-tuning, advanced analytics)
 
 mcp-server/               # MCP server for AI agent integration (38 tools, TypeScript, stdio transport)
 dashboard_react/          # React dashboard (Vite + Recharts)
-scripts/                  # Load testing (k6) scripts
+aerospike/                # Aerospike server configuration
 prometheus/               # Prometheus scrape configuration
 grafana/provisioning/     # Grafana datasources + pre-built dashboards (4)
 ```
@@ -882,7 +887,7 @@ Key settings in `application.yml` (overridable via environment variables):
 | `risk.block-threshold` | 70.0 | Score threshold for BLOCK action |
 | `risk.ewma-alpha` | 0.01 | EWMA smoothing factor (lower = slower adaptation) |
 | `risk.min-profile-txns` | 20 | Grace period before rules apply to new clients |
-| `risk.rule-cache-refresh-seconds` | 60 | Rule reload interval from Oracle |
+| `risk.rule-cache-refresh-seconds` | 60 | Rule reload interval from Aerospike |
 | `risk.transaction-types` | NEFT, RTGS, IMPS, UPI, IFT | Accepted transaction types (extensible — add CBDC etc.) |
 
 ### Rule Defaults
@@ -914,27 +919,26 @@ All rule parameters are configurable via `risk.rule-defaults.*` in `application.
 | `risk.rule-defaults.mule-composite-threshold` | 25.0 | Mule Network (min composite score to trigger) |
 | `risk.rule-defaults.mule-graph-refresh-ms` | 300000 | Mule Network (graph rebuild interval, 5 min) |
 
-## Oracle Data Model
+## Aerospike Data Model
 
-All data is stored in Oracle across 13 tables, managed by Liquibase migrations:
+All data is stored in the `banking` namespace across 12 sets:
 
-| # | Table | Purpose | Primary Key |
-|---|-------|---------|-------------|
-| 1 | `transactions` | Raw transaction records | `txn_id` |
-| 2 | `client_profiles` | EWMA behavioral profiles per client | `client_id` |
-| 3 | `client_type_stats` | Per-type transaction stats (avg, stddev, count) | `client_id, txn_type` |
-| 4 | `client_seasonal_stats` | Per-hour seasonal patterns | `client_id, hour_of_day` |
-| 5 | `beneficiary_stats` | Per-beneficiary transaction stats | `client_id, beneficiary` |
-| 6 | `client_counters` | Atomic counters (hourly/daily txn count, amount, new bene) | `client_id, counter_type, time_bucket` |
-| 7 | `anomaly_rules` | Rule definitions (type, weight, params) | `rule_id` |
-| 8 | `evaluation_results` | Evaluation results per transaction | `txn_id` |
-| 9 | `review_queue` | ALERT/BLOCK items for ops review | `txn_id` |
-| 10 | `rule_weight_history` | Rule weight change audit trail | `id (auto)` |
-| 11 | `ai_feedback` | AI explanation helpful/not-helpful ratings | `txn_id` |
-| 12 | `isolation_forest_models` | Serialized Isolation Forest models | `client_id` |
-| 13 | `metrics_buckets` | Time-bucketed metrics for dashboards | `bucket_key, bucket_time` |
+| # | Set | Purpose | Key Format |
+|---|-----|---------|------------|
+| 1 | `transactions` | Raw transaction records | `txnId` |
+| 2 | `client_profiles` | EWMA behavioral profiles per client | `clientId` |
+| 3 | `anomaly_rules` | Rule definitions (type, weight, params) | `ruleId` |
+| 4 | `risk_results` | Evaluation results per transaction | `txnId` |
+| 5 | `client_hourly_counters` | Atomic hourly txn count + amount | `clientId:yyyyMMddHH` |
+| 6 | `bene_hourly_counters` | Atomic hourly beneficiary count + amount | `clientId:beneKey:yyyyMMddHH` |
+| 7 | `client_daily_counters` | Atomic daily txn count + amount | `clientId:yyyyMMdd` |
+| 8 | `daily_new_bene_cntrs` | Atomic daily new-beneficiary count | `clientId:newbene:yyyyMMdd` |
+| 9 | `if_models` | Serialized Isolation Forest models | `clientId` |
+| 10 | `review_queue` | ALERT/BLOCK items for ops review | `txnId` |
+| 11 | `rule_weight_history` | Rule weight change audit trail | `ruleId_timestamp` |
+| 12 | `ai_feedback` | AI explanation helpful/not-helpful ratings | `txnId` |
 
-Tables 1–5 are core data, 6 stores atomic counters (MERGE-based upserts for real-time aggregation), 7–8 are evaluation engine, 9–11 support the feedback loop, 12 is ML models, and 13 stores pre-aggregated metrics.
+Sets 1–4 are core data, 5–8 are atomic counters for real-time aggregation, 9 is ML models, 10–11 support the feedback loop, and 12 stores AI explanation feedback.
 
 ## Claude Code Skills (Developer Automation)
 
@@ -944,7 +948,7 @@ The project includes **8 custom Claude Code skills** (slash commands) in `.claud
 |---------------|-------------|
 | `/deploy` | Build Java project (`./gradlew build -x test`), rebuild Docker image, restart the app container, and verify health. Use after any backend code change. |
 | `/test-all` | Run the full test suite with `./gradlew testReport` and display the executive summary (total, passed, failed, skipped, duration). |
-| `/seed` | Re-seed the Oracle database with demo data by restarting the app with the `seed` Spring profile. Verifies 16 rules are loaded, then restarts in normal mode. |
+| `/seed` | Re-seed the Aerospike database with demo data by restarting the app with the `seed` Spring profile. Verifies 16 rules are loaded, then restarts in normal mode. |
 | `/verify` | Run the full post-change verification checklist: health check, API data, Prometheus targets, dashboard, Grafana, and Jaeger accessibility. Reports each as PASS/FAIL. |
 | `/status` | Quick system status: Docker container states, API health, system overview, and review queue stats. |
 | `/rebuild-dashboard` | Rebuild the React dashboard (`npm run build`) and copy static assets to `src/main/resources/static/`. |
@@ -986,9 +990,7 @@ Skills can be customized by editing the `SKILL.md` files. Key frontmatter fields
 | Language | Java 17 |
 | Framework | Spring Boot 3.2.5 |
 | Build | Gradle 8.7 |
-| Database | Oracle 19c (RDS) / Oracle XE 21 (Docker) |
-| Messaging | Amazon MSK (prod) / Confluent Kafka 7.6 (Docker) |
-| Schema Migration | Liquibase 4.24 |
+| Database | Aerospike 7.1 (Docker) |
 | ML | Isolation Forest (pure Java) |
 | LLM | Ollama + llama3.2:1b (native macOS, Metal GPU) |
 | Notifications | Twilio SDK 10.1.0 (WhatsApp / SMS) |

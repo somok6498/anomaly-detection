@@ -1,18 +1,15 @@
 package com.bank.anomaly.config;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.policy.ClientPolicy;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.WritePolicy;
-import lombok.Getter;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-@Getter
+/**
+ * Aerospike has been replaced by Oracle + Kafka.
+ * This class is retained as a placeholder to avoid breaking any remaining references.
+ * All set-name constants are no longer used — tables are now in Oracle.
+ */
 @Configuration
 public class AerospikeConfig {
-
+    // Retained for any stale compile-time references; all runtime usage removed.
     public static final String SET_TRANSACTIONS = "transactions";
     public static final String SET_CLIENT_PROFILES = "client_profiles";
     public static final String SET_ANOMALY_RULES = "anomaly_rules";
@@ -27,67 +24,4 @@ public class AerospikeConfig {
     public static final String SET_AI_FEEDBACK = "ai_feedback";
     public static final String SET_METRICS_MINUTE = "metrics_minute_buckets";
     public static final String SET_METRICS_HOURLY = "metrics_hourly_buckets";
-
-    @Value("${aerospike.host:127.0.0.1}")
-    private String host;
-
-    @Value("${aerospike.port:3000}")
-    private int port;
-
-    @Value("${aerospike.namespace:banking}")
-    private String namespace;
-
-    @Bean
-    public AerospikeClient aerospikeClient() {
-        ClientPolicy clientPolicy = new ClientPolicy();
-        clientPolicy.maxConnsPerNode = 300;
-        clientPolicy.timeout = 5000;
-
-        // Read policy defaults
-        clientPolicy.readPolicyDefault.totalTimeout = 3000;
-        clientPolicy.readPolicyDefault.socketTimeout = 1000;
-
-        // Write policy defaults
-        clientPolicy.writePolicyDefault.totalTimeout = 3000;
-        clientPolicy.writePolicyDefault.socketTimeout = 1000;
-
-        return new AerospikeClient(clientPolicy, host, port);
-    }
-
-    @Bean
-    public WritePolicy defaultWritePolicy() {
-        WritePolicy policy = new WritePolicy();
-        policy.totalTimeout = 3000;
-        policy.socketTimeout = 1000;
-        return policy;
-    }
-
-    @Bean
-    public Policy defaultReadPolicy() {
-        Policy policy = new Policy();
-        policy.totalTimeout = 3000;
-        policy.socketTimeout = 1000;
-        return policy;
-    }
-
-    @Bean
-    public String aerospikeNamespace() {
-        return namespace;
-    }
-
-    @Bean
-    public WritePolicy minuteBucketWritePolicy() {
-        WritePolicy policy = new WritePolicy();
-        policy.totalTimeout = 3000;
-        policy.socketTimeout = 1000;
-        return policy;
-    }
-
-    @Bean
-    public WritePolicy hourlyBucketWritePolicy() {
-        WritePolicy policy = new WritePolicy();
-        policy.totalTimeout = 3000;
-        policy.socketTimeout = 1000;
-        return policy;
-    }
 }

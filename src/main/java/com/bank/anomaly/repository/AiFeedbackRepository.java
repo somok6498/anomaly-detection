@@ -1,113 +1,86 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.ScanPolicy;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.AiFeedback;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Repository
 public class AiFeedbackRepository {
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy writePolicy;
-    private final Policy readPolicy;
+    private final JdbcTemplate jdbc;
 
-    public AiFeedbackRepository(AerospikeClient client,
-                                @Qualifier("aerospikeNamespace") String namespace,
-                                @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
-                                @Qualifier("defaultReadPolicy") Policy readPolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.writePolicy = writePolicy;
-        this.readPolicy = readPolicy;
+    private final RowMapper<AiFeedback> rowMapper = (rs, rowNum) ->
+            AiFeedback.builder()
+                    .txnId(rs.getString("txn_id"))
+                    .helpful(rs.getInt("helpful") == 1)
+                    .operatorId(rs.getString("operator_id"))
+                    .timestamp(rs.getLong("feedback_ts"))
+                    .build();
+
+    public AiFeedbackRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     public void save(AiFeedback feedback) {
-        Key key = new Key(namespace, AerospikeConfig.SET_AI_FEEDBACK, feedback.getTxnId());
-        client.put(writePolicy, key,
-                new Bin("aiFbHelpful", feedback.isHelpful()),
-                new Bin("aiFbOperator", feedback.getOperatorId()),
-                new Bin("aiFbTimestamp", feedback.getTimestamp()));
+        jdbc.update("""
+                MERGE INTO ai_feedback f
+                USING (SELECT ? AS txn_id FROM dual) s ON (f.txn_id = s.txn_id)
+                WHEN MATCHED THEN UPDATE SET
+                    helpful = ?, operator_id = ?, feedback_ts = ?
+                WHEN NOT MATCHED THEN INSERT (txn_id, helpful, operator_id, feedback_ts)
+                VALUES (?, ?, ?, ?)
+                """,
+                feedback.getTxnId(),
+                feedback.isHelpful() ? 1 : 0, feedback.getOperatorId(), feedback.getTimestamp(),
+                feedback.getTxnId(), feedback.isHelpful() ? 1 : 0,
+                feedback.getOperatorId(), feedback.getTimestamp());
     }
 
     public AiFeedback findByTxnId(String txnId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_AI_FEEDBACK, txnId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return null;
-
-        return AiFeedback.builder()
-                .txnId(txnId)
-                .helpful(record.getBoolean("aiFbHelpful"))
-                .operatorId(record.getString("aiFbOperator"))
-                .timestamp(record.getLong("aiFbTimestamp"))
-                .build();
+        List<AiFeedback> results = jdbc.query(
+                "SELECT * FROM ai_feedback WHERE txn_id = ?", rowMapper, txnId);
+        return results.isEmpty() ? null : results.get(0);
     }
 
     public Map<String, Object> getStats() {
-        AtomicInteger helpful = new AtomicInteger(0);
-        AtomicInteger notHelpful = new AtomicInteger(0);
-
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_AI_FEEDBACK,
-                (key, record) -> {
-                    if (record.getBoolean("aiFbHelpful")) {
-                        helpful.incrementAndGet();
-                    } else {
-                        notHelpful.incrementAndGet();
-                    }
-                });
-
-        int total = helpful.get() + notHelpful.get();
         Map<String, Object> stats = new LinkedHashMap<>();
-        stats.put("helpful", helpful.get());
-        stats.put("notHelpful", notHelpful.get());
-        stats.put("total", total);
-        stats.put("helpfulPct", total > 0 ? (helpful.get() * 100.0 / total) : 0.0);
+
+        jdbc.query("""
+                SELECT
+                    SUM(CASE WHEN helpful = 1 THEN 1 ELSE 0 END) AS helpful_cnt,
+                    SUM(CASE WHEN helpful = 0 THEN 1 ELSE 0 END) AS not_helpful_cnt,
+                    COUNT(*) AS total
+                FROM ai_feedback
+                """, (rs) -> {
+            int helpful = rs.getInt("helpful_cnt");
+            int notHelpful = rs.getInt("not_helpful_cnt");
+            int total = rs.getInt("total");
+            stats.put("helpful", helpful);
+            stats.put("notHelpful", notHelpful);
+            stats.put("total", total);
+            stats.put("helpfulPct", total > 0 ? (helpful * 100.0 / total) : 0.0);
+        });
+
+        if (stats.isEmpty()) {
+            stats.put("helpful", 0);
+            stats.put("notHelpful", 0);
+            stats.put("total", 0);
+            stats.put("helpfulPct", 0.0);
+        }
         return stats;
     }
 
-    /**
-     * Returns txnIds of recent "not helpful" feedback, sorted by most recent first.
-     * Used to provide negative examples for AI explanation generation.
-     */
     public List<String> findRecentNotHelpfulTxnIds(int maxResults) {
-        List<AiFeedback> notHelpful = new ArrayList<>();
-
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_AI_FEEDBACK,
-                (key, record) -> {
-                    if (!record.getBoolean("aiFbHelpful")) {
-                        synchronized (notHelpful) {
-                            notHelpful.add(AiFeedback.builder()
-                                    .txnId(key.userKey.toString())
-                                    .timestamp(record.getLong("aiFbTimestamp"))
-                                    .build());
-                        }
-                    }
-                });
-
-        return notHelpful.stream()
-                .sorted((a, b) -> Long.compare(b.getTimestamp(), a.getTimestamp()))
-                .limit(maxResults)
-                .map(AiFeedback::getTxnId)
-                .toList();
+        return jdbc.queryForList("""
+                SELECT txn_id FROM ai_feedback
+                WHERE helpful = 0
+                ORDER BY feedback_ts DESC
+                FETCH FIRST ? ROWS ONLY
+                """, String.class, maxResults);
     }
 }

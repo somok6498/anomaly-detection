@@ -1,12 +1,7 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.BatchRead;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.BucketEntry;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.time.Instant;
@@ -23,14 +18,10 @@ public class MetricsBucketRepository {
     private static final DateTimeFormatter HOUR_FMT =
             DateTimeFormatter.ofPattern("yyyyMMddHH").withZone(ZoneOffset.UTC);
 
-    private final AerospikeClient client;
-    private final String namespace;
+    private final JdbcTemplate jdbc;
 
-    public MetricsBucketRepository(
-            AerospikeClient client,
-            @Qualifier("aerospikeNamespace") String namespace) {
-        this.client = client;
-        this.namespace = namespace;
+    public MetricsBucketRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     private static final long MAX_MINUTE_SPAN = 4 * 3600_000L;
@@ -44,50 +35,44 @@ public class MetricsBucketRepository {
 
         long spanMs = toMs - fromMs;
         boolean useMinute = spanMs < MAX_MINUTE_SPAN;
-        String setName = useMinute ? AerospikeConfig.SET_METRICS_MINUTE : AerospikeConfig.SET_METRICS_HOURLY;
+        String granularity = useMinute ? "MINUTE" : "HOURLY";
         long stepMs = useMinute ? 60_000L : 3600_000L;
         DateTimeFormatter fmt = useMinute ? MINUTE_FMT : HOUR_FMT;
 
         long alignedFrom = (fromMs / stepMs) * stepMs;
         long alignedTo = ((toMs + stepMs - 1) / stepMs) * stepMs;
 
-        List<BatchRead> batchReads = new ArrayList<>();
+        List<String> buckets = new ArrayList<>();
         List<Long> timestamps = new ArrayList<>();
-
         for (long ts = alignedFrom; ts < alignedTo; ts += stepMs) {
-            String timeBucket = fmt.format(Instant.ofEpochMilli(ts));
-            String compositeKey = scope + ":" + metric + ":" + timeBucket;
-            Key key = new Key(namespace, setName, compositeKey);
-            batchReads.add(new BatchRead(key, true));
+            buckets.add(fmt.format(Instant.ofEpochMilli(ts)));
             timestamps.add(ts);
         }
 
-        if (batchReads.isEmpty()) return List.of();
-
-        client.get(null, batchReads);
+        if (buckets.isEmpty()) return List.of();
 
         List<BucketEntry> results = new ArrayList<>();
-        for (int i = 0; i < batchReads.size(); i++) {
-            Record rec = batchReads.get(i).record;
-            if (rec == null) continue;
+        List<Object[]> rows = new ArrayList<>();
 
-            long count = rec.getLong("count");
-            if (count == 0) continue;
-
-            long rawSum = rec.getLong("sum");
-            long rawMax = rec.getLong("max");
-            long rawMin = rec.getLong("min");
-
-            results.add(new BucketEntry(
-                    timestamps.get(i),
-                    count,
-                    rawSum / 100.0,
-                    rawMax == 0 ? 0 : rawMax / 100.0,
-                    rawMin == 0 ? 0 : rawMin / 100.0,
-                    scope,
-                    metric
-            ));
+        for (int i = 0; i < buckets.size(); i++) {
+            String bucket = buckets.get(i);
+            long ts = timestamps.get(i);
+            jdbc.query("""
+                    SELECT count_val, sum_val, max_val, min_val FROM metrics_buckets
+                    WHERE scope = ? AND metric = ? AND bucket = ? AND granularity = ?
+                    """, (rs) -> {
+                long count = rs.getLong("count_val");
+                if (count > 0) {
+                    results.add(new BucketEntry(
+                            ts, count,
+                            rs.getLong("sum_val") / 100.0,
+                            rs.getLong("max_val") == 0 ? 0 : rs.getLong("max_val") / 100.0,
+                            rs.getLong("min_val") == 0 ? 0 : rs.getLong("min_val") / 100.0,
+                            scope, metric));
+                }
+            }, scope, metric, bucket, granularity);
         }
+
         return results;
     }
 

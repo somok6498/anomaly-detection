@@ -1,20 +1,12 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.ScanPolicy;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.Transaction;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -22,65 +14,68 @@ import java.util.concurrent.ConcurrentHashMap;
 @Repository
 public class TransactionRepository {
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final Policy readPolicy;
-    private final WritePolicy writePolicy;
+    private final JdbcTemplate jdbc;
 
-    public TransactionRepository(AerospikeClient client,
-                                 @Qualifier("aerospikeNamespace") String namespace,
-                                 @Qualifier("defaultReadPolicy") Policy readPolicy,
-                                 @Qualifier("defaultWritePolicy") WritePolicy writePolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.readPolicy = readPolicy;
-        this.writePolicy = writePolicy;
+    private static final RowMapper<Transaction> ROW_MAPPER = (rs, rowNum) ->
+            Transaction.builder()
+                    .txnId(rs.getString("txn_id"))
+                    .clientId(rs.getString("client_id"))
+                    .txnType(rs.getString("txn_type"))
+                    .amount(rs.getDouble("amount"))
+                    .timestamp(rs.getLong("timestamp_ms"))
+                    .beneficiaryAccount(rs.getString("beneficiary_account"))
+                    .beneficiaryIfsc(rs.getString("beneficiary_ifsc"))
+                    .build();
+
+    public TransactionRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     public void save(Transaction txn) {
-        Key key = new Key(namespace, AerospikeConfig.SET_TRANSACTIONS, txn.getTxnId());
-        java.util.List<Bin> bins = new java.util.ArrayList<>(java.util.List.of(
-                new Bin("txnId", txn.getTxnId()),
-                new Bin("clientId", txn.getClientId()),
-                new Bin("txnType", txn.getTxnType()),
-                new Bin("amount", txn.getAmount()),
-                new Bin("timestamp", txn.getTimestamp())));
-
-        if (txn.getBeneficiaryAccount() != null) {
-            bins.add(new Bin("beneAcct", txn.getBeneficiaryAccount()));
-        }
-        if (txn.getBeneficiaryIfsc() != null) {
-            bins.add(new Bin("beneIfsc", txn.getBeneficiaryIfsc()));
-        }
-
-        client.put(writePolicy, key, bins.toArray(new Bin[0]));
+        jdbc.update("""
+                MERGE INTO transactions t
+                USING (SELECT ? AS txn_id FROM dual) s ON (t.txn_id = s.txn_id)
+                WHEN NOT MATCHED THEN INSERT (txn_id, client_id, amount, txn_type,
+                    beneficiary_account, beneficiary_ifsc, timestamp_ms)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                txn.getTxnId(),
+                txn.getTxnId(), txn.getClientId(), txn.getAmount(), txn.getTxnType(),
+                txn.getBeneficiaryAccount(), txn.getBeneficiaryIfsc(), txn.getTimestamp());
     }
 
     public Transaction findByTxnId(String txnId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_TRANSACTIONS, txnId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return null;
-        return mapRecord(txnId, record);
+        List<Transaction> results = jdbc.query(
+                "SELECT * FROM transactions WHERE txn_id = ?",
+                ROW_MAPPER, txnId);
+        return results.isEmpty() ? null : results.get(0);
     }
 
     public PagedResponse<Transaction> findByClientId(String clientId, int limit, Long before) {
-        List<Transaction> results = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.maxRecords = 0;
-        scanPolicy.concurrentNodes = true;
+        String sql;
+        List<Object> params = new ArrayList<>();
+        params.add(clientId);
 
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_TRANSACTIONS,
-                (key, record) -> {
-                    String recClientId = record.getString("clientId");
-                    if (clientId.equals(recClientId)) {
-                        if (before != null && record.getLong("timestamp") >= before) return;
-                        synchronized (results) {
-                            results.add(mapRecord(record.getString("txnId"), record));
-                        }
-                    }
-                });
+        if (before != null) {
+            sql = """
+                SELECT * FROM transactions
+                WHERE client_id = ? AND timestamp_ms < ?
+                ORDER BY timestamp_ms DESC
+                FETCH FIRST ? ROWS ONLY
+                """;
+            params.add(before);
+        } else {
+            sql = """
+                SELECT * FROM transactions
+                WHERE client_id = ?
+                ORDER BY timestamp_ms DESC
+                FETCH FIRST ? ROWS ONLY
+                """;
+        }
+        params.add(limit + 1);
 
-        results.sort(Comparator.comparingLong(Transaction::getTimestamp).reversed());
+        List<Transaction> results = jdbc.query(sql, ROW_MAPPER, params.toArray());
+
         boolean hasMore = results.size() > limit;
         List<Transaction> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getTimestamp()) : null;
@@ -88,54 +83,31 @@ public class TransactionRepository {
     }
 
     public List<Transaction> findByTimeRange(long fromMs, long toMs, String txnType, int maxResults) {
-        List<Transaction> results = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_TRANSACTIONS,
-                (key, record) -> {
-                    try {
-                        long ts = record.getLong("timestamp");
-                        if (ts < fromMs || ts > toMs) return;
-                        if (txnType != null && !txnType.equalsIgnoreCase(record.getString("txnType"))) return;
-                        synchronized (results) {
-                            if (results.size() < maxResults) {
-                                results.add(mapRecord(record.getString("txnId"), record));
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                });
-
-        return results;
+        if (txnType != null) {
+            return jdbc.query("""
+                    SELECT * FROM transactions
+                    WHERE timestamp_ms BETWEEN ? AND ? AND UPPER(txn_type) = UPPER(?)
+                    ORDER BY timestamp_ms DESC
+                    FETCH FIRST ? ROWS ONLY
+                    """, ROW_MAPPER, fromMs, toMs, txnType, maxResults);
+        }
+        return jdbc.query("""
+                SELECT * FROM transactions
+                WHERE timestamp_ms BETWEEN ? AND ?
+                ORDER BY timestamp_ms DESC
+                FETCH FIRST ? ROWS ONLY
+                """, ROW_MAPPER, fromMs, toMs, maxResults);
     }
 
     public long countDistinctClientsByTimeRange(long fromMs, long toMs, String txnType) {
-        Set<String> clientIds = ConcurrentHashMap.newKeySet();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_TRANSACTIONS,
-                (key, record) -> {
-                    try {
-                        long ts = record.getLong("timestamp");
-                        if (ts < fromMs || ts > toMs) return;
-                        if (txnType != null && !txnType.equalsIgnoreCase(record.getString("txnType"))) return;
-                        clientIds.add(record.getString("clientId"));
-                    } catch (Exception ignored) {}
-                });
-
-        return clientIds.size();
-    }
-
-    private Transaction mapRecord(String txnId, Record record) {
-        return Transaction.builder()
-                .txnId(txnId != null ? txnId : record.getString("txnId"))
-                .clientId(record.getString("clientId"))
-                .txnType(record.getString("txnType"))
-                .amount(record.getDouble("amount"))
-                .timestamp(record.getLong("timestamp"))
-                .beneficiaryAccount(record.getString("beneAcct"))
-                .beneficiaryIfsc(record.getString("beneIfsc"))
-                .build();
+        String sql;
+        if (txnType != null) {
+            sql = "SELECT COUNT(DISTINCT client_id) FROM transactions WHERE timestamp_ms BETWEEN ? AND ? AND UPPER(txn_type) = UPPER(?)";
+            Long count = jdbc.queryForObject(sql, Long.class, fromMs, toMs, txnType);
+            return count != null ? count : 0;
+        }
+        sql = "SELECT COUNT(DISTINCT client_id) FROM transactions WHERE timestamp_ms BETWEEN ? AND ?";
+        Long count = jdbc.queryForObject(sql, Long.class, fromMs, toMs);
+        return count != null ? count : 0;
     }
 }

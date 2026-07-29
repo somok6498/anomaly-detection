@@ -1,113 +1,114 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.EvaluationResult;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.RiskLevel;
 import com.bank.anomaly.model.RuleResult;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
-
-import com.aerospike.client.policy.ScanPolicy;
-
-import com.bank.anomaly.model.PagedResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
 public class RiskResultRepository {
 
     private static final Logger log = LoggerFactory.getLogger(RiskResultRepository.class);
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy writePolicy;
-    private final Policy readPolicy;
-    private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public RiskResultRepository(AerospikeClient client,
-                                @Qualifier("aerospikeNamespace") String namespace,
-                                @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
-                                @Qualifier("defaultReadPolicy") Policy readPolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.writePolicy = writePolicy;
-        this.readPolicy = readPolicy;
-        this.objectMapper = new ObjectMapper();
+    private final RowMapper<EvaluationResult> rowMapper = (rs, rowNum) ->
+            EvaluationResult.builder()
+                    .txnId(rs.getString("txn_id"))
+                    .clientId(rs.getString("client_id"))
+                    .compositeScore(rs.getDouble("composite_score"))
+                    .riskLevel(RiskLevel.valueOf(rs.getString("risk_level")))
+                    .action(rs.getString("action"))
+                    .evaluatedAt(rs.getLong("evaluated_at"))
+                    .ruleResults(deserializeRuleResults(rs.getString("rule_results")))
+                    .triggeredRuleCount(rs.getInt("triggered_rule_count"))
+                    .breadthBonus(rs.getDouble("breadth_bonus"))
+                    .aiExplanation(rs.getString("ai_explanation"))
+                    .attackPattern(rs.getString("attack_pattern"))
+                    .build();
+
+    public RiskResultRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     public void save(EvaluationResult result) {
-        Key key = new Key(namespace, AerospikeConfig.SET_RISK_RESULTS, result.getTxnId());
-
-        Bin txnIdBin = new Bin("txnId", result.getTxnId());
-        Bin clientIdBin = new Bin("clientId", result.getClientId());
-        Bin scoreBin = new Bin("compositeScore", result.getCompositeScore());
-        Bin riskLevelBin = new Bin("riskLevel", result.getRiskLevel().name());
-        Bin actionBin = new Bin("action", result.getAction());
-        Bin evaluatedAtBin = new Bin("evaluatedAt", result.getEvaluatedAt());
-        Bin ruleResultsBin = new Bin("ruleResults", serializeRuleResults(result.getRuleResults()));
-        Bin triggeredCountBin = new Bin("trigRuleCount", result.getTriggeredRuleCount());
-        Bin breadthBonusBin = new Bin("breadthBonus", result.getBreadthBonus());
-        Bin aiExplanationBin = new Bin("aiExplanation", result.getAiExplanation());
-        Bin attackPatternBin = new Bin("atkPattern", result.getAttackPattern());
-
-        client.put(writePolicy, key,
-                txnIdBin, clientIdBin, scoreBin, riskLevelBin,
-                actionBin, evaluatedAtBin, ruleResultsBin,
-                triggeredCountBin, breadthBonusBin, aiExplanationBin, attackPatternBin);
+        jdbc.update(conn -> {
+            var ps = conn.prepareStatement("""
+                    MERGE INTO evaluation_results r
+                    USING (SELECT ? AS txn_id FROM dual) s ON (r.txn_id = s.txn_id)
+                    WHEN NOT MATCHED THEN INSERT (
+                        txn_id, client_id, composite_score, risk_level, action,
+                        rule_results, evaluated_at, triggered_rule_count, breadth_bonus,
+                        ai_explanation, attack_pattern)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """);
+            ps.setString(1, result.getTxnId());
+            ps.setString(2, result.getTxnId());
+            ps.setString(3, result.getClientId());
+            ps.setDouble(4, result.getCompositeScore());
+            ps.setString(5, result.getRiskLevel().name());
+            ps.setString(6, result.getAction());
+            ps.setString(7, serializeRuleResults(result.getRuleResults()));
+            ps.setLong(8, result.getEvaluatedAt());
+            ps.setInt(9, result.getTriggeredRuleCount());
+            ps.setDouble(10, result.getBreadthBonus());
+            if (result.getAiExplanation() != null) {
+                ps.setString(11, result.getAiExplanation());
+            } else {
+                ps.setNull(11, java.sql.Types.CLOB);
+            }
+            if (result.getAttackPattern() != null) {
+                ps.setString(12, result.getAttackPattern());
+            } else {
+                ps.setNull(12, java.sql.Types.VARCHAR);
+            }
+            return ps;
+        });
     }
 
     public EvaluationResult findByTxnId(String txnId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_RISK_RESULTS, txnId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return null;
-
-        return EvaluationResult.builder()
-                .txnId(txnId)
-                .clientId(record.getString("clientId"))
-                .compositeScore(record.getDouble("compositeScore"))
-                .riskLevel(RiskLevel.valueOf(record.getString("riskLevel")))
-                .action(record.getString("action"))
-                .evaluatedAt(record.getLong("evaluatedAt"))
-                .ruleResults(deserializeRuleResults(record.getString("ruleResults")))
-                .triggeredRuleCount(safeInt(record, "trigRuleCount"))
-                .breadthBonus(safeDouble(record, "breadthBonus"))
-                .aiExplanation(record.getString("aiExplanation"))
-                .attackPattern(record.getString("atkPattern"))
-                .build();
+        List<EvaluationResult> results = jdbc.query(
+                "SELECT * FROM evaluation_results WHERE txn_id = ?", rowMapper, txnId);
+        return results.isEmpty() ? null : results.get(0);
     }
 
     public PagedResponse<EvaluationResult> findByClientId(String clientId, int limit, Long before) {
-        List<EvaluationResult> results = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
+        List<Object> params = new ArrayList<>();
+        params.add(clientId);
+        String sql;
 
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_RISK_RESULTS,
-                (key, record) -> {
-                    String recClientId = record.getString("clientId");
-                    if (clientId.equals(recClientId)) {
-                        if (before != null && record.getLong("evaluatedAt") >= before) return;
-                        synchronized (results) {
-                            results.add(mapRecord(record));
-                        }
-                    }
-                });
+        if (before != null) {
+            sql = """
+                SELECT * FROM evaluation_results
+                WHERE client_id = ? AND evaluated_at < ?
+                ORDER BY evaluated_at DESC
+                FETCH FIRST ? ROWS ONLY
+                """;
+            params.add(before);
+        } else {
+            sql = """
+                SELECT * FROM evaluation_results
+                WHERE client_id = ?
+                ORDER BY evaluated_at DESC
+                FETCH FIRST ? ROWS ONLY
+                """;
+        }
+        params.add(limit + 1);
 
-        results.sort(Comparator.comparingLong(EvaluationResult::getEvaluatedAt).reversed());
+        List<EvaluationResult> results = jdbc.query(sql, rowMapper, params.toArray());
+
         boolean hasMore = results.size() > limit;
         List<EvaluationResult> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getEvaluatedAt()) : null;
@@ -116,79 +117,50 @@ public class RiskResultRepository {
 
     public List<EvaluationResult> findByTimeRange(long fromMs, long toMs,
                                                    String riskLevel, String action, int maxResults) {
-        List<EvaluationResult> results = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
+        StringBuilder sql = new StringBuilder(
+                "SELECT * FROM evaluation_results WHERE evaluated_at BETWEEN ? AND ?");
+        List<Object> params = new ArrayList<>(List.of(fromMs, toMs));
 
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_RISK_RESULTS,
-                (key, record) -> {
-                    try {
-                        long ts = record.getLong("evaluatedAt");
-                        if (ts < fromMs || ts > toMs) return;
-                        if (riskLevel != null && !riskLevel.equalsIgnoreCase(record.getString("riskLevel"))) return;
-                        if (action != null && !action.equalsIgnoreCase(record.getString("action"))) return;
-                        synchronized (results) {
-                            if (results.size() < maxResults) {
-                                results.add(mapRecord(record));
-                            }
-                        }
-                    } catch (Exception ignored) {}
-                });
+        if (riskLevel != null) {
+            sql.append(" AND UPPER(risk_level) = UPPER(?)");
+            params.add(riskLevel);
+        }
+        if (action != null) {
+            sql.append(" AND UPPER(action) = UPPER(?)");
+            params.add(action);
+        }
+        sql.append(" ORDER BY evaluated_at DESC FETCH FIRST ? ROWS ONLY");
+        params.add(maxResults);
 
-        return results;
+        return jdbc.query(sql.toString(), rowMapper, params.toArray());
     }
 
     public long countDistinctClientsByTimeRange(long fromMs, long toMs, String riskLevel, String action) {
-        Set<String> clientIds = ConcurrentHashMap.newKeySet();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
+        StringBuilder sql = new StringBuilder(
+                "SELECT COUNT(DISTINCT client_id) FROM evaluation_results WHERE evaluated_at BETWEEN ? AND ?");
+        List<Object> params = new ArrayList<>(List.of(fromMs, toMs));
 
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_RISK_RESULTS,
-                (key, record) -> {
-                    try {
-                        long ts = record.getLong("evaluatedAt");
-                        if (ts < fromMs || ts > toMs) return;
-                        if (riskLevel != null && !riskLevel.equalsIgnoreCase(record.getString("riskLevel"))) return;
-                        if (action != null && !action.equalsIgnoreCase(record.getString("action"))) return;
-                        clientIds.add(record.getString("clientId"));
-                    } catch (Exception ignored) {}
-                });
+        if (riskLevel != null) {
+            sql.append(" AND UPPER(risk_level) = UPPER(?)");
+            params.add(riskLevel);
+        }
+        if (action != null) {
+            sql.append(" AND UPPER(action) = UPPER(?)");
+            params.add(action);
+        }
 
-        return clientIds.size();
-    }
-
-    private EvaluationResult mapRecord(Record record) {
-        return EvaluationResult.builder()
-                .txnId(record.getString("txnId"))
-                .clientId(record.getString("clientId"))
-                .compositeScore(record.getDouble("compositeScore"))
-                .riskLevel(RiskLevel.valueOf(record.getString("riskLevel")))
-                .action(record.getString("action"))
-                .evaluatedAt(record.getLong("evaluatedAt"))
-                .ruleResults(deserializeRuleResults(record.getString("ruleResults")))
-                .triggeredRuleCount(safeInt(record, "trigRuleCount"))
-                .breadthBonus(safeDouble(record, "breadthBonus"))
-                .aiExplanation(record.getString("aiExplanation"))
-                .attackPattern(record.getString("atkPattern"))
-                .build();
-    }
-
-    private int safeInt(Record record, String bin) {
-        try { return record.getInt(bin); } catch (Exception e) { return 0; }
-    }
-
-    private double safeDouble(Record record, String bin) {
-        try { return record.getDouble(bin); } catch (Exception e) { return 0.0; }
+        Long count = jdbc.queryForObject(sql.toString(), Long.class, params.toArray());
+        return count != null ? count : 0;
     }
 
     public void updateAiExplanation(String txnId, String aiExplanation) {
-        Key key = new Key(namespace, AerospikeConfig.SET_RISK_RESULTS, txnId);
-        client.put(writePolicy, key, new Bin("aiExplanation", aiExplanation));
+        jdbc.update("UPDATE evaluation_results SET ai_explanation = ? WHERE txn_id = ?",
+                aiExplanation, txnId);
     }
 
     public void updateAttackPattern(String txnId, String attackPattern) {
-        Key key = new Key(namespace, AerospikeConfig.SET_RISK_RESULTS, txnId);
-        client.put(writePolicy, key, new Bin("atkPattern", attackPattern));
+        jdbc.update("UPDATE evaluation_results SET attack_pattern = ? WHERE txn_id = ?",
+                attackPattern, txnId);
     }
 
     private String serializeRuleResults(List<RuleResult> results) {

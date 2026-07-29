@@ -23,10 +23,17 @@ repositories {
 
 dependencies {
     implementation("org.springframework.boot:spring-boot-starter-web")
-    implementation("com.aerospike:aerospike-client-jdk8:9.0.5")
     implementation("com.fasterxml.jackson.core:jackson-databind")
     implementation("org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0")
     implementation("com.twilio.sdk:twilio:10.1.0")
+
+    // Oracle + Spring Data JDBC + Liquibase
+    implementation("org.springframework.boot:spring-boot-starter-data-jdbc")
+    implementation("com.oracle.database.jdbc:ojdbc11:23.4.0.24.05")
+    implementation("org.liquibase:liquibase-core")
+
+    // Kafka (Amazon MSK compatible)
+    implementation("org.springframework.kafka:spring-kafka")
 
     // Observability: OTEL traces + Micrometer metrics
     implementation("org.springframework.boot:spring-boot-starter-actuator")
@@ -39,6 +46,7 @@ dependencies {
     annotationProcessor("org.projectlombok:lombok")
 
     testImplementation("org.springframework.boot:spring-boot-starter-test")
+    testImplementation("org.springframework.kafka:spring-kafka-test")
 }
 
 tasks.test {

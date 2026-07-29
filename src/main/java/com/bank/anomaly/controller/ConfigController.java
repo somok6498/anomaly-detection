@@ -1,6 +1,5 @@
 package com.bank.anomaly.controller;
 
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.config.FeedbackConfig;
 import com.bank.anomaly.config.OllamaConfig;
 import com.bank.anomaly.config.RiskThresholdConfig;
@@ -10,6 +9,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -20,18 +22,18 @@ public class ConfigController {
 
     private final RiskThresholdConfig thresholdConfig;
     private final FeedbackConfig feedbackConfig;
-    private final AerospikeConfig aerospikeConfig;
+    private final DataSource dataSource;
     private final TwilioNotificationConfig twilioConfig;
     private final OllamaConfig ollamaConfig;
 
     public ConfigController(RiskThresholdConfig thresholdConfig,
                             FeedbackConfig feedbackConfig,
-                            AerospikeConfig aerospikeConfig,
+                            DataSource dataSource,
                             TwilioNotificationConfig twilioConfig,
                             OllamaConfig ollamaConfig) {
         this.thresholdConfig = thresholdConfig;
         this.feedbackConfig = feedbackConfig;
-        this.aerospikeConfig = aerospikeConfig;
+        this.dataSource = dataSource;
         this.twilioConfig = twilioConfig;
         this.ollamaConfig = ollamaConfig;
     }
@@ -195,16 +197,22 @@ public class ConfigController {
         return getSilenceConfig();
     }
 
-    // ── Aerospike (read-only) ──
+    // ── Database (read-only) ──
 
-    @Operation(summary = "Get Aerospike connection info (read-only)")
-    @GetMapping("/aerospike")
-    public ResponseEntity<Map<String, Object>> getAerospikeInfo() {
-        return ResponseEntity.ok(Map.of(
-                "host", aerospikeConfig.getHost(),
-                "port", aerospikeConfig.getPort(),
-                "namespace", aerospikeConfig.getNamespace()
-        ));
+    @Operation(summary = "Get database connection info (read-only)")
+    @GetMapping("/database")
+    public ResponseEntity<Map<String, Object>> getDatabaseInfo() {
+        try (Connection conn = dataSource.getConnection()) {
+            DatabaseMetaData meta = conn.getMetaData();
+            return ResponseEntity.ok(Map.of(
+                    "url", meta.getURL(),
+                    "databaseProduct", meta.getDatabaseProductName(),
+                    "databaseVersion", meta.getDatabaseProductVersion(),
+                    "driverName", meta.getDriverName()
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.ok(Map.of("error", "Unable to retrieve database info: " + e.getMessage()));
+        }
     }
 
     // ── Twilio Notification ──
@@ -240,7 +248,6 @@ public class ConfigController {
         }
         if (body.containsKey("authToken")) {
             String token = body.get("authToken").toString();
-            // Don't overwrite with the masked value
             if (!token.startsWith("****")) {
                 twilioConfig.setAuthToken(token);
             }

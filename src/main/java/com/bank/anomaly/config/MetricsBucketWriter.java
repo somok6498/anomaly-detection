@@ -1,20 +1,14 @@
 package com.bank.anomaly.config;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Operation;
-import com.aerospike.client.policy.WritePolicy;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
@@ -27,23 +21,13 @@ public class MetricsBucketWriter {
     private static final DateTimeFormatter HOUR_FMT =
             DateTimeFormatter.ofPattern("yyyyMMddHH").withZone(ZoneOffset.UTC);
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy minutePolicy;
-    private final WritePolicy hourlyPolicy;
+    private final JdbcTemplate jdbc;
 
     private final ConcurrentHashMap<String, double[]> minuteAccum = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, double[]> hourlyAccum = new ConcurrentHashMap<>();
 
-    public MetricsBucketWriter(
-            AerospikeClient client,
-            @Qualifier("aerospikeNamespace") String namespace,
-            @Qualifier("minuteBucketWritePolicy") WritePolicy minutePolicy,
-            @Qualifier("hourlyBucketWritePolicy") WritePolicy hourlyPolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.minutePolicy = minutePolicy;
-        this.hourlyPolicy = hourlyPolicy;
+    public MetricsBucketWriter(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     public void recordCounter(String scope, String metric, long increment) {
@@ -84,15 +68,15 @@ public class MetricsBucketWriter {
 
     @Scheduled(fixedRate = 10_000)
     public void flush() {
-        flushMap(minuteAccum, AerospikeConfig.SET_METRICS_MINUTE, minutePolicy);
-        flushMap(hourlyAccum, AerospikeConfig.SET_METRICS_HOURLY, hourlyPolicy);
+        flushMap(minuteAccum, "MINUTE");
+        flushMap(hourlyAccum, "HOURLY");
     }
 
     public void flushNow() {
         flush();
     }
 
-    private void flushMap(ConcurrentHashMap<String, double[]> map, String setName, WritePolicy policy) {
+    private void flushMap(ConcurrentHashMap<String, double[]> map, String granularity) {
         var snapshot = new ConcurrentHashMap<>(map);
         map.clear();
 
@@ -102,55 +86,31 @@ public class MetricsBucketWriter {
                 String scope = parts[0];
                 String metric = parts[1];
                 String timeBucket = parts[2];
-                long ts = bucketToEpochMs(timeBucket);
-
-                Key asKey = new Key(namespace, setName, compositeKey);
 
                 long count = (long) vals[0];
-                double sum = vals[1];
-                double max = vals[2];
-                double min = vals[3];
+                long sumCents = Math.round(vals[1] * 100);
+                long maxCents = vals[2] == Double.NEGATIVE_INFINITY ? 0 : Math.round(vals[2] * 100);
+                long minCents = vals[3] == Double.POSITIVE_INFINITY ? 0 : Math.round(vals[3] * 100);
 
-                if (max == Double.NEGATIVE_INFINITY) {
-                    client.operate(policy, asKey,
-                            Operation.add(new Bin("count", count)),
-                            Operation.put(new Bin("scope", scope)),
-                            Operation.put(new Bin("metric", metric)),
-                            Operation.put(new Bin("ts", ts)));
-                } else {
-                    client.operate(policy, asKey,
-                            Operation.add(new Bin("count", count)),
-                            Operation.add(new Bin("sum", Math.round(sum * 100))),
-                            Operation.put(new Bin("scope", scope)),
-                            Operation.put(new Bin("metric", metric)),
-                            Operation.put(new Bin("ts", ts)));
-                    updateMaxMin(asKey, policy, max, min);
-                }
+                jdbc.update("""
+                        MERGE INTO metrics_buckets m
+                        USING (SELECT ? AS scope, ? AS metric, ? AS bucket, ? AS granularity FROM dual) s
+                        ON (m.scope = s.scope AND m.metric = s.metric AND m.bucket = s.bucket AND m.granularity = s.granularity)
+                        WHEN MATCHED THEN UPDATE SET
+                            count_val = count_val + ?,
+                            sum_val = sum_val + ?,
+                            max_val = GREATEST(max_val, ?),
+                            min_val = LEAST(CASE WHEN min_val = 0 THEN ? ELSE min_val END, ?)
+                        WHEN NOT MATCHED THEN INSERT (scope, metric, bucket, granularity, count_val, sum_val, max_val, min_val)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                        """,
+                        scope, metric, timeBucket, granularity,
+                        count, sumCents, maxCents, minCents, minCents,
+                        scope, metric, timeBucket, granularity, count, sumCents, maxCents, minCents);
             } catch (Exception e) {
                 log.warn("Failed to flush bucket {}: {}", compositeKey, e.getMessage());
             }
         });
-    }
-
-    private void updateMaxMin(Key key, WritePolicy policy, double newMax, double newMin) {
-        try {
-            var record = client.get(null, key, "max", "min");
-            double existingMax = Double.NEGATIVE_INFINITY;
-            double existingMin = Double.POSITIVE_INFINITY;
-            if (record != null) {
-                Long rawMax = record.getLong("max");
-                Long rawMin = record.getLong("min");
-                if (rawMax != null && rawMax != 0) existingMax = rawMax / 100.0;
-                if (rawMin != null && rawMin != 0) existingMin = rawMin / 100.0;
-            }
-            double finalMax = Math.max(existingMax, newMax);
-            double finalMin = Math.min(existingMin, newMin);
-            client.operate(policy, key,
-                    Operation.put(new Bin("max", Math.round(finalMax * 100))),
-                    Operation.put(new Bin("min", Math.round(finalMin * 100))));
-        } catch (Exception e) {
-            log.warn("Failed to update max/min for {}: {}", key, e.getMessage());
-        }
     }
 
     private String minuteKey(String scope, String metric, long epochMs) {

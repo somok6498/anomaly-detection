@@ -1,19 +1,13 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.engine.isolationforest.IsolationForest;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -22,42 +16,30 @@ public class IsolationForestModelRepository {
 
     private static final Logger log = LoggerFactory.getLogger(IsolationForestModelRepository.class);
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy writePolicy;
-    private final Policy readPolicy;
-    private final ObjectMapper objectMapper;
-
-    // In-memory cache of loaded models
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper objectMapper = new ObjectMapper();
     private final Map<String, IsolationForest> modelCache = new ConcurrentHashMap<>();
 
-    public IsolationForestModelRepository(AerospikeClient client,
-                                          @Qualifier("aerospikeNamespace") String namespace,
-                                          @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
-                                          @Qualifier("defaultReadPolicy") Policy readPolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.writePolicy = writePolicy;
-        this.readPolicy = readPolicy;
-        this.objectMapper = new ObjectMapper();
+    public IsolationForestModelRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     public void save(String clientId, IsolationForest forest, int trainingSamples) {
         try {
             String modelJson = objectMapper.writeValueAsString(forest);
-            Key key = new Key(namespace, AerospikeConfig.SET_IF_MODELS, clientId);
+            jdbc.update("""
+                    MERGE INTO isolation_forest_models m
+                    USING (SELECT ? AS client_id FROM dual) s ON (m.client_id = s.client_id)
+                    WHEN MATCHED THEN UPDATE SET
+                        model_json = ?, tree_count = ?, train_samples = ?, trained_at = ?
+                    WHEN NOT MATCHED THEN INSERT (client_id, model_json, feature_count, tree_count, train_samples, trained_at)
+                    VALUES (?, ?, 6, ?, ?, ?)
+                    """,
+                    clientId,
+                    modelJson, forest.getTrees().size(), trainingSamples, System.currentTimeMillis(),
+                    clientId, modelJson, forest.getTrees().size(), trainingSamples, System.currentTimeMillis());
 
-            client.put(writePolicy, key,
-                    new Bin("clientId", clientId),
-                    new Bin("modelJson", modelJson),
-                    new Bin("featureCount", 6),
-                    new Bin("treeCount", forest.getTrees().size()),
-                    new Bin("trainedAt", System.currentTimeMillis()),
-                    new Bin("trainSamples", trainingSamples));
-
-            // Update cache
             modelCache.put(clientId, forest);
-
             log.info("Saved IF model for {}: {} trees, {} samples",
                     clientId, forest.getTrees().size(), trainingSamples);
         } catch (Exception e) {
@@ -66,17 +48,18 @@ public class IsolationForestModelRepository {
     }
 
     public IsolationForest load(String clientId) {
-        // Check cache first
         IsolationForest cached = modelCache.get(clientId);
         if (cached != null) return cached;
 
-        Key key = new Key(namespace, AerospikeConfig.SET_IF_MODELS, clientId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return null;
+        List<String> jsonResults = jdbc.query(
+                "SELECT model_json FROM isolation_forest_models WHERE client_id = ?",
+                (rs, rowNum) -> rs.getString("model_json"),
+                clientId);
+
+        if (jsonResults.isEmpty()) return null;
 
         try {
-            String modelJson = record.getString("modelJson");
-            IsolationForest forest = objectMapper.readValue(modelJson, IsolationForest.class);
+            IsolationForest forest = objectMapper.readValue(jsonResults.get(0), IsolationForest.class);
             modelCache.put(clientId, forest);
             return forest;
         } catch (Exception e) {
@@ -86,16 +69,18 @@ public class IsolationForestModelRepository {
     }
 
     public Map<String, Object> getModelMetadata(String clientId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_IF_MODELS, clientId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return null;
+        List<Map<String, Object>> rows = jdbc.queryForList(
+                "SELECT tree_count, feature_count, train_samples, trained_at FROM isolation_forest_models WHERE client_id = ?",
+                clientId);
+        if (rows.isEmpty()) return null;
 
+        Map<String, Object> row = rows.get(0);
         return Map.of(
                 "clientId", clientId,
-                "treeCount", record.getInt("treeCount"),
-                "featureCount", record.getInt("featureCount"),
-                "trainingSamples", record.getInt("trainSamples"),
-                "trainedAt", record.getLong("trainedAt")
+                "treeCount", row.get("tree_count"),
+                "featureCount", row.get("feature_count"),
+                "trainingSamples", row.get("train_samples"),
+                "trainedAt", row.get("trained_at")
         );
     }
 

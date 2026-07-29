@@ -1,27 +1,18 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.ScanPolicy;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
+import com.bank.anomaly.model.PagedResponse;
 import com.bank.anomaly.model.ReviewQueueItem;
 import com.bank.anomaly.model.ReviewStatus;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
-
-import com.bank.anomaly.model.PagedResponse;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.List;
 
 @Repository
@@ -29,143 +20,123 @@ public class ReviewQueueRepository {
 
     private static final Logger log = LoggerFactory.getLogger(ReviewQueueRepository.class);
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy writePolicy;
-    private final Policy readPolicy;
-    private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    public ReviewQueueRepository(AerospikeClient client,
-                                  @Qualifier("aerospikeNamespace") String namespace,
-                                  @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
-                                  @Qualifier("defaultReadPolicy") Policy readPolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.writePolicy = writePolicy;
-        this.readPolicy = readPolicy;
-        this.objectMapper = new ObjectMapper();
+    private final RowMapper<ReviewQueueItem> rowMapper = (rs, rowNum) -> {
+        String feedbackBy = rs.getString("feedback_by");
+        return ReviewQueueItem.builder()
+                .txnId(rs.getString("txn_id"))
+                .clientId(rs.getString("client_id"))
+                .action(rs.getString("action"))
+                .compositeScore(rs.getDouble("composite_score"))
+                .riskLevel(rs.getString("risk_level"))
+                .triggeredRuleIds(deserializeList(rs.getString("triggered_rule_ids")))
+                .enqueuedAt(rs.getLong("enqueued_at"))
+                .feedbackStatus(ReviewStatus.valueOf(rs.getString("feedback_status")))
+                .feedbackAt(rs.getLong("feedback_at"))
+                .feedbackBy(feedbackBy != null && !feedbackBy.isEmpty() ? feedbackBy : null)
+                .autoAcceptDeadline(rs.getLong("auto_accept_deadline"))
+                .build();
+    };
+
+    public ReviewQueueRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     public void save(ReviewQueueItem item) {
-        Key key = new Key(namespace, AerospikeConfig.SET_REVIEW_QUEUE, item.getTxnId());
-
-        Bin txnIdBin = new Bin("txnId", item.getTxnId());
-        Bin clientIdBin = new Bin("clientId", item.getClientId());
-        Bin actionBin = new Bin("action", item.getAction());
-        Bin scoreBin = new Bin("compositeScore", item.getCompositeScore());
-        Bin riskLevelBin = new Bin("riskLevel", item.getRiskLevel());
-        Bin triggeredRulesBin = new Bin("trigRuleIds", serializeList(item.getTriggeredRuleIds()));
-        Bin enqueuedAtBin = new Bin("enqueuedAt", item.getEnqueuedAt());
-        Bin feedbackStatusBin = new Bin("feedbackStatus", item.getFeedbackStatus().name());
-        Bin feedbackAtBin = new Bin("feedbackAt", item.getFeedbackAt());
-        Bin feedbackByBin = new Bin("feedbackBy", item.getFeedbackBy() != null ? item.getFeedbackBy() : "");
-        Bin deadlineBin = new Bin("autoAcceptDl", item.getAutoAcceptDeadline());
-
-        client.put(writePolicy, key,
-                txnIdBin, clientIdBin, actionBin, scoreBin, riskLevelBin,
-                triggeredRulesBin, enqueuedAtBin, feedbackStatusBin,
-                feedbackAtBin, feedbackByBin, deadlineBin);
+        jdbc.update("""
+                MERGE INTO review_queue r
+                USING (SELECT ? AS txn_id FROM dual) s ON (r.txn_id = s.txn_id)
+                WHEN MATCHED THEN UPDATE SET
+                    client_id = ?, action = ?, composite_score = ?, risk_level = ?,
+                    triggered_rule_ids = ?, enqueued_at = ?, feedback_status = ?,
+                    feedback_at = ?, feedback_by = ?, auto_accept_deadline = ?
+                WHEN NOT MATCHED THEN INSERT (
+                    txn_id, client_id, action, composite_score, risk_level,
+                    triggered_rule_ids, enqueued_at, feedback_status,
+                    feedback_at, feedback_by, auto_accept_deadline)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                item.getTxnId(),
+                item.getClientId(), item.getAction(), item.getCompositeScore(), item.getRiskLevel(),
+                serializeList(item.getTriggeredRuleIds()), item.getEnqueuedAt(),
+                item.getFeedbackStatus().name(), item.getFeedbackAt(),
+                item.getFeedbackBy() != null ? item.getFeedbackBy() : "",
+                item.getAutoAcceptDeadline(),
+                item.getTxnId(), item.getClientId(), item.getAction(), item.getCompositeScore(),
+                item.getRiskLevel(), serializeList(item.getTriggeredRuleIds()),
+                item.getEnqueuedAt(), item.getFeedbackStatus().name(), item.getFeedbackAt(),
+                item.getFeedbackBy() != null ? item.getFeedbackBy() : "",
+                item.getAutoAcceptDeadline());
     }
 
     public ReviewQueueItem findByTxnId(String txnId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_REVIEW_QUEUE, txnId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return null;
-        return mapRecord(record);
+        List<ReviewQueueItem> results = jdbc.query(
+                "SELECT * FROM review_queue WHERE txn_id = ?", rowMapper, txnId);
+        return results.isEmpty() ? null : results.get(0);
     }
 
     public List<ReviewQueueItem> findPending() {
-        List<ReviewQueueItem> results = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_REVIEW_QUEUE,
-                (key, record) -> {
-                    try {
-                        String status = record.getString("feedbackStatus");
-                        if ("PENDING".equals(status)) {
-                            synchronized (results) {
-                                results.add(mapRecord(record));
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to read review queue record: {}", e.getMessage());
-                    }
-                });
-        return results;
+        return jdbc.query(
+                "SELECT * FROM review_queue WHERE feedback_status = 'PENDING' ORDER BY enqueued_at DESC",
+                rowMapper);
     }
 
     public PagedResponse<ReviewQueueItem> findByFilters(String action, String clientId,
-                                                Long fromDate, Long toDate,
-                                                String ruleId, String feedbackStatus,
-                                                int limit, Long before) {
-        List<ReviewQueueItem> results = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
+                                                         Long fromDate, Long toDate,
+                                                         String ruleId, String feedbackStatus,
+                                                         int limit, Long before) {
+        StringBuilder sql = new StringBuilder("SELECT * FROM review_queue WHERE 1=1");
+        List<Object> params = new ArrayList<>();
 
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_REVIEW_QUEUE,
-                (key, record) -> {
-                    try {
-                        // Apply filters
-                        if (action != null && !action.isEmpty()) {
-                            String recAction = record.getString("action");
-                            if (!action.equalsIgnoreCase(recAction)) return;
-                        }
-                        if (clientId != null && !clientId.isEmpty()) {
-                            String recClientId = record.getString("clientId");
-                            if (!clientId.equalsIgnoreCase(recClientId)) return;
-                        }
-                        if (feedbackStatus != null && !feedbackStatus.isEmpty()) {
-                            String recStatus = record.getString("feedbackStatus");
-                            if (!feedbackStatus.equalsIgnoreCase(recStatus)) return;
-                        }
-                        long enqueuedAt = record.getLong("enqueuedAt");
-                        if (before != null && enqueuedAt >= before) return;
-                        if (fromDate != null && enqueuedAt < fromDate) return;
-                        if (toDate != null && enqueuedAt > toDate) return;
+        if (action != null && !action.isEmpty()) {
+            sql.append(" AND UPPER(action) = UPPER(?)");
+            params.add(action);
+        }
+        if (clientId != null && !clientId.isEmpty()) {
+            sql.append(" AND UPPER(client_id) = UPPER(?)");
+            params.add(clientId);
+        }
+        if (feedbackStatus != null && !feedbackStatus.isEmpty()) {
+            sql.append(" AND UPPER(feedback_status) = UPPER(?)");
+            params.add(feedbackStatus);
+        }
+        if (before != null) {
+            sql.append(" AND enqueued_at < ?");
+            params.add(before);
+        }
+        if (fromDate != null) {
+            sql.append(" AND enqueued_at >= ?");
+            params.add(fromDate);
+        }
+        if (toDate != null) {
+            sql.append(" AND enqueued_at <= ?");
+            params.add(toDate);
+        }
+        if (ruleId != null && !ruleId.isEmpty()) {
+            sql.append(" AND triggered_rule_ids LIKE ?");
+            params.add("%" + ruleId + "%");
+        }
 
-                        if (ruleId != null && !ruleId.isEmpty()) {
-                            List<String> ruleIds = deserializeList(record.getString("trigRuleIds"));
-                            if (!ruleIds.contains(ruleId)) return;
-                        }
+        sql.append(" ORDER BY enqueued_at DESC FETCH FIRST ? ROWS ONLY");
+        params.add(limit + 1);
 
-                        synchronized (results) {
-                            results.add(mapRecord(record));
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to filter review queue record: {}", e.getMessage());
-                    }
-                });
+        List<ReviewQueueItem> results = jdbc.query(sql.toString(), rowMapper, params.toArray());
 
-        results.sort(Comparator.comparingLong(ReviewQueueItem::getEnqueuedAt).reversed());
         boolean hasMore = results.size() > limit;
         List<ReviewQueueItem> page = hasMore ? new ArrayList<>(results.subList(0, limit)) : results;
         String nextCursor = hasMore ? String.valueOf(page.get(page.size() - 1).getEnqueuedAt()) : null;
         return new PagedResponse<>(page, hasMore, nextCursor);
     }
 
-    /**
-     * Update feedback status. Only updates if current status is PENDING
-     * (guard against race with auto-accept).
-     * @return true if updated, false if status was already changed
-     */
     public boolean updateFeedback(String txnId, ReviewStatus status, String feedbackBy) {
-        Key key = new Key(namespace, AerospikeConfig.SET_REVIEW_QUEUE, txnId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return false;
-
-        String currentStatus = record.getString("feedbackStatus");
-        if (!"PENDING".equals(currentStatus)) {
-            log.debug("Queue item {} already has status {}, skipping update", txnId, currentStatus);
-            return false;
-        }
-
-        Bin feedbackStatusBin = new Bin("feedbackStatus", status.name());
-        Bin feedbackAtBin = new Bin("feedbackAt", System.currentTimeMillis());
-        Bin feedbackByBin = new Bin("feedbackBy", feedbackBy);
-
-        client.put(writePolicy, key, feedbackStatusBin, feedbackAtBin, feedbackByBin);
-        return true;
+        int updated = jdbc.update("""
+                UPDATE review_queue SET feedback_status = ?, feedback_at = ?, feedback_by = ?
+                WHERE txn_id = ? AND feedback_status = 'PENDING'
+                """,
+                status.name(), System.currentTimeMillis(), feedbackBy, txnId);
+        return updated > 0;
     }
 
     public int bulkUpdateFeedback(List<String> txnIds, ReviewStatus status, String feedbackBy) {
@@ -183,88 +154,59 @@ public class ReviewQueueRepository {
     }
 
     public List<ReviewQueueItem> findAllWithFeedback(Long fromDate, Long toDate) {
-        List<ReviewQueueItem> results = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
+        StringBuilder sql = new StringBuilder(
+                "SELECT * FROM review_queue WHERE feedback_status IN ('TRUE_POSITIVE', 'FALSE_POSITIVE')");
+        List<Object> params = new ArrayList<>();
 
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_REVIEW_QUEUE,
-                (key, record) -> {
-                    try {
-                        String status = record.getString("feedbackStatus");
-                        if ("TRUE_POSITIVE".equals(status) || "FALSE_POSITIVE".equals(status)) {
-                            long enqueuedAt = record.getLong("enqueuedAt");
-                            if (fromDate != null && enqueuedAt < fromDate) return;
-                            if (toDate != null && enqueuedAt > toDate) return;
-                            synchronized (results) {
-                                results.add(mapRecord(record));
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to read review queue record: {}", e.getMessage());
-                    }
-                });
-        return results;
+        if (fromDate != null) {
+            sql.append(" AND enqueued_at >= ?");
+            params.add(fromDate);
+        }
+        if (toDate != null) {
+            sql.append(" AND enqueued_at <= ?");
+            params.add(toDate);
+        }
+
+        return jdbc.query(sql.toString(), rowMapper, params.toArray());
     }
 
-    /**
-     * Get counts by feedback status for dashboard stats.
-     */
     public int[] countByStatus() {
         return countByStatus(null, null);
     }
 
     public int[] countByStatus(Long fromDate, Long toDate) {
-        // [pending, truePositive, falsePositive, autoAccepted]
-        int[] counts = new int[4];
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
+        StringBuilder sql = new StringBuilder(
+                "SELECT feedback_status, COUNT(*) AS cnt FROM review_queue WHERE 1=1");
+        List<Object> params = new ArrayList<>();
 
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_REVIEW_QUEUE,
-                (key, record) -> {
-                    try {
-                        if (fromDate != null || toDate != null) {
-                            long ts = record.getLong("enqueuedAt");
-                            if (fromDate != null && ts < fromDate) return;
-                            if (toDate != null && ts > toDate) return;
-                        }
-                        String status = record.getString("feedbackStatus");
-                        synchronized (counts) {
-                            switch (status) {
-                                case "PENDING" -> counts[0]++;
-                                case "TRUE_POSITIVE" -> counts[1]++;
-                                case "FALSE_POSITIVE" -> counts[2]++;
-                                case "AUTO_ACCEPTED" -> counts[3]++;
-                            }
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to count review queue record: {}", e.getMessage());
-                    }
-                });
+        if (fromDate != null) {
+            sql.append(" AND enqueued_at >= ?");
+            params.add(fromDate);
+        }
+        if (toDate != null) {
+            sql.append(" AND enqueued_at <= ?");
+            params.add(toDate);
+        }
+        sql.append(" GROUP BY feedback_status");
+
+        int[] counts = new int[4]; // [pending, truePositive, falsePositive, autoAccepted]
+        jdbc.query(sql.toString(), (rs) -> {
+            String status = rs.getString("feedback_status");
+            int cnt = rs.getInt("cnt");
+            switch (status) {
+                case "PENDING" -> counts[0] = cnt;
+                case "TRUE_POSITIVE" -> counts[1] = cnt;
+                case "FALSE_POSITIVE" -> counts[2] = cnt;
+                case "AUTO_ACCEPTED" -> counts[3] = cnt;
+            }
+        }, params.toArray());
         return counts;
-    }
-
-    private ReviewQueueItem mapRecord(Record record) {
-        String feedbackByStr = record.getString("feedbackBy");
-        return ReviewQueueItem.builder()
-                .txnId(record.getString("txnId"))
-                .clientId(record.getString("clientId"))
-                .action(record.getString("action"))
-                .compositeScore(record.getDouble("compositeScore"))
-                .riskLevel(record.getString("riskLevel"))
-                .triggeredRuleIds(deserializeList(record.getString("trigRuleIds")))
-                .enqueuedAt(record.getLong("enqueuedAt"))
-                .feedbackStatus(ReviewStatus.valueOf(record.getString("feedbackStatus")))
-                .feedbackAt(record.getLong("feedbackAt"))
-                .feedbackBy(feedbackByStr != null && !feedbackByStr.isEmpty() ? feedbackByStr : null)
-                .autoAcceptDeadline(record.getLong("autoAcceptDl"))
-                .build();
     }
 
     private String serializeList(List<String> list) {
         try {
             return objectMapper.writeValueAsString(list != null ? list : Collections.emptyList());
         } catch (Exception e) {
-            log.error("Failed to serialize list", e);
             return "[]";
         }
     }
@@ -274,7 +216,6 @@ public class ReviewQueueRepository {
         try {
             return objectMapper.readValue(json, new TypeReference<List<String>>() {});
         } catch (Exception e) {
-            log.error("Failed to deserialize list", e);
             return Collections.emptyList();
         }
     }

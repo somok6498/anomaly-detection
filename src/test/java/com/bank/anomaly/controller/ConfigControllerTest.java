@@ -1,6 +1,5 @@
 package com.bank.anomaly.controller;
 
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.config.FeedbackConfig;
 import com.bank.anomaly.config.OllamaConfig;
 import com.bank.anomaly.config.RiskThresholdConfig;
@@ -13,6 +12,9 @@ import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
+import javax.sql.DataSource;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -37,7 +39,7 @@ class ConfigControllerTest {
     private FeedbackConfig feedbackConfig;
 
     @MockBean
-    private AerospikeConfig aerospikeConfig;
+    private DataSource dataSource;
 
     @MockBean
     private TwilioNotificationConfig twilioConfig;
@@ -274,19 +276,23 @@ class ConfigControllerTest {
                 .andExpect(jsonPath("$.field").value("silenceMultiplier"));
     }
 
-    // ── Aerospike (read-only) ──
+    // ── Database (read-only) ──
 
     @Test
-    void getAerospikeInfo_success() throws Exception {
-        when(aerospikeConfig.getHost()).thenReturn("127.0.0.1");
-        when(aerospikeConfig.getPort()).thenReturn(3000);
-        when(aerospikeConfig.getNamespace()).thenReturn("banking");
+    void getDatabaseInfo_success() throws Exception {
+        Connection conn = mock(Connection.class);
+        DatabaseMetaData meta = mock(DatabaseMetaData.class);
+        when(dataSource.getConnection()).thenReturn(conn);
+        when(conn.getMetaData()).thenReturn(meta);
+        when(meta.getURL()).thenReturn("jdbc:oracle:thin:@//localhost:1521/XEPDB1");
+        when(meta.getDatabaseProductName()).thenReturn("Oracle");
+        when(meta.getDatabaseProductVersion()).thenReturn("21.3.0.0.0");
+        when(meta.getDriverName()).thenReturn("Oracle JDBC driver");
 
-        mockMvc.perform(get("/api/v1/config/aerospike"))
+        mockMvc.perform(get("/api/v1/config/database"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.host").value("127.0.0.1"))
-                .andExpect(jsonPath("$.port").value(3000))
-                .andExpect(jsonPath("$.namespace").value("banking"));
+                .andExpect(jsonPath("$.url").value("jdbc:oracle:thin:@//localhost:1521/XEPDB1"))
+                .andExpect(jsonPath("$.databaseProduct").value("Oracle"));
     }
 
     // ── Twilio ──

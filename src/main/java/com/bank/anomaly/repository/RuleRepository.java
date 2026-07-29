@@ -1,24 +1,15 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.aerospike.client.ScanCallback;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.ScanPolicy;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.AnomalyRule;
 import com.bank.anomaly.model.RuleType;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowMapper;
 import org.springframework.stereotype.Repository;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -33,29 +24,27 @@ public class RuleRepository {
 
     private static final Logger log = LoggerFactory.getLogger(RuleRepository.class);
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy writePolicy;
-    private final Policy readPolicy;
-    private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
-    // In-memory cache of active rules, refreshed periodically
     private final AtomicReference<List<AnomalyRule>> cachedRules = new AtomicReference<>(new CopyOnWriteArrayList<>());
 
-    public RuleRepository(AerospikeClient client,
-                          @Qualifier("aerospikeNamespace") String namespace,
-                          @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
-                          @Qualifier("defaultReadPolicy") Policy readPolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.writePolicy = writePolicy;
-        this.readPolicy = readPolicy;
-        this.objectMapper = new ObjectMapper();
+    private final RowMapper<AnomalyRule> rowMapper = (rs, rowNum) ->
+            AnomalyRule.builder()
+                    .ruleId(rs.getString("rule_id"))
+                    .name(rs.getString("rule_name"))
+                    .description(rs.getString("description"))
+                    .ruleType(RuleType.valueOf(rs.getString("rule_type")))
+                    .variancePct(rs.getDouble("variance_pct"))
+                    .riskWeight(rs.getDouble("risk_weight"))
+                    .enabled(rs.getInt("enabled") == 1)
+                    .params(deserializeParams(rs.getString("params")))
+                    .build();
+
+    public RuleRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
-    /**
-     * Start periodic cache refresh. Called from a @PostConstruct or config bean.
-     */
     public void startCacheRefresh(int intervalSeconds) {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "rule-cache-refresh");
@@ -67,7 +56,7 @@ public class RuleRepository {
 
     public void refreshCache() {
         try {
-            List<AnomalyRule> allRules = scanAllRules();
+            List<AnomalyRule> allRules = findAll();
             cachedRules.set(new CopyOnWriteArrayList<>(allRules));
             log.debug("Rule cache refreshed, {} rules loaded", allRules.size());
         } catch (Exception e) {
@@ -75,96 +64,56 @@ public class RuleRepository {
         }
     }
 
-    /**
-     * Get all active (enabled) rules from the in-memory cache.
-     */
     public List<AnomalyRule> getActiveRules() {
         return cachedRules.get().stream()
                 .filter(AnomalyRule::isEnabled)
                 .toList();
     }
 
-    /**
-     * Get all rules (including disabled) from the in-memory cache.
-     */
     public List<AnomalyRule> getAllRulesCached() {
         return cachedRules.get();
     }
 
     public List<AnomalyRule> findAll() {
-        return scanAllRules();
+        return jdbc.query("SELECT * FROM anomaly_rules", rowMapper);
     }
 
     public AnomalyRule findById(String ruleId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_ANOMALY_RULES, ruleId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return null;
-        return mapRecordToRule(ruleId, record);
+        List<AnomalyRule> results = jdbc.query(
+                "SELECT * FROM anomaly_rules WHERE rule_id = ?", rowMapper, ruleId);
+        return results.isEmpty() ? null : results.get(0);
     }
 
     public void save(AnomalyRule rule) {
-        Key key = new Key(namespace, AerospikeConfig.SET_ANOMALY_RULES, rule.getRuleId());
+        jdbc.update("""
+                MERGE INTO anomaly_rules r
+                USING (SELECT ? AS rule_id FROM dual) s ON (r.rule_id = s.rule_id)
+                WHEN MATCHED THEN UPDATE SET
+                    rule_name = ?, description = ?, rule_type = ?,
+                    variance_pct = ?, risk_weight = ?, enabled = ?,
+                    params = ?, version = version + 1
+                WHEN NOT MATCHED THEN INSERT (
+                    rule_id, rule_name, description, rule_type,
+                    variance_pct, risk_weight, enabled, params, version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                rule.getRuleId(),
+                rule.getName(), rule.getDescription(), rule.getRuleType().name(),
+                rule.getVariancePct(), rule.getRiskWeight(), rule.isEnabled() ? 1 : 0,
+                serializeParams(rule.getParams()),
+                rule.getRuleId(), rule.getName(), rule.getDescription(), rule.getRuleType().name(),
+                rule.getVariancePct(), rule.getRiskWeight(), rule.isEnabled() ? 1 : 0,
+                serializeParams(rule.getParams()));
 
-        Bin ruleIdBin = new Bin("ruleId", rule.getRuleId());
-        Bin nameBin = new Bin("name", rule.getName());
-        Bin descBin = new Bin("description", rule.getDescription());
-        Bin ruleTypeBin = new Bin("ruleType", rule.getRuleType().name());
-        Bin variancePctBin = new Bin("variancePct", rule.getVariancePct());
-        Bin riskWeightBin = new Bin("riskWeight", rule.getRiskWeight());
-        Bin enabledBin = new Bin("enabled", rule.isEnabled());
-        Bin paramsBin = new Bin("params", serializeParams(rule.getParams()));
-
-        client.put(writePolicy, key,
-                ruleIdBin, nameBin, descBin, ruleTypeBin,
-                variancePctBin, riskWeightBin, enabledBin, paramsBin);
-
-        // Immediately refresh cache after save
         refreshCache();
     }
 
     public boolean delete(String ruleId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_ANOMALY_RULES, ruleId);
-        boolean deleted = client.delete(writePolicy, key);
-        if (deleted) {
+        int deleted = jdbc.update("DELETE FROM anomaly_rules WHERE rule_id = ?", ruleId);
+        if (deleted > 0) {
             refreshCache();
         }
-        return deleted;
-    }
-
-    /**
-     * Scan all rules from Aerospike. Used for cache refresh and listing.
-     */
-    private List<AnomalyRule> scanAllRules() {
-        List<AnomalyRule> rules = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-        scanPolicy.includeBinData = true;
-
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_ANOMALY_RULES,
-                (key, record) -> {
-                    try {
-                        String ruleId = record.getString("ruleId");
-                        if (ruleId != null) {
-                            rules.add(mapRecordToRule(ruleId, record));
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to deserialize rule record: {}", e.getMessage());
-                    }
-                });
-        return rules;
-    }
-
-    private AnomalyRule mapRecordToRule(String ruleId, Record record) {
-        return AnomalyRule.builder()
-                .ruleId(ruleId)
-                .name(record.getString("name"))
-                .description(record.getString("description"))
-                .ruleType(RuleType.valueOf(record.getString("ruleType")))
-                .variancePct(record.getDouble("variancePct"))
-                .riskWeight(record.getDouble("riskWeight"))
-                .enabled(record.getBoolean("enabled"))
-                .params(deserializeParams(record.getString("params")))
-                .build();
+        return deleted > 0;
     }
 
     private String serializeParams(Map<String, String> params) {

@@ -1,54 +1,41 @@
 package com.bank.anomaly.seeder;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Key;
-import com.aerospike.client.Record;
-import com.aerospike.client.policy.ScanPolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.ClientProfile;
 import com.bank.anomaly.model.Transaction;
+import com.bank.anomaly.repository.TransactionRepository;
 import com.bank.anomaly.service.BeneficiaryGraphService;
 import com.bank.anomaly.service.IsolationForestTrainingService;
 import com.bank.anomaly.service.ProfileService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Scans all historical transactions and builds client behavioral profiles.
- * Runs after DataSeeder (via @Order) only when the "seed" profile is active.
- *
- * This processes transactions in chronological order per client so EWMA
- * stats accurately reflect the historical progression.
- */
 @Component
 @Profile("seed")
-@Order(2)  // run after DataSeeder (@Order default is MAX)
+@Order(2)
 public class ProfileBuilder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(ProfileBuilder.class);
 
-    private final AerospikeClient aerospikeClient;
-    private final String namespace;
+    private final TransactionRepository transactionRepository;
+    private final JdbcTemplate jdbc;
     private final ProfileService profileService;
     private final IsolationForestTrainingService ifTrainingService;
     private final BeneficiaryGraphService beneficiaryGraphService;
 
-    public ProfileBuilder(AerospikeClient aerospikeClient,
-                          @Qualifier("aerospikeNamespace") String namespace,
+    public ProfileBuilder(TransactionRepository transactionRepository,
+                          JdbcTemplate jdbc,
                           ProfileService profileService,
                           IsolationForestTrainingService ifTrainingService,
                           BeneficiaryGraphService beneficiaryGraphService) {
-        this.aerospikeClient = aerospikeClient;
-        this.namespace = namespace;
+        this.transactionRepository = transactionRepository;
+        this.jdbc = jdbc;
         this.profileService = profileService;
         this.ifTrainingService = ifTrainingService;
         this.beneficiaryGraphService = beneficiaryGraphService;
@@ -58,48 +45,14 @@ public class ProfileBuilder implements CommandLineRunner {
     public void run(String... args) throws Exception {
         log.info("=== Building client profiles from historical data ===");
 
-        // Step 1: Scan all transactions and group by clientId
-        Map<String, List<Transaction>> txnsByClient = new ConcurrentHashMap<>();
-        AtomicInteger scanCount = new AtomicInteger(0);
+        List<String> clientIds = jdbc.queryForList(
+                "SELECT DISTINCT client_id FROM transactions ORDER BY client_id",
+                String.class);
 
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-        scanPolicy.includeBinData = true;
+        log.info("Found {} distinct clients in transactions table", clientIds.size());
 
-        aerospikeClient.scanAll(scanPolicy, namespace, AerospikeConfig.SET_TRANSACTIONS,
-                (key, record) -> {
-                    try {
-                        Transaction txn = Transaction.builder()
-                                .txnId(record.getString("txnId"))
-                                .clientId(record.getString("clientId"))
-                                .txnType(record.getString("txnType"))
-                                .amount(record.getDouble("amount"))
-                                .timestamp(record.getLong("timestamp"))
-                                .beneficiaryAccount(record.getString("beneAcct"))
-                                .beneficiaryIfsc(record.getString("beneIfsc"))
-                                .build();
-
-                        txnsByClient.computeIfAbsent(txn.getClientId(), k -> Collections.synchronizedList(new ArrayList<>()))
-                                .add(txn);
-
-                        int count = scanCount.incrementAndGet();
-                        if (count % 10000 == 0) {
-                            log.info("  Scanned {} transactions...", count);
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to read transaction: {}", e.getMessage());
-                    }
-                });
-
-        log.info("Scanned {} total transactions for {} clients",
-                scanCount.get(), txnsByClient.size());
-
-        // Step 2: Sort each client's transactions by timestamp and process in order
-        for (Map.Entry<String, List<Transaction>> entry : txnsByClient.entrySet()) {
-            String clientId = entry.getKey();
-            List<Transaction> txns = entry.getValue();
-
-            // Sort chronologically
+        for (String clientId : clientIds) {
+            List<Transaction> txns = transactionRepository.findByClientId(clientId, 1_000_000, null).data();
             txns.sort(Comparator.comparingLong(Transaction::getTimestamp));
 
             ClientProfile profile = profileService.getOrCreateProfile(clientId);
@@ -116,15 +69,12 @@ public class ProfileBuilder implements CommandLineRunner {
                     profile.getDistinctBeneficiaryCount());
         }
 
-        log.info("=== Profile building complete for {} clients ===", txnsByClient.size());
+        log.info("=== Profile building complete for {} clients ===", clientIds.size());
 
-        // Step 3: Train Isolation Forest models for all clients
         log.info("=== Training Isolation Forest models ===");
-        List<String> clientIds = new ArrayList<>(txnsByClient.keySet());
         ifTrainingService.trainForClients(clientIds, 100, 256);
         log.info("=== Isolation Forest training complete ===");
 
-        // Step 4: Build the beneficiary graph for mule network detection
         log.info("=== Building beneficiary graph ===");
         beneficiaryGraphService.refreshGraph();
         log.info("=== Beneficiary graph build complete ===");

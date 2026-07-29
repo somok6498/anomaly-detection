@@ -1,18 +1,14 @@
 package com.bank.anomaly.seeder;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.config.MetricsBucketWriter;
 import com.bank.anomaly.config.RiskThresholdConfig;
 import com.bank.anomaly.model.AnomalyRule;
 import com.bank.anomaly.model.RuleType;
+import com.bank.anomaly.model.Transaction;
 import com.bank.anomaly.repository.RuleRepository;
+import com.bank.anomaly.repository.TransactionRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.annotation.Order;
@@ -31,16 +27,8 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Seeds Aerospike with realistic transaction data for local testing.
+ * Seeds Oracle with realistic transaction data for local testing.
  * Only runs when the "seed" Spring profile is active.
- *
- * Run with:  mvn spring-boot:run -Dspring-boot.run.profiles=seed
- *
- * Generates 10 clients with distinct behavioral patterns:
- *   - CLIENT-001 to CLIENT-005: normal, consistent patterns
- *   - CLIENT-006 to CLIENT-010: similar patterns but with injected anomalies
- *
- * Total records: ~50,000 (enough to build meaningful profiles without waiting too long)
  */
 @Component
 @Profile("seed")
@@ -49,9 +37,7 @@ public class DataSeeder implements CommandLineRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DataSeeder.class);
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy writePolicy;
+    private final TransactionRepository transactionRepository;
     private final RuleRepository ruleRepository;
     private final RiskThresholdConfig thresholdConfig;
     private final MetricsBucketWriter bucketWriter;
@@ -62,15 +48,11 @@ public class DataSeeder implements CommandLineRunner {
             "HDFC", "ICIC", "SBIN", "UTIB", "KKBK", "PUNB", "BARB", "IDFB", "YESB", "CNRB"
     };
 
-    public DataSeeder(AerospikeClient client,
-                      @Qualifier("aerospikeNamespace") String namespace,
-                      @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
+    public DataSeeder(TransactionRepository transactionRepository,
                       RuleRepository ruleRepository,
                       RiskThresholdConfig thresholdConfig,
                       MetricsBucketWriter bucketWriter) {
-        this.client = client;
-        this.namespace = namespace;
-        this.writePolicy = writePolicy;
+        this.transactionRepository = transactionRepository;
         this.ruleRepository = ruleRepository;
         this.thresholdConfig = thresholdConfig;
         this.bucketWriter = bucketWriter;
@@ -82,7 +64,7 @@ public class DataSeeder implements CommandLineRunner {
 
         List<AnomalyRule> existing = ruleRepository.findAll();
         if (!existing.isEmpty()) {
-            log.info("Data already seeded ({} rules found), skipping. To re-seed, clear the Aerospike data first.", existing.size());
+            log.info("Data already seeded ({} rules found), skipping. To re-seed, clear the Oracle data first.", existing.size());
             return;
         }
 
@@ -802,9 +784,6 @@ public class DataSeeder implements CommandLineRunner {
     }
 
     /**
-     * Write a single transaction record to Aerospike.
-     */
-    /**
      * CLIENT-012: Declining transaction pattern.
      * Starts at ~400 txns/day, decays exponentially to ~20 txns/day over 60 days.
      * Avg amount also declines from 80K to 15K — simulates a churning corporate client.
@@ -886,25 +865,17 @@ public class DataSeeder implements CommandLineRunner {
     private void writeTransaction(String txnId, String clientId, String txnType,
                                   double amount, long timestamp,
                                   String beneAcct, String beneIfsc) {
-        Key key = new Key(namespace, AerospikeConfig.SET_TRANSACTIONS, txnId);
+        Transaction txn = Transaction.builder()
+                .txnId(txnId)
+                .clientId(clientId)
+                .txnType(txnType)
+                .amount(amount)
+                .timestamp(timestamp)
+                .beneficiaryAccount(beneAcct)
+                .beneficiaryIfsc(beneIfsc)
+                .build();
+        transactionRepository.save(txn);
 
-        List<Bin> bins = new ArrayList<>(List.of(
-                new Bin("txnId", txnId),
-                new Bin("clientId", clientId),
-                new Bin("txnType", txnType),
-                new Bin("amount", amount),
-                new Bin("timestamp", timestamp)));
-
-        if (beneAcct != null) {
-            bins.add(new Bin("beneAcct", beneAcct));
-        }
-        if (beneIfsc != null) {
-            bins.add(new Bin("beneIfsc", beneIfsc));
-        }
-
-        client.put(writePolicy, key, bins.toArray(new Bin[0]));
-
-        // Backfill hourly metric buckets for historical data
         bucketWriter.recordCounterAt(clientId, "eval_count_PASS", 1, timestamp);
         bucketWriter.recordCounterAt("SYSTEM", "eval_count_PASS", 1, timestamp);
         bucketWriter.recordDistributionAt(clientId, "txn_amount_" + txnType, amount, timestamp);

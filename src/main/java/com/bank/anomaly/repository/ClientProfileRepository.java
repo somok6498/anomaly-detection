@@ -1,20 +1,9 @@
 package com.bank.anomaly.repository;
 
-import com.aerospike.client.AerospikeClient;
-import com.aerospike.client.Bin;
-import com.aerospike.client.Key;
-import com.aerospike.client.Operation;
-import com.aerospike.client.Record;
-import com.aerospike.client.policy.Policy;
-import com.aerospike.client.policy.ScanPolicy;
-import com.aerospike.client.policy.WritePolicy;
-import com.bank.anomaly.config.AerospikeConfig;
 import com.bank.anomaly.model.ClientProfile;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import java.util.ArrayList;
@@ -27,390 +16,399 @@ public class ClientProfileRepository {
 
     private static final Logger log = LoggerFactory.getLogger(ClientProfileRepository.class);
 
-    private final AerospikeClient client;
-    private final String namespace;
-    private final WritePolicy writePolicy;
-    private final Policy readPolicy;
-    private final ObjectMapper objectMapper;
+    private final JdbcTemplate jdbc;
 
-    public ClientProfileRepository(AerospikeClient client,
-                                   @Qualifier("aerospikeNamespace") String namespace,
-                                   @Qualifier("defaultWritePolicy") WritePolicy writePolicy,
-                                   @Qualifier("defaultReadPolicy") Policy readPolicy) {
-        this.client = client;
-        this.namespace = namespace;
-        this.writePolicy = writePolicy;
-        this.readPolicy = readPolicy;
-        this.objectMapper = new ObjectMapper();
+    public ClientProfileRepository(JdbcTemplate jdbc) {
+        this.jdbc = jdbc;
     }
 
     public ClientProfile findByClientId(String clientId) {
-        Key key = new Key(namespace, AerospikeConfig.SET_CLIENT_PROFILES, clientId);
-        Record record = client.get(readPolicy, key);
-        if (record == null) {
-            return null;
-        }
-        return mapRecordToProfile(clientId, record);
+        List<ClientProfile> profiles = jdbc.query(
+                "SELECT * FROM client_profiles WHERE client_id = ?",
+                (rs, rowNum) -> {
+                    ClientProfile p = new ClientProfile();
+                    p.setClientId(rs.getString("client_id"));
+                    p.setTotalTxnCount(rs.getLong("total_txn_count"));
+                    p.setEwmaAmount(rs.getDouble("ewma_amount"));
+                    p.setAmountM2(rs.getDouble("amount_m2"));
+                    p.setEwmaHourlyTps(rs.getDouble("ewma_hourly_tps"));
+                    p.setTpsM2(rs.getDouble("tps_m2"));
+                    p.setCompletedHoursCount(rs.getLong("completed_hours_count"));
+                    p.setEwmaHourlyAmount(rs.getDouble("ewma_hourly_amount"));
+                    p.setHourlyAmountM2(rs.getDouble("hourly_amount_m2"));
+                    p.setEwmaDailyAmount(rs.getDouble("ewma_daily_amount"));
+                    p.setDailyAmountM2(rs.getDouble("daily_amount_m2"));
+                    p.setCompletedDaysCount(rs.getLong("completed_days_count"));
+                    p.setEwmaDailyNewBeneficiaries(rs.getDouble("ewma_daily_new_bene"));
+                    p.setDailyNewBeneM2(rs.getDouble("daily_new_bene_m2"));
+                    p.setCompletedDaysForBeneCount(rs.getLong("completed_days_bene_cnt"));
+                    p.setDistinctBeneficiaryCount(rs.getLong("distinct_bene_count"));
+                    p.setLastHourBucket(rs.getString("last_hour_bucket"));
+                    p.setLastDayBucket(rs.getString("last_day_bucket"));
+                    p.setLastUpdated(rs.getLong("last_updated"));
+                    return p;
+                }, clientId);
+
+        if (profiles.isEmpty()) return null;
+
+        ClientProfile profile = profiles.get(0);
+        loadTypeStats(profile);
+        loadSeasonalStats(profile);
+        loadBeneficiaryStats(profile);
+        return profile;
     }
 
     public List<ClientProfile> scanAllProfiles() {
         List<ClientProfile> profiles = new ArrayList<>();
-        ScanPolicy scanPolicy = new ScanPolicy();
-        scanPolicy.concurrentNodes = true;
-        scanPolicy.includeBinData = true;
-
-        client.scanAll(scanPolicy, namespace, AerospikeConfig.SET_CLIENT_PROFILES,
-                (key, record) -> {
-                    try {
-                        String clientId = record.getString("clientId");
-                        if (clientId != null) {
-                            profiles.add(mapRecordToProfile(clientId, record));
-                        }
-                    } catch (Exception e) {
-                        log.warn("Failed to deserialize profile record: {}", e.getMessage());
-                    }
-                });
+        List<Map<String, Object>> rows = jdbc.queryForList("SELECT client_id FROM client_profiles");
+        for (Map<String, Object> row : rows) {
+            String clientId = (String) row.get("client_id");
+            ClientProfile p = findByClientId(clientId);
+            if (p != null) profiles.add(p);
+        }
         return profiles;
     }
 
     public void save(ClientProfile profile) {
-        Key key = new Key(namespace, AerospikeConfig.SET_CLIENT_PROFILES, profile.getClientId());
+        jdbc.update("""
+                MERGE INTO client_profiles p
+                USING (SELECT ? AS client_id FROM dual) s ON (p.client_id = s.client_id)
+                WHEN MATCHED THEN UPDATE SET
+                    total_txn_count = ?, ewma_amount = ?, amount_m2 = ?,
+                    ewma_hourly_tps = ?, tps_m2 = ?, completed_hours_count = ?,
+                    ewma_hourly_amount = ?, hourly_amount_m2 = ?,
+                    ewma_daily_amount = ?, daily_amount_m2 = ?, completed_days_count = ?,
+                    ewma_daily_new_bene = ?, daily_new_bene_m2 = ?, completed_days_bene_cnt = ?,
+                    distinct_bene_count = ?, last_hour_bucket = ?, last_day_bucket = ?,
+                    last_updated = ?, version = version + 1
+                WHEN NOT MATCHED THEN INSERT (
+                    client_id, total_txn_count, ewma_amount, amount_m2,
+                    ewma_hourly_tps, tps_m2, completed_hours_count,
+                    ewma_hourly_amount, hourly_amount_m2,
+                    ewma_daily_amount, daily_amount_m2, completed_days_count,
+                    ewma_daily_new_bene, daily_new_bene_m2, completed_days_bene_cnt,
+                    distinct_bene_count, last_hour_bucket, last_day_bucket,
+                    last_updated, version)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+                """,
+                // ON key
+                profile.getClientId(),
+                // UPDATE values
+                profile.getTotalTxnCount(), profile.getEwmaAmount(), profile.getAmountM2(),
+                profile.getEwmaHourlyTps(), profile.getTpsM2(), profile.getCompletedHoursCount(),
+                profile.getEwmaHourlyAmount(), profile.getHourlyAmountM2(),
+                profile.getEwmaDailyAmount(), profile.getDailyAmountM2(), profile.getCompletedDaysCount(),
+                profile.getEwmaDailyNewBeneficiaries(), profile.getDailyNewBeneM2(), profile.getCompletedDaysForBeneCount(),
+                profile.getDistinctBeneficiaryCount(), profile.getLastHourBucket(), profile.getLastDayBucket(),
+                profile.getLastUpdated(),
+                // INSERT values
+                profile.getClientId(),
+                profile.getTotalTxnCount(), profile.getEwmaAmount(), profile.getAmountM2(),
+                profile.getEwmaHourlyTps(), profile.getTpsM2(), profile.getCompletedHoursCount(),
+                profile.getEwmaHourlyAmount(), profile.getHourlyAmountM2(),
+                profile.getEwmaDailyAmount(), profile.getDailyAmountM2(), profile.getCompletedDaysCount(),
+                profile.getEwmaDailyNewBeneficiaries(), profile.getDailyNewBeneM2(), profile.getCompletedDaysForBeneCount(),
+                profile.getDistinctBeneficiaryCount(), profile.getLastHourBucket(), profile.getLastDayBucket(),
+                profile.getLastUpdated());
 
-        Bin clientIdBin = new Bin("clientId", profile.getClientId());
-        Bin txnTypeCountsBin = new Bin("txnTypeCounts", profile.getTxnTypeCounts());
-        Bin totalTxnCountBin = new Bin("totalTxnCount", profile.getTotalTxnCount());
-        Bin ewmaAmountBin = new Bin("ewmaAmount", profile.getEwmaAmount());
-        Bin amountM2Bin = new Bin("amountM2", profile.getAmountM2());
-        Bin ewmaHourlyTpsBin = new Bin("ewmaHourlyTps", profile.getEwmaHourlyTps());
-        Bin tpsM2Bin = new Bin("tpsM2", profile.getTpsM2());
-        Bin completedHoursCountBin = new Bin("completedHours", profile.getCompletedHoursCount());
-        Bin avgAmountByTypeBin = new Bin("avgAmtByType", profile.getAvgAmountByType());
-        Bin amountM2ByTypeBin = new Bin("amtM2ByType", serializeMap(profile.getAmountM2ByType()));
-        Bin amountCountByTypeBin = new Bin("amtCntByType", profile.getAmountCountByType());
-        Bin ewmaHourlyAmountBin = new Bin("ewmaHrlyAmt", profile.getEwmaHourlyAmount());
-        Bin hourlyAmountM2Bin = new Bin("hrlyAmtM2", profile.getHourlyAmountM2());
-        Bin lastUpdatedBin = new Bin("lastUpdated", profile.getLastUpdated());
-        Bin lastHourBucketBin = new Bin("lastHrBucket", profile.getLastHourBucket());
-
-        // Beneficiary tracking bins
-        Bin beneTxnCntsBin = new Bin("beneTxnCnts", serializeLongMap(profile.getBeneficiaryTxnCounts()));
-        Bin distinctBeneBin = new Bin("distinctBene", profile.getDistinctBeneficiaryCount());
-        Bin ewmaAmtBeneBin = new Bin("ewmaAmtBene", serializeMap(profile.getEwmaAmountByBeneficiary()));
-        Bin amtM2BeneBin = new Bin("amtM2Bene", serializeMap(profile.getAmountM2ByBeneficiary()));
-
-        // Daily tracking bins
-        Bin ewmaDailyAmtBin = new Bin("ewmaDailyAmt", profile.getEwmaDailyAmount());
-        Bin dailyAmtM2Bin = new Bin("dailyAmtM2", profile.getDailyAmountM2());
-        Bin completedDaysBin = new Bin("completedDays", profile.getCompletedDaysCount());
-        Bin ewmaDlyNewBnBin = new Bin("ewmaDlyNewBn", profile.getEwmaDailyNewBeneficiaries());
-        Bin dlyNewBnM2Bin = new Bin("dlyNewBnM2", profile.getDailyNewBeneM2());
-        Bin cmpltDaysBnBin = new Bin("cmpltDaysBn", profile.getCompletedDaysForBeneCount());
-        Bin lastDayBktBin = new Bin("lastDayBkt", profile.getLastDayBucket());
-
-        // Seasonal profile bins (12 new bins)
-        Bin ssnHrTpsBin = new Bin("ssnHrTps", serializeMap(profile.getSeasonalHourlyTps()));
-        Bin ssnHrTpsM2Bin = new Bin("ssnHrTpsM2", serializeMap(profile.getSeasonalHourlyTpsM2()));
-        Bin ssnHrTpsCntBin = new Bin("ssnHrTpsCnt", serializeLongMap(profile.getSeasonalHourlyTpsCnt()));
-        Bin ssnHrAmtBin = new Bin("ssnHrAmt", serializeMap(profile.getSeasonalHourlyAmt()));
-        Bin ssnHrAmtM2Bin = new Bin("ssnHrAmtM2", serializeMap(profile.getSeasonalHourlyAmtM2()));
-        Bin ssnHrAmtCntBin = new Bin("ssnHrAmtCnt", serializeLongMap(profile.getSeasonalHourlyAmtCnt()));
-        Bin ssnDyAmtBin = new Bin("ssnDyAmt", serializeMap(profile.getSeasonalDailyAmt()));
-        Bin ssnDyAmtM2Bin = new Bin("ssnDyAmtM2", serializeMap(profile.getSeasonalDailyAmtM2()));
-        Bin ssnDyAmtCntBin = new Bin("ssnDyAmtCnt", serializeLongMap(profile.getSeasonalDailyAmtCnt()));
-        Bin ssnDyTpsBin = new Bin("ssnDyTps", serializeMap(profile.getSeasonalDailyTps()));
-        Bin ssnDyTpsM2Bin = new Bin("ssnDyTpsM2", serializeMap(profile.getSeasonalDailyTpsM2()));
-        Bin ssnDyTpsCntBin = new Bin("ssnDyTpsCnt", serializeLongMap(profile.getSeasonalDailyTpsCnt()));
-
-        client.put(writePolicy, key,
-                clientIdBin, txnTypeCountsBin, totalTxnCountBin,
-                ewmaAmountBin, amountM2Bin,
-                ewmaHourlyTpsBin, tpsM2Bin, completedHoursCountBin,
-                avgAmountByTypeBin, amountM2ByTypeBin, amountCountByTypeBin,
-                ewmaHourlyAmountBin, hourlyAmountM2Bin,
-                lastUpdatedBin, lastHourBucketBin,
-                beneTxnCntsBin, distinctBeneBin, ewmaAmtBeneBin, amtM2BeneBin,
-                ewmaDailyAmtBin, dailyAmtM2Bin, completedDaysBin, ewmaDlyNewBnBin,
-                dlyNewBnM2Bin, cmpltDaysBnBin, lastDayBktBin,
-                ssnHrTpsBin, ssnHrTpsM2Bin, ssnHrTpsCntBin,
-                ssnHrAmtBin, ssnHrAmtM2Bin, ssnHrAmtCntBin,
-                ssnDyAmtBin, ssnDyAmtM2Bin, ssnDyAmtCntBin,
-                ssnDyTpsBin, ssnDyTpsM2Bin, ssnDyTpsCntBin);
+        saveTypeStats(profile);
+        saveSeasonalStats(profile);
+        saveBeneficiaryStats(profile);
     }
 
-    /**
-     * Atomically increment the hourly transaction counter for a client.
-     * Key format: clientId:YYYYMMDDHH
-     */
+    // ---- Counter operations (using client_counters table with MERGE) ----
+
+    private void mergeCounter(String clientId, String counterType, String bucket, long deltaCount, long deltaSumPaise) {
+        jdbc.update("""
+                MERGE INTO client_counters c
+                USING (SELECT ? AS client_id, ? AS counter_type, ? AS bucket FROM dual) s
+                ON (c.client_id = s.client_id AND c.counter_type = s.counter_type AND c.bucket = s.bucket)
+                WHEN MATCHED THEN UPDATE SET
+                    c.count_val = c.count_val + ?, c.sum_val = c.sum_val + ?
+                WHEN NOT MATCHED THEN INSERT (client_id, counter_type, bucket, count_val, sum_val)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                clientId, counterType, bucket,
+                deltaCount, deltaSumPaise,
+                clientId, counterType, bucket, deltaCount, deltaSumPaise);
+    }
+
+    private long getCounterValue(String clientId, String counterType, String bucket, String column) {
+        List<Long> results = jdbc.query(
+                "SELECT " + column + " FROM client_counters WHERE client_id = ? AND counter_type = ? AND bucket = ?",
+                (rs, rowNum) -> rs.getLong(1),
+                clientId, counterType, bucket);
+        return results.isEmpty() ? 0 : results.get(0);
+    }
+
+    // Hourly counters — counterKey format: "clientId:yyyyMMddHH"
     public long incrementHourlyCounter(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_HOURLY_COUNTERS, counterKey);
-        Bin countBin = new Bin("count", 1);
-        Record record = client.operate(writePolicy, key,
-                Operation.add(countBin),
-                Operation.get("count"));
-        return record.getLong("count");
+        String[] parts = splitKey(counterKey);
+        mergeCounter(parts[0], "HOURLY_TXN", parts[1], 1, 0);
+        return getCounterValue(parts[0], "HOURLY_TXN", parts[1], "count_val");
     }
 
-    /**
-     * Atomically add to the hourly amount total for a client.
-     */
     public void addHourlyAmount(String counterKey, long amountInPaise) {
-        Key key = new Key(namespace, AerospikeConfig.SET_HOURLY_COUNTERS, counterKey);
-        Bin amountBin = new Bin("totalAmount", amountInPaise);
-        client.operate(writePolicy, key, Operation.add(amountBin));
+        String[] parts = splitKey(counterKey);
+        mergeCounter(parts[0], "HOURLY_AMT", parts[1], 0, amountInPaise);
     }
 
-    /**
-     * Get the current hourly counter value.
-     */
     public long getHourlyCount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_HOURLY_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        return record.getLong("count");
+        String[] parts = splitKey(counterKey);
+        return getCounterValue(parts[0], "HOURLY_TXN", parts[1], "count_val");
     }
 
-    /**
-     * Get the current hourly total amount.
-     */
     public long getHourlyAmount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_HOURLY_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        Long amount = record.getLong("totalAmount");
-        return amount != null ? amount : 0;
+        String[] parts = splitKey(counterKey);
+        return getCounterValue(parts[0], "HOURLY_AMT", parts[1], "sum_val");
     }
 
-    // --- Beneficiary hourly counters ---
-
+    // Beneficiary hourly counters — counterKey: "clientId:beneKey:yyyyMMddHH"
     public long incrementBeneficiaryCounter(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
-        Bin countBin = new Bin("count", 1);
-        Record record = client.operate(writePolicy, key,
-                Operation.add(countBin),
-                Operation.get("count"));
-        return record.getLong("count");
+        int lastColon = counterKey.lastIndexOf(':');
+        String bucket = counterKey.substring(lastColon + 1);
+        String prefix = counterKey.substring(0, lastColon);
+        int firstColon = prefix.indexOf(':');
+        String clientId = prefix.substring(0, firstColon);
+        String beneKey = prefix.substring(firstColon + 1);
+        String compositeBucket = beneKey + ":" + bucket;
+        mergeCounter(clientId, "BENE_HOURLY_TXN", compositeBucket, 1, 0);
+        return getCounterValue(clientId, "BENE_HOURLY_TXN", compositeBucket, "count_val");
     }
 
     public void addBeneficiaryAmount(String counterKey, long amountInPaise) {
-        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
-        Bin amountBin = new Bin("totalAmount", amountInPaise);
-        client.operate(writePolicy, key, Operation.add(amountBin));
+        int lastColon = counterKey.lastIndexOf(':');
+        String bucket = counterKey.substring(lastColon + 1);
+        String prefix = counterKey.substring(0, lastColon);
+        int firstColon = prefix.indexOf(':');
+        String clientId = prefix.substring(0, firstColon);
+        String beneKey = prefix.substring(firstColon + 1);
+        String compositeBucket = beneKey + ":" + bucket;
+        mergeCounter(clientId, "BENE_HOURLY_AMT", compositeBucket, 0, amountInPaise);
     }
 
     public long getBeneficiaryCount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        return record.getLong("count");
+        int lastColon = counterKey.lastIndexOf(':');
+        String bucket = counterKey.substring(lastColon + 1);
+        String prefix = counterKey.substring(0, lastColon);
+        int firstColon = prefix.indexOf(':');
+        String clientId = prefix.substring(0, firstColon);
+        String beneKey = prefix.substring(firstColon + 1);
+        String compositeBucket = beneKey + ":" + bucket;
+        return getCounterValue(clientId, "BENE_HOURLY_TXN", compositeBucket, "count_val");
     }
 
     public long getBeneficiaryAmount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_BENEFICIARY_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        Long amount = record.getLong("totalAmount");
-        return amount != null ? amount : 0;
+        int lastColon = counterKey.lastIndexOf(':');
+        String bucket = counterKey.substring(lastColon + 1);
+        String prefix = counterKey.substring(0, lastColon);
+        int firstColon = prefix.indexOf(':');
+        String clientId = prefix.substring(0, firstColon);
+        String beneKey = prefix.substring(firstColon + 1);
+        String compositeBucket = beneKey + ":" + bucket;
+        return getCounterValue(clientId, "BENE_HOURLY_AMT", compositeBucket, "sum_val");
     }
 
-    // --- Daily transaction counters ---
-
+    // Daily counters — counterKey: "clientId:yyyyMMdd"
     public long incrementDailyCounter(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
-        Bin countBin = new Bin("count", 1);
-        Record record = client.operate(writePolicy, key,
-                Operation.add(countBin),
-                Operation.get("count"));
-        return record.getLong("count");
+        String[] parts = splitKey(counterKey);
+        mergeCounter(parts[0], "DAILY_TXN", parts[1], 1, 0);
+        return getCounterValue(parts[0], "DAILY_TXN", parts[1], "count_val");
     }
 
     public void addDailyAmount(String counterKey, long amountInPaise) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
-        Bin amountBin = new Bin("totalAmount", amountInPaise);
-        client.operate(writePolicy, key, Operation.add(amountBin));
+        String[] parts = splitKey(counterKey);
+        mergeCounter(parts[0], "DAILY_AMT", parts[1], 0, amountInPaise);
     }
 
     public long getDailyCount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        return record.getLong("count");
+        String[] parts = splitKey(counterKey);
+        return getCounterValue(parts[0], "DAILY_TXN", parts[1], "count_val");
     }
 
     public long getDailyAmount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        Long amount = record.getLong("totalAmount");
-        return amount != null ? amount : 0;
+        String[] parts = splitKey(counterKey);
+        return getCounterValue(parts[0], "DAILY_AMT", parts[1], "sum_val");
     }
 
-    // --- Daily new-beneficiary counters ---
-
+    // Daily new-beneficiary counters — counterKey: "clientId:newbene:yyyyMMdd"
     public long incrementDailyNewBeneCounter(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_BENE_COUNTERS, counterKey);
-        Bin countBin = new Bin("count", 1);
-        Record record = client.operate(writePolicy, key,
-                Operation.add(countBin),
-                Operation.get("count"));
-        return record.getLong("count");
+        String[] parts = counterKey.split(":", 3);
+        String clientId = parts[0];
+        String bucket = parts[2];
+        mergeCounter(clientId, "DAILY_NEW_BENE", bucket, 1, 0);
+        return getCounterValue(clientId, "DAILY_NEW_BENE", bucket, "count_val");
     }
 
     public long getDailyNewBeneCount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_BENE_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        return record.getLong("count");
+        String[] parts = counterKey.split(":", 3);
+        String clientId = parts[0];
+        String bucket = parts[2];
+        return getCounterValue(clientId, "DAILY_NEW_BENE", bucket, "count_val");
     }
 
-    // --- Daily beneficiary amount counter (for cross-channel detection) ---
-
+    // Daily beneficiary amount — counterKey: "clientId:beneDaily:yyyyMMdd:beneKey"
     public void addDailyBeneficiaryAmount(String counterKey, long amountInPaise) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
-        Bin amountBin = new Bin("totalAmount", amountInPaise);
-        client.operate(writePolicy, key, Operation.add(amountBin));
+        String[] parts = counterKey.split(":", 4);
+        String clientId = parts[0];
+        String bucket = parts[2] + ":" + parts[3];
+        mergeCounter(clientId, "DAILY_BENE_AMT", bucket, 0, amountInPaise);
     }
 
     public long getDailyBeneficiaryAmount(String counterKey) {
-        Key key = new Key(namespace, AerospikeConfig.SET_DAILY_COUNTERS, counterKey);
-        Record record = client.get(readPolicy, key);
-        if (record == null) return 0;
-        Long amount = record.getLong("totalAmount");
-        return amount != null ? amount : 0;
+        String[] parts = counterKey.split(":", 4);
+        String clientId = parts[0];
+        String bucket = parts[2] + ":" + parts[3];
+        return getCounterValue(clientId, "DAILY_BENE_AMT", bucket, "sum_val");
     }
 
-    private ClientProfile mapRecordToProfile(String clientId, Record record) {
-        ClientProfile profile = new ClientProfile();
-        profile.setClientId(clientId);
-        profile.setTotalTxnCount(record.getLong("totalTxnCount"));
-        profile.setEwmaAmount(record.getDouble("ewmaAmount"));
-        profile.setAmountM2(record.getDouble("amountM2"));
-        profile.setEwmaHourlyTps(record.getDouble("ewmaHourlyTps"));
-        profile.setTpsM2(record.getDouble("tpsM2"));
-        profile.setCompletedHoursCount(record.getLong("completedHours"));
-        profile.setEwmaHourlyAmount(record.getDouble("ewmaHrlyAmt"));
-        profile.setHourlyAmountM2(record.getDouble("hrlyAmtM2"));
-        profile.setLastUpdated(record.getLong("lastUpdated"));
-        profile.setLastHourBucket(record.getString("lastHrBucket"));
+    // ---- Sub-table helpers ----
 
-        // Deserialize maps
-        @SuppressWarnings("unchecked")
-        Map<String, Object> txnTypeCounts = (Map<String, Object>) record.getMap("txnTypeCounts");
-        if (txnTypeCounts != null) {
-            Map<String, Long> typed = new HashMap<>();
-            txnTypeCounts.forEach((k, v) -> typed.put(k, ((Number) v).longValue()));
-            profile.setTxnTypeCounts(typed);
-        }
+    private void loadTypeStats(ClientProfile profile) {
+        Map<String, Long> txnTypeCounts = new HashMap<>();
+        Map<String, Double> avgAmountByType = new HashMap<>();
+        Map<String, Double> amountM2ByType = new HashMap<>();
+        Map<String, Long> amountCountByType = new HashMap<>();
 
-        @SuppressWarnings("unchecked")
-        Map<String, Object> avgAmtByType = (Map<String, Object>) record.getMap("avgAmtByType");
-        if (avgAmtByType != null) {
-            Map<String, Double> typed = new HashMap<>();
-            avgAmtByType.forEach((k, v) -> typed.put(k, ((Number) v).doubleValue()));
-            profile.setAvgAmountByType(typed);
-        }
+        jdbc.query("SELECT * FROM client_type_stats WHERE client_id = ?",
+                (rs) -> {
+                    String type = rs.getString("txn_type");
+                    txnTypeCounts.put(type, rs.getLong("txn_count"));
+                    avgAmountByType.put(type, rs.getDouble("avg_amount"));
+                    amountM2ByType.put(type, rs.getDouble("amount_m2"));
+                    amountCountByType.put(type, rs.getLong("amount_count"));
+                }, profile.getClientId());
 
-        String amtM2ByTypeStr = record.getString("amtM2ByType");
-        if (amtM2ByTypeStr != null) {
-            profile.setAmountM2ByType(deserializeDoubleMap(amtM2ByTypeStr));
-        }
-
-        @SuppressWarnings("unchecked")
-        Map<String, Object> amtCntByType = (Map<String, Object>) record.getMap("amtCntByType");
-        if (amtCntByType != null) {
-            Map<String, Long> typed = new HashMap<>();
-            amtCntByType.forEach((k, v) -> typed.put(k, ((Number) v).longValue()));
-            profile.setAmountCountByType(typed);
-        }
-
-        // Beneficiary fields
-        Long distinctBene = (Long) record.getValue("distinctBene");
-        profile.setDistinctBeneficiaryCount(distinctBene != null ? distinctBene : 0);
-
-        String beneTxnCntsStr = record.getString("beneTxnCnts");
-        if (beneTxnCntsStr != null) {
-            profile.setBeneficiaryTxnCounts(deserializeLongMap(beneTxnCntsStr));
-        }
-
-        String ewmaAmtBeneStr = record.getString("ewmaAmtBene");
-        if (ewmaAmtBeneStr != null) {
-            profile.setEwmaAmountByBeneficiary(deserializeDoubleMap(ewmaAmtBeneStr));
-        }
-
-        String amtM2BeneStr = record.getString("amtM2Bene");
-        if (amtM2BeneStr != null) {
-            profile.setAmountM2ByBeneficiary(deserializeDoubleMap(amtM2BeneStr));
-        }
-
-        // Daily tracking fields
-        profile.setEwmaDailyAmount(record.getDouble("ewmaDailyAmt"));
-        profile.setDailyAmountM2(record.getDouble("dailyAmtM2"));
-        profile.setCompletedDaysCount(record.getLong("completedDays"));
-        profile.setEwmaDailyNewBeneficiaries(record.getDouble("ewmaDlyNewBn"));
-        profile.setDailyNewBeneM2(record.getDouble("dlyNewBnM2"));
-        profile.setCompletedDaysForBeneCount(record.getLong("cmpltDaysBn"));
-        profile.setLastDayBucket(record.getString("lastDayBkt"));
-
-        // Seasonal profile maps
-        String ssnHrTpsStr = record.getString("ssnHrTps");
-        if (ssnHrTpsStr != null) profile.setSeasonalHourlyTps(deserializeDoubleMap(ssnHrTpsStr));
-        String ssnHrTpsM2Str = record.getString("ssnHrTpsM2");
-        if (ssnHrTpsM2Str != null) profile.setSeasonalHourlyTpsM2(deserializeDoubleMap(ssnHrTpsM2Str));
-        String ssnHrTpsCntStr = record.getString("ssnHrTpsCnt");
-        if (ssnHrTpsCntStr != null) profile.setSeasonalHourlyTpsCnt(deserializeLongMap(ssnHrTpsCntStr));
-
-        String ssnHrAmtStr = record.getString("ssnHrAmt");
-        if (ssnHrAmtStr != null) profile.setSeasonalHourlyAmt(deserializeDoubleMap(ssnHrAmtStr));
-        String ssnHrAmtM2Str = record.getString("ssnHrAmtM2");
-        if (ssnHrAmtM2Str != null) profile.setSeasonalHourlyAmtM2(deserializeDoubleMap(ssnHrAmtM2Str));
-        String ssnHrAmtCntStr = record.getString("ssnHrAmtCnt");
-        if (ssnHrAmtCntStr != null) profile.setSeasonalHourlyAmtCnt(deserializeLongMap(ssnHrAmtCntStr));
-
-        String ssnDyAmtStr = record.getString("ssnDyAmt");
-        if (ssnDyAmtStr != null) profile.setSeasonalDailyAmt(deserializeDoubleMap(ssnDyAmtStr));
-        String ssnDyAmtM2Str = record.getString("ssnDyAmtM2");
-        if (ssnDyAmtM2Str != null) profile.setSeasonalDailyAmtM2(deserializeDoubleMap(ssnDyAmtM2Str));
-        String ssnDyAmtCntStr = record.getString("ssnDyAmtCnt");
-        if (ssnDyAmtCntStr != null) profile.setSeasonalDailyAmtCnt(deserializeLongMap(ssnDyAmtCntStr));
-
-        String ssnDyTpsStr = record.getString("ssnDyTps");
-        if (ssnDyTpsStr != null) profile.setSeasonalDailyTps(deserializeDoubleMap(ssnDyTpsStr));
-        String ssnDyTpsM2Str = record.getString("ssnDyTpsM2");
-        if (ssnDyTpsM2Str != null) profile.setSeasonalDailyTpsM2(deserializeDoubleMap(ssnDyTpsM2Str));
-        String ssnDyTpsCntStr = record.getString("ssnDyTpsCnt");
-        if (ssnDyTpsCntStr != null) profile.setSeasonalDailyTpsCnt(deserializeLongMap(ssnDyTpsCntStr));
-
-        return profile;
+        profile.setTxnTypeCounts(txnTypeCounts);
+        profile.setAvgAmountByType(avgAmountByType);
+        profile.setAmountM2ByType(amountM2ByType);
+        profile.setAmountCountByType(amountCountByType);
     }
 
-    private String serializeLongMap(Map<String, Long> map) {
-        try {
-            return objectMapper.writeValueAsString(map);
-        } catch (Exception e) {
-            return "{}";
+    private void loadSeasonalStats(ClientProfile profile) {
+        jdbc.query("SELECT * FROM client_seasonal_stats WHERE client_id = ?",
+                (rs) -> {
+                    String periodType = rs.getString("period_type");
+                    String slot = rs.getString("slot");
+
+                    if ("HOURLY".equals(periodType)) {
+                        profile.getSeasonalHourlyTps().put(slot, rs.getDouble("tps_mean"));
+                        profile.getSeasonalHourlyTpsM2().put(slot, rs.getDouble("tps_m2"));
+                        profile.getSeasonalHourlyTpsCnt().put(slot, rs.getLong("tps_count"));
+                        profile.getSeasonalHourlyAmt().put(slot, rs.getDouble("amt_mean"));
+                        profile.getSeasonalHourlyAmtM2().put(slot, rs.getDouble("amt_m2"));
+                        profile.getSeasonalHourlyAmtCnt().put(slot, rs.getLong("amt_count"));
+                    } else if ("DAILY".equals(periodType)) {
+                        profile.getSeasonalDailyTps().put(slot, rs.getDouble("tps_mean"));
+                        profile.getSeasonalDailyTpsM2().put(slot, rs.getDouble("tps_m2"));
+                        profile.getSeasonalDailyTpsCnt().put(slot, rs.getLong("tps_count"));
+                        profile.getSeasonalDailyAmt().put(slot, rs.getDouble("amt_mean"));
+                        profile.getSeasonalDailyAmtM2().put(slot, rs.getDouble("amt_m2"));
+                        profile.getSeasonalDailyAmtCnt().put(slot, rs.getLong("amt_count"));
+                    }
+                }, profile.getClientId());
+    }
+
+    private void loadBeneficiaryStats(ClientProfile profile) {
+        Map<String, Long> txnCounts = new HashMap<>();
+        Map<String, Double> ewmaAmount = new HashMap<>();
+        Map<String, Double> amountM2 = new HashMap<>();
+
+        jdbc.query("SELECT * FROM beneficiary_stats WHERE client_id = ?",
+                (rs) -> {
+                    String beneId = rs.getString("beneficiary_id");
+                    txnCounts.put(beneId, rs.getLong("txn_count"));
+                    ewmaAmount.put(beneId, rs.getDouble("ewma_amount"));
+                    amountM2.put(beneId, rs.getDouble("amount_m2"));
+                }, profile.getClientId());
+
+        profile.setBeneficiaryTxnCounts(txnCounts);
+        profile.setEwmaAmountByBeneficiary(ewmaAmount);
+        profile.setAmountM2ByBeneficiary(amountM2);
+    }
+
+    private void saveTypeStats(ClientProfile profile) {
+        for (Map.Entry<String, Long> entry : profile.getTxnTypeCounts().entrySet()) {
+            String type = entry.getKey();
+            jdbc.update("""
+                    MERGE INTO client_type_stats s
+                    USING (SELECT ? AS client_id, ? AS txn_type FROM dual) d
+                    ON (s.client_id = d.client_id AND s.txn_type = d.txn_type)
+                    WHEN MATCHED THEN UPDATE SET
+                        txn_count = ?, avg_amount = ?, amount_m2 = ?, amount_count = ?
+                    WHEN NOT MATCHED THEN INSERT (client_id, txn_type, txn_count, avg_amount, amount_m2, amount_count)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    """,
+                    profile.getClientId(), type,
+                    entry.getValue(),
+                    profile.getAvgAmountByType().getOrDefault(type, 0.0),
+                    profile.getAmountM2ByType().getOrDefault(type, 0.0),
+                    profile.getAmountCountByType().getOrDefault(type, 0L),
+                    profile.getClientId(), type,
+                    entry.getValue(),
+                    profile.getAvgAmountByType().getOrDefault(type, 0.0),
+                    profile.getAmountM2ByType().getOrDefault(type, 0.0),
+                    profile.getAmountCountByType().getOrDefault(type, 0L));
         }
     }
 
-    private Map<String, Long> deserializeLongMap(String json) {
-        try {
-            return objectMapper.readValue(json, new TypeReference<Map<String, Long>>() {});
-        } catch (Exception e) {
-            return new HashMap<>();
+    private void saveSeasonalStats(ClientProfile profile) {
+        saveSeasonalMap(profile.getClientId(), "HOURLY",
+                profile.getSeasonalHourlyTps(), profile.getSeasonalHourlyTpsM2(), profile.getSeasonalHourlyTpsCnt(),
+                profile.getSeasonalHourlyAmt(), profile.getSeasonalHourlyAmtM2(), profile.getSeasonalHourlyAmtCnt());
+        saveSeasonalMap(profile.getClientId(), "DAILY",
+                profile.getSeasonalDailyTps(), profile.getSeasonalDailyTpsM2(), profile.getSeasonalDailyTpsCnt(),
+                profile.getSeasonalDailyAmt(), profile.getSeasonalDailyAmtM2(), profile.getSeasonalDailyAmtCnt());
+    }
+
+    private void saveSeasonalMap(String clientId, String periodType,
+                                  Map<String, Double> tpsMean, Map<String, Double> tpsM2, Map<String, Long> tpsCnt,
+                                  Map<String, Double> amtMean, Map<String, Double> amtM2, Map<String, Long> amtCnt) {
+        for (String slot : tpsMean.keySet()) {
+            jdbc.update("""
+                    MERGE INTO client_seasonal_stats s
+                    USING (SELECT ? AS client_id, ? AS period_type, ? AS slot FROM dual) d
+                    ON (s.client_id = d.client_id AND s.period_type = d.period_type AND s.slot = d.slot)
+                    WHEN MATCHED THEN UPDATE SET
+                        tps_mean = ?, tps_m2 = ?, tps_count = ?,
+                        amt_mean = ?, amt_m2 = ?, amt_count = ?
+                    WHEN NOT MATCHED THEN INSERT (client_id, period_type, slot, tps_mean, tps_m2, tps_count, amt_mean, amt_m2, amt_count)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    clientId, periodType, slot,
+                    tpsMean.getOrDefault(slot, 0.0), tpsM2.getOrDefault(slot, 0.0), tpsCnt.getOrDefault(slot, 0L),
+                    amtMean.getOrDefault(slot, 0.0), amtM2.getOrDefault(slot, 0.0), amtCnt.getOrDefault(slot, 0L),
+                    clientId, periodType, slot,
+                    tpsMean.getOrDefault(slot, 0.0), tpsM2.getOrDefault(slot, 0.0), tpsCnt.getOrDefault(slot, 0L),
+                    amtMean.getOrDefault(slot, 0.0), amtM2.getOrDefault(slot, 0.0), amtCnt.getOrDefault(slot, 0L));
         }
     }
 
-    private String serializeMap(Map<String, Double> map) {
-        try {
-            return objectMapper.writeValueAsString(map);
-        } catch (Exception e) {
-            return "{}";
+    private void saveBeneficiaryStats(ClientProfile profile) {
+        for (Map.Entry<String, Long> entry : profile.getBeneficiaryTxnCounts().entrySet()) {
+            String beneId = entry.getKey();
+            jdbc.update("""
+                    MERGE INTO beneficiary_stats s
+                    USING (SELECT ? AS client_id, ? AS beneficiary_id FROM dual) d
+                    ON (s.client_id = d.client_id AND s.beneficiary_id = d.beneficiary_id)
+                    WHEN MATCHED THEN UPDATE SET
+                        txn_count = ?, total_amount = txn_count * NVL(ewma_amount, 0),
+                        ewma_amount = ?, amount_m2 = ?, last_seen = SYSTIMESTAMP
+                    WHEN NOT MATCHED THEN INSERT (client_id, beneficiary_id, txn_count, ewma_amount, amount_m2)
+                    VALUES (?, ?, ?, ?, ?)
+                    """,
+                    profile.getClientId(), beneId,
+                    entry.getValue(),
+                    profile.getEwmaAmountByBeneficiary().getOrDefault(beneId, 0.0),
+                    profile.getAmountM2ByBeneficiary().getOrDefault(beneId, 0.0),
+                    profile.getClientId(), beneId, entry.getValue(),
+                    profile.getEwmaAmountByBeneficiary().getOrDefault(beneId, 0.0),
+                    profile.getAmountM2ByBeneficiary().getOrDefault(beneId, 0.0));
         }
     }
 
-    private Map<String, Double> deserializeDoubleMap(String json) {
-        try {
-            return objectMapper.readValue(json, new TypeReference<Map<String, Double>>() {});
-        } catch (Exception e) {
-            return new HashMap<>();
-        }
+    private String[] splitKey(String counterKey) {
+        int idx = counterKey.indexOf(':');
+        return new String[] { counterKey.substring(0, idx), counterKey.substring(idx + 1) };
     }
 }

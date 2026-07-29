@@ -1,34 +1,53 @@
 spring:
   application:
     name: anomaly-detection
+
+  # Oracle Database
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:oracle:thin:@//localhost:1521/XEPDB1}
+    username: ${SPRING_DATASOURCE_USERNAME:anomaly}
+    password: ${SPRING_DATASOURCE_PASSWORD:anomaly_pass}
+    driver-class-name: oracle.jdbc.OracleDriver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 10000
+      idle-timeout: 300000
+
+  # Liquibase schema migration
+  liquibase:
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+  # Kafka (Amazon MSK compatible)
+  kafka:
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.StringSerializer
+      acks: all
+      retries: 3
+    consumer:
+      group-id: anomaly-detection
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+    listener:
+      concurrency: 3
+      ack-mode: manual
+
 server:
   port: 8080
 
-# Aerospike connection
-aerospike:
-  host: 127.0.0.1
-  port: 3000
-  namespace: banking
-
 # Risk scoring configuration
 risk:
-  # Composite score threshold for ALERT action (score >= this but < blockThreshold)
   alert-threshold: 30.0
-  # Composite score threshold for BLOCK action (score >= this)
   block-threshold: 70.0
-  # EWMA smoothing factor. Lower = slower adaptation to new patterns.
-  # 0.01 is good for 30-day windows with high txn volume.
   ewma-alpha: 0.01
-  # Minimum transactions before rules apply to a client (grace period for new clients)
   min-profile-txns: 20
-  # Breadth multiplier: escalates score when multiple rules trigger simultaneously.
-  # Each additional triggered rule beyond the first adds this % boost to the composite score.
-  # 0.03 = 3% per extra rule. Set to 0 to disable.
   breadth-multiplier-pct: 0.03
-  # How often (seconds) to reload rules from Aerospike into memory cache
   rule-cache-refresh-seconds: 60
 
-  # Configurable transaction types — add new types (e.g., CBDC) here without code changes
   transaction-types:
     - NEFT
     - RTGS
@@ -36,10 +55,7 @@ risk:
     - UPI
     - IFT
 
-  # Rule default parameters — fallback values when not specified in rule.params (Aerospike).
-  # Override per-rule via PUT /api/v1/rules/{ruleId} or seed via DataSeeder.
   rule-defaults:
-    # Existing rules
     amount-anomaly-variance-pct: 100.0
     amount-per-type-variance-pct: 150.0
     min-type-samples: 10
@@ -53,7 +69,6 @@ risk:
     min-beneficiary-txns: 3
     max-cv-pct: 10.0
     isolation-forest-threshold: 60.0
-    # New rules
     daily-cumulative-variance-pct: 150.0
     daily-cumulative-min-days: 3
     new-bene-max-per-day: 5
@@ -64,32 +79,35 @@ risk:
     cross-channel-bene-min-days: 3
     seasonal-deviation-variance-pct: 80.0
     seasonal-min-samples: 4
-    # Rule 15: Mule network detection
     mule-min-fan-in: 2
     mule-shared-bene-pct: 20.0
     mule-density-threshold: 0.3
     mule-composite-threshold: 25.0
     mule-graph-refresh-ms: 300000
 
-  # Feedback loop — review queue for ALERT/BLOCK transactions + rule auto-tuning
   feedback:
-    auto-accept-timeout-ms: 3600000          # 1 hour — unreviewed items auto-accepted after this
-    auto-accept-check-interval-seconds: 60   # how often to scan for expired items
-    tuning-interval-hours: 6                 # how often to re-compute rule weights from feedback
-    min-samples-for-tuning: 50               # minimum TP+FP feedback items before adjusting a rule
-    weight-floor: 0.5                        # rule weight never drops below this
-    weight-ceiling: 5.0                      # rule weight never exceeds this
-    max-adjustment-pct: 0.10                 # max 10% weight change per tuning cycle
+    auto-accept-timeout-ms: 3600000
+    auto-accept-check-interval-seconds: 60
+    tuning-interval-hours: 6
+    min-samples-for-tuning: 50
+    weight-floor: 0.5
+    weight-ceiling: 5.0
+    max-adjustment-pct: 0.10
 
-  # Silence detection — background scheduler that alerts when active clients stop transacting
   silence-detection:
     enabled: false
-    check-interval-minutes: 5       # how often to scan profiles
-    silence-multiplier: 3.0         # alert if gap > 3x expected gap between txns
-    min-expected-tps: 1.0           # skip clients with < 1 txn/hour baseline
-    min-completed-hours: 48         # need 2+ days of hourly data before monitoring
+    check-interval-minutes: 5
+    silence-multiplier: 3.0
+    min-expected-tps: 1.0
+    min-completed-hours: 48
 
-# Ollama LLM (for chat assistant, AI explanations, pattern labeling, alert triage)
+# Kafka topics
+kafka:
+  topics:
+    txn-events: txn-events
+    profile-updates: profile-updates
+
+# Ollama LLM
 ollama:
   host: ${OLLAMA_HOST:http://localhost:11434}
   model: ${OLLAMA_MODEL:llama3.2:1b}
@@ -104,17 +122,16 @@ springdoc:
   api-docs:
     path: /v3/api-docs
 
-# Twilio notification (SMS / WhatsApp) on BLOCKED transactions
-# Set these via environment variables: TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, etc.
+# Twilio notification
 twilio:
   account-sid: ${TWILIO_ACCOUNT_SID:}
   auth-token: ${TWILIO_AUTH_TOKEN:}
   from-number: ${TWILIO_FROM_NUMBER:+14155238886}
   to-number: ${TWILIO_TO_NUMBER:+919830709527}
   enabled: ${TWILIO_ENABLED:true}
-  channel: ${TWILIO_CHANNEL:whatsapp}   # "sms" or "whatsapp"
+  channel: ${TWILIO_CHANNEL:whatsapp}
 
-# Observability: OTEL traces + Actuator metrics
+# Observability
 management:
   endpoints:
     web:
@@ -132,3 +149,5 @@ logging:
   level:
     com.bank.anomaly: INFO
     com.bank.anomaly.engine: DEBUG
+    org.springframework.kafka: WARN
+    liquibase: INFO
